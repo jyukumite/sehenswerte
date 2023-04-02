@@ -1,4 +1,4 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <TargetFramework>net6.0-windows</TargetFramework>
@@ -8,17 +8,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <Compile Remove="draw\**" />
-    <EmbeddedResource Remove="draw\**" />
-    <None Remove="draw\**" />
-  </ItemGroup>
-
-  <ItemGroup>
     <ProjectReference Include="..\core\Core.csproj" />
-  </ItemGroup>
-
-  <ItemGroup>
-    <Compile Update="ui\Divisions.cs" />
   </ItemGroup>
 
 </Project>
