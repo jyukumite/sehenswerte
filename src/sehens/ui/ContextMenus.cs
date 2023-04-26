@@ -1191,6 +1191,22 @@ namespace SehensWerte.Controls.Sehens
 
             embeddedContextMenu.Add(new ScopeContextMenu.EmbeddedMenu
             {
+                Text = "PiP",
+                Sort = 5,
+                Style = TraceViewEmbedText.Style.Normal,
+                Clicked = (a) =>
+                {
+                    a.View.ShowPictureInPicture = !a.View.ShowPictureInPicture;
+                },
+                GetStyle = (a) =>
+                {
+                    a.Menu.Style = a.View.ShowPictureInPicture ? TraceViewEmbedText.Style.Selected : TraceViewEmbedText.Style.Normal;
+                    a.Menu.Text = "PiP";
+                }
+            });
+
+            embeddedContextMenu.Add(new ScopeContextMenu.EmbeddedMenu
+            {
                 Text = "FFT",
                 Sort = 10,
                 Style = TraceViewEmbedText.Style.Normal,
