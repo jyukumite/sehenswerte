@@ -2,6 +2,7 @@ using SehensWerte.Files;
 using System.Collections;
 using System.ComponentModel;
 using System.Data;
+using System.Linq;
 using System.Text.RegularExpressions;
 
 namespace SehensWerte.Controls
@@ -23,6 +24,7 @@ namespace SehensWerte.Controls
         private ToolStripDropDownButton ShowByRegexStatus;
         private ToolStripDropDownButton HideMatchCellStatus;
         private ToolStripDropDownButton HideUnmatchCellStatus;
+        private ToolStripDropDownButton SaveCsv;
         public BoundData? DataGridBind;
         private string RegexInput = ".*";
 
@@ -51,6 +53,7 @@ namespace SehensWerte.Controls
             this.ShowByRegexStatus = new System.Windows.Forms.ToolStripDropDownButton();
             this.HideMatchCellStatus = new System.Windows.Forms.ToolStripDropDownButton();
             this.HideUnmatchCellStatus = new System.Windows.Forms.ToolStripDropDownButton();
+            this.SaveCsv = new System.Windows.Forms.ToolStripDropDownButton();
 
             ((System.ComponentModel.ISupportInitialize)(this.Grid)).BeginInit();
             this.StatusStrip.SuspendLayout();
@@ -83,7 +86,8 @@ namespace SehensWerte.Controls
                     this.HideByRegexStatus,
                     this.ShowByRegexStatus,
                     this.HideMatchCellStatus,
-                    this.HideUnmatchCellStatus});
+                    this.HideUnmatchCellStatus,
+                    this.SaveCsv});
             this.StatusStrip.LayoutStyle = System.Windows.Forms.ToolStripLayoutStyle.HorizontalStackWithOverflow;
             this.StatusStrip.Location = new System.Drawing.Point(0, 1037);
             this.StatusStrip.Name = "StatusStrip";
@@ -179,6 +183,14 @@ namespace SehensWerte.Controls
             this.HideUnmatchCellStatus.Size = new System.Drawing.Size(171, 38);
             this.HideUnmatchCellStatus.Text = "Hide Unmatch";
             this.HideUnmatchCellStatus.Click += new System.EventHandler(this.HideUnmatchCellStatus_Click);
+            // 
+            // SaveCsv
+            // 
+            this.SaveCsv.Name = "SaveCsv";
+            this.SaveCsv.ShowDropDownArrow = false;
+            this.SaveCsv.Size = new System.Drawing.Size(171, 38);
+            this.SaveCsv.Text = "Save";
+            this.SaveCsv.Click += new System.EventHandler(this.SaveCsv_Click);
             // 
             // CloudDataQueryTab
             // 
@@ -307,6 +319,24 @@ namespace SehensWerte.Controls
                 DataGridBind?.HideRowsNotMatching(
                     Convert.ToString(Grid.CurrentCell.OwningColumn.HeaderText) ?? "",
                     Convert.ToString(Grid.CurrentCell.Value) ?? "");
+            });
+        }
+
+        private SaveFileDialog m_SaveFileDialog = new SaveFileDialog();
+        private void SaveCsv_Click(object? sender, EventArgs e)
+        {
+            this.ExceptionToMessagebox(() =>
+            {
+                if (Grid.SelectedCells.Count != 0)
+                {
+                    m_SaveFileDialog.Title = "Save as CSV";
+                    m_SaveFileDialog.Filter = "CSV files (*.csv)|*.csv";
+                    m_SaveFileDialog.RestoreDirectory = true;
+                    if (m_SaveFileDialog.ShowDialog() == DialogResult.OK)
+                    {
+                        DataGridBind?.SaveToCsv(m_SaveFileDialog.FileName, this);
+                    }
+                }
             });
         }
 
@@ -790,6 +820,17 @@ namespace SehensWerte.Controls
             {
                 CurrentSortProperty = null;
                 CurrentSortDirection = ListSortDirection.Ascending;
+            }
+
+            internal void SaveToCsv(string fileName, DataGridView dataGrid)
+            {
+                //var rows = RowsWithSelection(dataGrid);
+                //var rows = dataGrid.SelectedRows.Cast<DataGridViewRow>().Select(x => ((BoundDataRow?)(x.DataBoundItem))?.Index);
+                //var cells = dataGrid.SelectedCells.Cast<DataGridViewCell>().Select(x => ((BoundDataRow?)(x.OwningRow.DataBoundItem))?.Index);
+                //var union = rows.Union(cells).Where(x => x != null).Select(y => (int)(y ?? 0));
+
+                //fixme: save selection
+                CSVSave.SaveRows(fileName, ColumnNames, FilteredData.Select(x => x.SourceRow), ",");
             }
         }
     }
