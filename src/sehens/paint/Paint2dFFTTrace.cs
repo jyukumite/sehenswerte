@@ -78,7 +78,7 @@ namespace SehensWerte.Controls.Sehens
                     for (int y = 0; y < bins; y++)
                     {
                         int bin = bins - y - 1;
-                        double db = 10.0 * Math.Log10(spectralMagnitude[y]);
+                        double db = 10.0 * Math.Log10(spectralMagnitude[bin]);
                         db = (double.IsNegativeInfinity(db) || db < MINMAG) ? MINMAG : (db > MAXMAG) ? MAXMAG : db;
                         histogram[(int)db - MINMAG]++;
                         db = (db - lowestValue) / (highestValue - lowestValue);
@@ -95,27 +95,7 @@ namespace SehensWerte.Controls.Sehens
 
                 if (info.View0.LogVertical)
                 {
-                    int multiply = 3;
-                    int newBitmapPixelsPerBucket = bitmapPixelsPerBucket * multiply;
-                    byte[] newPixels = new byte[stride * bins * newBitmapPixelsPerBucket];
-                    int y = 0;
-                    for (int oldy = 0; oldy < bins * bitmapPixelsPerBucket; oldy++)
-                    {
-                        ProjectLog(HighestFrequency, (bins - oldy - 1 - 0.5) * hzPerBucket, out var newMax, out var output);
-                        int newY = (int)((newMax - output) * bins * multiply / newMax);
-                        newY = newY < 0 ? 0 : ((newY >= bins * multiply) ? (bins * multiply - 1) : newY);
-                        if (y > newY)
-                        {
-                            //fixme: should sum, not drop
-                        }
-                        while (y <= newY)
-                        {
-                            Array.Copy(pixels, oldy * stride, newPixels, y * stride, stride);
-                            y++;
-                        }
-                    }
-                    pixels = newPixels;
-                    bitmapPixelsPerBucket = newBitmapPixelsPerBucket;
+                    LogVertical(bins, hzPerBucket, stride, ref bitmapPixelsPerBucket, ref pixels);
                 }
 
                 m_CachedBitmap = BytesToBitmap(fftsWide, bins * bitmapPixelsPerBucket, stride, pixels);
@@ -137,6 +117,31 @@ namespace SehensWerte.Controls.Sehens
             }
 
             base.PaintPiP(info, graphics);
+        }
+
+        private void LogVertical(int bins, double hzPerBucket, int stride, ref int bitmapPixelsPerBucket, ref byte[] pixels)
+        {
+            int multiply = 3;
+            int newBitmapPixelsPerBucket = bitmapPixelsPerBucket * multiply;
+            byte[] newPixels = new byte[stride * bins * newBitmapPixelsPerBucket];
+            int y = 0;
+            for (int oldy = 0; oldy < bins * bitmapPixelsPerBucket; oldy++)
+            {
+                ProjectLog(HighestFrequency, (bins - oldy - 1 - 0.5) * hzPerBucket, out var newMax, out var output);
+                int newY = (int)((newMax - output) * bins * multiply / newMax);
+                newY = newY < 0 ? 0 : ((newY >= bins * multiply) ? (bins * multiply - 1) : newY);
+                if (y > newY)
+                {
+                    //fixme: should sum, not drop
+                }
+                while (y <= newY)
+                {
+                    Array.Copy(pixels, oldy * stride, newPixels, y * stride, stride);
+                    y++;
+                }
+            }
+            pixels = newPixels;
+            bitmapPixelsPerBucket = newBitmapPixelsPerBucket;
         }
 
         private Bitmap BytesToBitmap(int width, int height, int stride, byte[] pixels)

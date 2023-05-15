@@ -15,8 +15,11 @@ namespace SehensWerte.Maths
         private IntPtr m_SpectralComplexFloatPointer;
         private GCHandle m_TemporalComplexFloatHandle;
         private GCHandle m_SpectralComplexFloatHandle;
-        private IntPtr m_ForwardPlan;
-        private IntPtr m_ReversePlan;
+
+        private static object GeneratePlanLock = new object();
+        private static Dictionary<int, IntPtr> m_ForwardPlans = new Dictionary<int, IntPtr>();
+        private static Dictionary<int, IntPtr> m_BackwardPlans = new Dictionary<int, IntPtr>();
+
         private bool m_Disposed;
 
         private double[]? m_CacheSpectralReal;
@@ -25,7 +28,35 @@ namespace SehensWerte.Maths
         private double[]? m_CacheTemporalReal;
         private double[]? m_CacheTemporalMagnitude;
 
-        private static object GeneratePlanLock = new object();
+        private static IntPtr GetPlan(int width, Dictionary<int, IntPtr> dict, Import.Direction direction)
+        {
+            lock (GeneratePlanLock)
+            {
+                Import.fftw_plan_with_nthreads(Environment.ProcessorCount);
+                IntPtr plan;
+                if (!dict.TryGetValue(width, out plan))
+                {
+                    int complex = 2;
+                    IntPtr inFloatPointer = Import.malloc(width * complex * sizeof(float));
+                    IntPtr outFloatPointer = Import.malloc(width * complex * sizeof(float));
+                    plan = Import.plan_dft_1d(width, inFloatPointer, outFloatPointer, direction, Import.Flags.Estimate);
+                    Import.free(outFloatPointer);
+                    Import.free(inFloatPointer);
+                    dict[width] = plan;
+                }
+                return plan;
+            }
+        }
+
+        private static IntPtr ForwardPlan(int width)
+        {
+            return GetPlan(width, m_ForwardPlans, Import.Direction.Forward);
+        }
+
+        private static IntPtr BackwardPlan(int width)
+        {
+            return GetPlan(width, m_BackwardPlans, Import.Direction.Backward);
+        }
 
         public int Bins => SampleCountToBinCount(m_Width);
 
@@ -252,8 +283,6 @@ namespace SehensWerte.Maths
             m_SpectralComplexFloat = new float[m_Width * complex];
             m_TemporalComplexFloatHandle = GCHandle.Alloc(m_TemporalComplexFloat, GCHandleType.Pinned);
             m_SpectralComplexFloatHandle = GCHandle.Alloc(m_SpectralComplexFloat, GCHandleType.Pinned);
-            m_ForwardPlan = Import.dft_1d(m_Width, m_TemporalComplexFloatPointer, m_SpectralComplexFloatPointer, Import.Direction.Forward, Import.Flags.Measure);
-            m_ReversePlan = Import.dft_1d(m_Width, m_SpectralComplexFloatPointer, m_TemporalComplexFloatPointer, Import.Direction.Backward, Import.Flags.Measure);
         }
 
         ~Fftw()
@@ -314,13 +343,10 @@ namespace SehensWerte.Maths
         public void ExecuteForward()
         {
             ClearCache();
-            lock (GeneratePlanLock)
-            {
-                int complex = 2;
-                Marshal.Copy(m_TemporalComplexFloat, 0, m_TemporalComplexFloatPointer, m_Width * complex);
-                Import.execute(m_ForwardPlan);
-                Marshal.Copy(m_SpectralComplexFloatPointer, m_SpectralComplexFloat, 0, m_Width * complex);
-            }
+            int complex = 2;
+            Marshal.Copy(m_TemporalComplexFloat, 0, m_TemporalComplexFloatPointer, m_Width * complex);
+            Import.fftw_execute_dft(ForwardPlan(m_Width), m_TemporalComplexFloatPointer, m_SpectralComplexFloatPointer);
+            Marshal.Copy(m_SpectralComplexFloatPointer, m_SpectralComplexFloat, 0, m_Width * complex);
             for (int loop = 0; loop < m_Width * 2; loop++)
             {
                 m_SpectralComplexFloat[loop] /= m_Width;
@@ -330,13 +356,10 @@ namespace SehensWerte.Maths
         public void ExecuteReverse()
         {
             ClearCache();
-            lock (GeneratePlanLock)
-            {
-                int complex = 2;
-                Marshal.Copy(m_SpectralComplexFloat, 0, m_SpectralComplexFloatPointer, m_Width * complex);
-                Import.execute(m_ReversePlan);
-                Marshal.Copy(m_TemporalComplexFloatPointer, m_TemporalComplexFloat, 0, m_Width * complex);
-            }
+            int complex = 2;
+            Marshal.Copy(m_SpectralComplexFloat, 0, m_SpectralComplexFloatPointer, m_Width * complex);
+            Import.fftw_execute_dft(BackwardPlan(m_Width), m_SpectralComplexFloatPointer, m_TemporalComplexFloatPointer);
+            Marshal.Copy(m_TemporalComplexFloatPointer, m_TemporalComplexFloat, 0, m_Width * complex);
         }
 
         public void SpectralPhaseShift(double radians)
@@ -426,348 +449,148 @@ namespace SehensWerte.Maths
             public static extern bool FreeLibrary(IntPtr hModule);
 
             [DllImport("libfftw3f-3_32.dll", CallingConvention = CallingConvention.Cdecl, EntryPoint = "fftwf_malloc", ExactSpelling = true)]
-            public static extern IntPtr malloc_32(int length);
+            public static extern IntPtr fftwf_malloc_32(int length);
 
             [DllImport("libfftw3f-3_64.dll", CallingConvention = CallingConvention.Cdecl, EntryPoint = "fftwf_malloc", ExactSpelling = true)]
-            public static extern IntPtr malloc_64(int length);
+            public static extern IntPtr fftwf_malloc_64(int length);
 
             public static IntPtr malloc(int length)
             {
                 return IntPtr.Size == 4
-                    ? malloc_32(length)
-                    : malloc_64(length);
+                    ? fftwf_malloc_32(length)
+                    : fftwf_malloc_64(length);
             }
 
             [DllImport("libfftw3f-3_32.dll", CallingConvention = CallingConvention.Cdecl, EntryPoint = "fftwf_free", ExactSpelling = true)]
-            public static extern void free_32(IntPtr mem);
+            public static extern void fftwf_free_32(IntPtr mem);
 
             [DllImport("libfftw3f-3_64.dll", CallingConvention = CallingConvention.Cdecl, EntryPoint = "fftwf_free", ExactSpelling = true)]
-            public static extern void free_64(IntPtr mem);
+            public static extern void fftwf_free_64(IntPtr mem);
 
             public static void free(IntPtr mem)
             {
                 if (IntPtr.Size == 4)
                 {
-                    free_32(mem);
+                    fftwf_free_32(mem);
                 }
                 else
                 {
-                    free_64(mem);
+                    fftwf_free_64(mem);
                 }
             }
 
             [DllImport("libfftw3f-3_32.dll", CallingConvention = CallingConvention.Cdecl, EntryPoint = "fftwf_destroy_plan", ExactSpelling = true)]
-            public static extern void destroy_plan_32(IntPtr plan);
+            public static extern void fftwf_destroy_plan_32(IntPtr plan);
 
             [DllImport("libfftw3f-3_64.dll", CallingConvention = CallingConvention.Cdecl, EntryPoint = "fftwf_destroy_plan", ExactSpelling = true)]
-            public static extern void destroy_plan_64(IntPtr plan);
+            public static extern void fftwf_destroy_plan_64(IntPtr plan);
 
             public static void destroy_plan(IntPtr plan)
             {
                 if (IntPtr.Size == 4)
                 {
-                    destroy_plan_32(plan);
+                    fftwf_destroy_plan_32(plan);
                 }
                 else
                 {
-                    destroy_plan_64(plan);
+                    fftwf_destroy_plan_64(plan);
                 }
             }
 
             [DllImport("libfftw3f-3_32.dll", CallingConvention = CallingConvention.Cdecl, EntryPoint = "fftwf_cleanup", ExactSpelling = true)]
-            public static extern void cleanup_32();
+            public static extern void fftwf_cleanup_32();
 
             [DllImport("libfftw3f-3_64.dll", CallingConvention = CallingConvention.Cdecl, EntryPoint = "fftwf_cleanup", ExactSpelling = true)]
-            public static extern void cleanup_64();
+            public static extern void fftwf_cleanup_64();
 
             public static void cleanup()
             {
                 if (IntPtr.Size == 4)
                 {
-                    cleanup_32();
+                    fftwf_cleanup_32();
                 }
                 else
                 {
-                    cleanup_64();
+                    fftwf_cleanup_64();
                 }
             }
 
-            [DllImport("libfftw3f-3_32.dll", CallingConvention = CallingConvention.Cdecl, EntryPoint = "fftwf_set_timelimit", ExactSpelling = true)]
-            public static extern void set_timelimit_32(double seconds);
+            [DllImport("libfftw3f-3_32.dll", CallingConvention = CallingConvention.Cdecl, EntryPoint = "fftwf_execute_dft", ExactSpelling = true)]
+            public static extern void fftwf_execute_dft_32(IntPtr plan, IntPtr in_ptr, IntPtr out_ptr);
 
-            [DllImport("libfftw3f-3_64.dll", CallingConvention = CallingConvention.Cdecl, EntryPoint = "fftwf_set_timelimit", ExactSpelling = true)]
-            public static extern void set_timelimit_64(double seconds);
+            [DllImport("libfftw3f-3_64.dll", CallingConvention = CallingConvention.Cdecl, EntryPoint = "fftwf_execute_dft", ExactSpelling = true)]
+            public static extern void fftwf_execute_dft_64(IntPtr plan, IntPtr in_ptr, IntPtr out_ptr);
 
-            public static void set_timelimit(double seconds)
+            public static void fftw_execute_dft(IntPtr plan, IntPtr in_ptr, IntPtr out_ptr)
             {
                 if (IntPtr.Size == 4)
                 {
-                    set_timelimit_32(seconds);
+                    fftwf_execute_dft_32(plan, in_ptr, out_ptr);
                 }
                 else
                 {
-                    set_timelimit_64(seconds);
-                }
-            }
-
-            [DllImport("libfftw3f-3_32.dll", CallingConvention = CallingConvention.Cdecl, EntryPoint = "fftwf_execute", ExactSpelling = true)]
-            public static extern void execute_32(IntPtr plan);
-
-            [DllImport("libfftw3f-3_64.dll", CallingConvention = CallingConvention.Cdecl, EntryPoint = "fftwf_execute", ExactSpelling = true)]
-            public static extern void execute_64(IntPtr plan);
-
-            public static void execute(IntPtr plan)
-            {
-                if (IntPtr.Size == 4)
-                {
-                    execute_32(plan);
-                }
-                else
-                {
-                    execute_64(plan);
+                    fftwf_execute_dft_64(plan, in_ptr, out_ptr);
                 }
             }
 
             [DllImport("libfftw3f-3_32.dll", CallingConvention = CallingConvention.Cdecl, EntryPoint = "fftwf_plan_dft_1d", ExactSpelling = true)]
-            public static extern IntPtr dft_1d_32(int n, IntPtr input, IntPtr output, Direction direction, Flags flags);
+            public static extern IntPtr fftwf_plan_dft_1d_32(int n, IntPtr input, IntPtr output, Direction direction, Flags flags);
 
             [DllImport("libfftw3f-3_64.dll", CallingConvention = CallingConvention.Cdecl, EntryPoint = "fftwf_plan_dft_1d", ExactSpelling = true)]
-            public static extern IntPtr dft_1d_64(int n, IntPtr input, IntPtr output, Direction direction, Flags flags);
+            public static extern IntPtr fftwf_plan_dft_1d_64(int n, IntPtr input, IntPtr output, Direction direction, Flags flags);
 
-            public static IntPtr dft_1d(int n, IntPtr input, IntPtr output, Direction direction, Flags flags)
+            public static IntPtr plan_dft_1d(int n, IntPtr input, IntPtr output, Direction direction, Flags flags)
             {
                 return IntPtr.Size == 4
-                    ? dft_1d_32(n, input, output, direction, flags)
-                    : dft_1d_64(n, input, output, direction, flags);
+                    ? fftwf_plan_dft_1d_32(n, input, output, direction, flags)
+                    : fftwf_plan_dft_1d_64(n, input, output, direction, flags);
             }
 
             [DllImport("libfftw3f-3_32.dll", CallingConvention = CallingConvention.Cdecl, EntryPoint = "fftwf_plan_dft_2d", ExactSpelling = true)]
-            public static extern IntPtr dft_2d_32(int nx, int ny, IntPtr input, IntPtr output, Direction direction, Flags flags);
+            public static extern IntPtr fftwf_plan_dft_2d_32(int nx, int ny, IntPtr input, IntPtr output, Direction direction, Flags flags);
 
             [DllImport("libfftw3f-3_64.dll", CallingConvention = CallingConvention.Cdecl, EntryPoint = "fftwf_plan_dft_2d", ExactSpelling = true)]
-            public static extern IntPtr dft_2d_64(int nx, int ny, IntPtr input, IntPtr output, Direction direction, Flags flags);
+            public static extern IntPtr fftwf_plan_dft_2d_64(int nx, int ny, IntPtr input, IntPtr output, Direction direction, Flags flags);
 
-            public static IntPtr dft_2d(int nx, int ny, IntPtr input, IntPtr output, Direction direction, Flags flags)
+            public static IntPtr plan_dft_2d(int nx, int ny, IntPtr input, IntPtr output, Direction direction, Flags flags)
             {
                 return IntPtr.Size == 4
-                    ? dft_2d_32(nx, ny, input, output, direction, flags)
-                    : dft_2d_64(nx, ny, input, output, direction, flags);
+                    ? fftwf_plan_dft_2d_32(nx, ny, input, output, direction, flags)
+                    : fftwf_plan_dft_2d_64(nx, ny, input, output, direction, flags);
             }
 
             [DllImport("libfftw3f-3_32.dll", CallingConvention = CallingConvention.Cdecl, EntryPoint = "fftwf_plan_dft_3d", ExactSpelling = true)]
-            public static extern IntPtr dft_3d_32(int nx, int ny, int nz, IntPtr input, IntPtr output, Direction direction, Flags flags);
+            public static extern IntPtr fftwf_plan_dft_3d_32(int nx, int ny, int nz, IntPtr input, IntPtr output, Direction direction, Flags flags);
 
             [DllImport("libfftw3f-3_64.dll", CallingConvention = CallingConvention.Cdecl, EntryPoint = "fftwf_plan_dft_3d", ExactSpelling = true)]
-            public static extern IntPtr dft_3d_64(int nx, int ny, int nz, IntPtr input, IntPtr output, Direction direction, Flags flags);
+            public static extern IntPtr fftwf_plan_dft_3d_64(int nx, int ny, int nz, IntPtr input, IntPtr output, Direction direction, Flags flags);
 
-            public static IntPtr dft_3d(int nx, int ny, int nz, IntPtr input, IntPtr output, Direction direction, Flags flags)
+            public static IntPtr plan_dft_3d(int nx, int ny, int nz, IntPtr input, IntPtr output, Direction direction, Flags flags)
             {
                 return IntPtr.Size == 4
-                    ? dft_3d_32(nx, ny, nz, input, output, direction, flags)
-                    : dft_3d_64(nx, ny, nz, input, output, direction, flags);
+                    ? fftwf_plan_dft_3d_32(nx, ny, nz, input, output, direction, flags)
+                    : fftwf_plan_dft_3d_64(nx, ny, nz, input, output, direction, flags);
             }
 
-            [DllImport("libfftw3f-3_32.dll", CallingConvention = CallingConvention.Cdecl, EntryPoint = "fftwf_plan_dft", ExactSpelling = true)]
-            public static extern IntPtr dft_32(int rank, int[] n, IntPtr input, IntPtr output, Direction direction, Flags flags);
+            [DllImport("libfftw3f-3_32.dll", CallingConvention = CallingConvention.Cdecl, EntryPoint = "fftw_plan_with_nthreads", ExactSpelling = true)]
+            public static extern IntPtr fftw_plan_with_nthreads_32(int n);
 
-            [DllImport("libfftw3f-3_64.dll", CallingConvention = CallingConvention.Cdecl, EntryPoint = "fftwf_plan_dft", ExactSpelling = true)]
-            public static extern IntPtr dft_64(int rank, int[] n, IntPtr input, IntPtr output, Direction direction, Flags flags);
+            [DllImport("libfftw3f-3_64.dll", CallingConvention = CallingConvention.Cdecl, EntryPoint = "fftwf_plan_dft_3d", ExactSpelling = true)]
+            public static extern IntPtr fftw_plan_with_nthreads_64(int n);
 
-            public static IntPtr dft(int rank, int[] n, IntPtr input, IntPtr output, Direction direction, Flags flags)
-            {
-                return IntPtr.Size == 4
-                    ? dft_32(rank, n, input, output, direction, flags)
-                    : dft_64(rank, n, input, output, direction, flags);
-            }
-
-            [DllImport("libfftw3f-3_32.dll", CallingConvention = CallingConvention.Cdecl, EntryPoint = "fftwf_plan_dft_r2c_1d", ExactSpelling = true)]
-            public static extern IntPtr dft_r2c_1d_32(int n, IntPtr input, IntPtr output, Flags flags);
-
-            [DllImport("libfftw3f-3_64.dll", CallingConvention = CallingConvention.Cdecl, EntryPoint = "fftwf_plan_dft_r2c_1d", ExactSpelling = true)]
-            public static extern IntPtr dft_r2c_1d_64(int n, IntPtr input, IntPtr output, Flags flags);
-
-            public static IntPtr dft_r2c_1d(int n, IntPtr input, IntPtr output, Flags flags)
-            {
-                return IntPtr.Size == 4
-                    ? dft_r2c_1d_32(n, input, output, flags)
-                    : dft_r2c_1d_64(n, input, output, flags);
-            }
-
-            [DllImport("libfftw3f-3_32.dll", CallingConvention = CallingConvention.Cdecl, EntryPoint = "fftwf_plan_dft_r2c_2d", ExactSpelling = true)]
-            public static extern IntPtr dft_r2c_2d_32(int nx, int ny, IntPtr input, IntPtr output, Flags flags);
-
-            [DllImport("libfftw3f-3_64.dll", CallingConvention = CallingConvention.Cdecl, EntryPoint = "fftwf_plan_dft_r2c_2d", ExactSpelling = true)]
-            public static extern IntPtr dft_r2c_2d_64(int nx, int ny, IntPtr input, IntPtr output, Flags flags);
-
-            public static IntPtr dft_r2c_2d(int nx, int ny, IntPtr input, IntPtr output, Flags flags)
-            {
-                return IntPtr.Size == 4
-                    ? dft_r2c_2d_32(nx, ny, input, output, flags)
-                    : dft_r2c_2d_64(nx, ny, input, output, flags);
-            }
-
-            [DllImport("libfftw3f-3_32.dll", CallingConvention = CallingConvention.Cdecl, EntryPoint = "fftwf_plan_dft_r2c_3d", ExactSpelling = true)]
-            public static extern IntPtr dft_r2c_3d_32(int nx, int ny, int nz, IntPtr input, IntPtr output, Flags flags);
-
-            [DllImport("libfftw3f-3_64.dll", CallingConvention = CallingConvention.Cdecl, EntryPoint = "fftwf_plan_dft_r2c_3d", ExactSpelling = true)]
-            public static extern IntPtr dft_r2c_3d_64(int nx, int ny, int nz, IntPtr input, IntPtr output, Flags flags);
-
-            public static IntPtr dft_r2c_3d(int nx, int ny, int nz, IntPtr input, IntPtr output, Flags flags)
-            {
-                return IntPtr.Size == 4
-                    ? dft_r2c_3d_32(nx, ny, nz, input, output, flags)
-                    : dft_r2c_3d_64(nx, ny, nz, input, output, flags);
-            }
-
-            [DllImport("libfftw3f-3_32.dll", CallingConvention = CallingConvention.Cdecl, EntryPoint = "fftwf_plan_dft_r2c", ExactSpelling = true)]
-            public static extern IntPtr dft_r2c_32(int rank, int[] n, IntPtr input, IntPtr output, Flags flags);
-
-            [DllImport("libfftw3f-3_64.dll", CallingConvention = CallingConvention.Cdecl, EntryPoint = "fftwf_plan_dft_r2c", ExactSpelling = true)]
-            public static extern IntPtr dft_r2c_64(int rank, int[] n, IntPtr input, IntPtr output, Flags flags);
-
-            public static IntPtr dft_r2c(int rank, int[] n, IntPtr input, IntPtr output, Flags flags)
-            {
-                return IntPtr.Size == 4
-                    ? dft_r2c_32(rank, n, input, output, flags)
-                    : dft_r2c_64(rank, n, input, output, flags);
-            }
-
-            [DllImport("libfftw3f-3_32.dll", CallingConvention = CallingConvention.Cdecl, EntryPoint = "fftwf_plan_dft_c2r_1d", ExactSpelling = true)]
-            public static extern IntPtr dft_c2r_1d_32(int n, IntPtr input, IntPtr output, Flags flags);
-
-            [DllImport("libfftw3f-3_64.dll", CallingConvention = CallingConvention.Cdecl, EntryPoint = "fftwf_plan_dft_c2r_1d", ExactSpelling = true)]
-            public static extern IntPtr dft_c2r_1d_64(int n, IntPtr input, IntPtr output, Flags flags);
-
-            public static IntPtr dft_c2r_1d(int n, IntPtr input, IntPtr output, Flags flags)
-            {
-                return IntPtr.Size == 4
-                    ? dft_c2r_1d_32(n, input, output, flags)
-                    : dft_c2r_1d_64(n, input, output, flags);
-            }
-
-            [DllImport("libfftw3f-3_32.dll", CallingConvention = CallingConvention.Cdecl, EntryPoint = "fftwf_plan_dft_c2r_2d", ExactSpelling = true)]
-            public static extern IntPtr dft_c2r_2d_32(int nx, int ny, IntPtr input, IntPtr output, Flags flags);
-
-            [DllImport("libfftw3f-3_64.dll", CallingConvention = CallingConvention.Cdecl, EntryPoint = "fftwf_plan_dft_c2r_2d", ExactSpelling = true)]
-            public static extern IntPtr dft_c2r_2d_64(int nx, int ny, IntPtr input, IntPtr output, Flags flags);
-
-            public static IntPtr dft_c2r_2d(int nx, int ny, IntPtr input, IntPtr output, Flags flags)
-            {
-                return IntPtr.Size == 4
-                    ? dft_c2r_2d_32(nx, ny, input, output, flags)
-                    : dft_c2r_2d_64(nx, ny, input, output, flags);
-            }
-
-            [DllImport("libfftw3f-3_32.dll", CallingConvention = CallingConvention.Cdecl, EntryPoint = "fftwf_plan_dft_c2r_3d", ExactSpelling = true)]
-            public static extern IntPtr dft_c2r_3d_32(int nx, int ny, int nz, IntPtr input, IntPtr output, Flags flags);
-
-            [DllImport("libfftw3f-3_64.dll", CallingConvention = CallingConvention.Cdecl, EntryPoint = "fftwf_plan_dft_c2r_3d", ExactSpelling = true)]
-            public static extern IntPtr dft_c2r_3d_64(int nx, int ny, int nz, IntPtr input, IntPtr output, Flags flags);
-
-            public static IntPtr dft_c2r_3d(int nx, int ny, int nz, IntPtr input, IntPtr output, Flags flags)
-            {
-                return IntPtr.Size == 4
-                    ? dft_c2r_3d_32(nx, ny, nz, input, output, flags)
-                    : dft_c2r_3d_64(nx, ny, nz, input, output, flags);
-            }
-
-            [DllImport("libfftw3f-3_32.dll", CallingConvention = CallingConvention.Cdecl, EntryPoint = "fftwf_plan_dft_c2r", ExactSpelling = true)]
-            public static extern IntPtr dft_c2r_32(int rank, int[] n, IntPtr input, IntPtr output, Flags flags);
-
-            [DllImport("libfftw3f-3_64.dll", CallingConvention = CallingConvention.Cdecl, EntryPoint = "fftwf_plan_dft_c2r", ExactSpelling = true)]
-            public static extern IntPtr dft_c2r_64(int rank, int[] n, IntPtr input, IntPtr output, Flags flags);
-
-            public static IntPtr dft_c2r(int rank, int[] n, IntPtr input, IntPtr output, Flags flags)
-            {
-                return IntPtr.Size == 4
-                    ? dft_c2r_32(rank, n, input, output, flags)
-                    : dft_c2r_64(rank, n, input, output, flags);
-            }
-
-            [DllImport("libfftw3f-3_32.dll", CallingConvention = CallingConvention.Cdecl, EntryPoint = "fftwf_plan_r2r_1d", ExactSpelling = true)]
-            public static extern IntPtr r2r_1d_32(int n, IntPtr input, IntPtr output, Kind kind, Flags flags);
-
-            [DllImport("libfftw3f-3_64.dll", CallingConvention = CallingConvention.Cdecl, EntryPoint = "fftwf_plan_r2r_1d", ExactSpelling = true)]
-            public static extern IntPtr r2r_1d_64(int n, IntPtr input, IntPtr output, Kind kind, Flags flags);
-
-            public static IntPtr r2r_1d(int n, IntPtr input, IntPtr output, Kind kind, Flags flags)
-            {
-                return IntPtr.Size == 4
-                    ? r2r_1d_32(n, input, output, kind, flags)
-                    : r2r_1d_64(n, input, output, kind, flags);
-            }
-
-            [DllImport("libfftw3f-3_32.dll", CallingConvention = CallingConvention.Cdecl, EntryPoint = "fftwf_plan_r2r_2d", ExactSpelling = true)]
-            public static extern IntPtr r2r_2d_32(int nx, int ny, IntPtr input, IntPtr output, Kind kindx, Kind kindy, Flags flags);
-
-            [DllImport("libfftw3f-3_64.dll", CallingConvention = CallingConvention.Cdecl, EntryPoint = "fftwf_plan_r2r_2d", ExactSpelling = true)]
-            public static extern IntPtr r2r_2d_64(int nx, int ny, IntPtr input, IntPtr output, Kind kindx, Kind kindy, Flags flags);
-
-            public static IntPtr r2r_2d(int nx, int ny, IntPtr input, IntPtr output, Kind kindx, Kind kindy, Flags flags)
-            {
-                return IntPtr.Size == 4
-                    ? r2r_2d_32(nx, ny, input, output, kindx, kindy, flags)
-                    : r2r_2d_64(nx, ny, input, output, kindx, kindy, flags);
-            }
-
-            [DllImport("libfftw3f-3_32.dll", CallingConvention = CallingConvention.Cdecl, EntryPoint = "fftwf_plan_r2r_3d", ExactSpelling = true)]
-            public static extern IntPtr r2r_3d_32(int nx, int ny, int nz, IntPtr input, IntPtr output, Kind kindx, Kind kindy, Kind kindz, Flags flags);
-
-            [DllImport("libfftw3f-3_64.dll", CallingConvention = CallingConvention.Cdecl, EntryPoint = "fftwf_plan_r2r_3d", ExactSpelling = true)]
-            public static extern IntPtr r2r_3d_64(int nx, int ny, int nz, IntPtr input, IntPtr output, Kind kindx, Kind kindy, Kind kindz, Flags flags);
-
-            public static IntPtr r2r_3d(int nx, int ny, int nz, IntPtr input, IntPtr output, Kind kindx, Kind kindy, Kind kindz, Flags flags)
-            {
-                return IntPtr.Size == 4
-                    ? r2r_3d_32(nx, ny, nz, input, output, kindx, kindy, kindz, flags)
-                    : r2r_3d_64(nx, ny, nz, input, output, kindx, kindy, kindz, flags);
-            }
-
-            [DllImport("libfftw3f-3_32.dll", CallingConvention = CallingConvention.Cdecl, EntryPoint = "fftwf_plan_r2r", ExactSpelling = true)]
-            public static extern IntPtr r2r_32(int rank, int[] n, IntPtr input, IntPtr output, Kind[] kind, Flags flags);
-
-            [DllImport("libfftw3f-3_64.dll", CallingConvention = CallingConvention.Cdecl, EntryPoint = "fftwf_plan_r2r", ExactSpelling = true)]
-            public static extern IntPtr r2r_64(int rank, int[] n, IntPtr input, IntPtr output, Kind[] kind, Flags flags);
-
-            public static IntPtr r2r(int rank, int[] n, IntPtr input, IntPtr output, Kind[] kind, Flags flags)
-            {
-                return IntPtr.Size == 4
-                    ? r2r_32(rank, n, input, output, kind, flags)
-                    : r2r_64(rank, n, input, output, kind, flags);
-            }
-
-            [DllImport("libfftw3f-3_32.dll", CallingConvention = CallingConvention.Cdecl, EntryPoint = "fftwf_flops", ExactSpelling = true)]
-            public static extern void flops_32(IntPtr plan, ref double add, ref double mul, ref double fma);
-
-            [DllImport("libfftw3f-3_64.dll", CallingConvention = CallingConvention.Cdecl, EntryPoint = "fftwf_flops", ExactSpelling = true)]
-            public static extern void flops_64(IntPtr plan, ref double add, ref double mul, ref double fma);
-
-            public static void flops(IntPtr plan, ref double add, ref double mul, ref double fma)
+            public static void fftw_plan_with_nthreads(int n)
             {
                 if (IntPtr.Size == 4)
                 {
-                    flops_32(plan, ref add, ref mul, ref fma);
+                    fftw_plan_with_nthreads_32(n);
                 }
                 else
                 {
-                    flops_64(plan, ref add, ref mul, ref fma);
+                    fftw_plan_with_nthreads_64(n);
                 }
             }
-            [DllImport("libfftw3f-3_32.dll", CallingConvention = CallingConvention.Cdecl, EntryPoint = "fftwf_print_plan", ExactSpelling = true)]
-            public static extern void print_plan_32(IntPtr plan);
-            [DllImport("libfftw3f-3_64.dll", CallingConvention = CallingConvention.Cdecl, EntryPoint = "fftwf_print_plan", ExactSpelling = true)]
-            public static extern void print_plan_64(IntPtr plan);
-            public static void print_plan(IntPtr plan)
-            {
-                if (IntPtr.Size == 4)
-                {
-                    print_plan_32(plan);
-                }
-                else
-                {
-                    print_plan_64(plan);
-                }
-            }
+
+
         }
 
         public void Dispose()
@@ -810,10 +633,6 @@ namespace SehensWerte.Maths
             {
                 Import.free(m_TemporalComplexFloatPointer);
                 Import.free(m_SpectralComplexFloatPointer);
-                Import.destroy_plan(m_ForwardPlan);
-                m_ForwardPlan = IntPtr.Zero;
-                Import.destroy_plan(m_ReversePlan);
-                m_ReversePlan = IntPtr.Zero;
                 m_TemporalComplexFloatHandle.Free();
                 m_SpectralComplexFloatHandle.Free();
             }
@@ -823,7 +642,6 @@ namespace SehensWerte.Maths
     [TestClass]
     public class FftWTest
     {
-
         [TestMethod]
         public void TestFftwBins()
         {
