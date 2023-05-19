@@ -412,7 +412,7 @@ namespace SehensWerte.Controls
         private object m_ViewGroupsLock = new object();
         private object m_TraceDataLock = new object();
         private Dictionary<string, TraceData> m_Traces = new Dictionary<string, TraceData>();
-        private List<List<TraceView>> m_ViewGroups = new List<List<TraceView>>();
+        private List<List<TraceView>> m_ViewGroups = new List<List<TraceView>>(); //includes invisible groups!
 
         public class ViewGroupList : List<TraceView>
         { // helper to set tracegroup
@@ -1044,8 +1044,8 @@ namespace SehensWerte.Controls
             try
             {
                 PaintBoxMouse.WipeStart = e;
-                PaintBoxMouse.MouseDownGroupIndex = MouseToGroupIndex(e.Y);
-                PaintBoxMouse.MouseDownGroupDisplay = MouseToGroupDisplayInfo(PaintBoxMouse.MouseDownGroupIndex);
+                PaintBoxMouse.MouseDownVisibleGroupIndex = MouseToGroupIndex(e.Y);
+                PaintBoxMouse.MouseDownGroupDisplay = MouseToGroupDisplayInfo(PaintBoxMouse.MouseDownVisibleGroupIndex);
                 PaintBoxMouse.DownSeconds = HighResTimer.StaticSeconds;
                 PaintBoxMouse.XDragPixels = 0;
 
@@ -1056,10 +1056,6 @@ namespace SehensWerte.Controls
                 else if (e.Button == MouseButtons.Right && (PaintBoxMouse.MouseDownGroupDisplay?.IsOnScreen ?? false) && !SimpleUi)
                 {
                     PaintBoxMouse.ClickType = PaintBoxMouseInfo.Type.WipeSelectStart;
-                }
-                else if (PaintBoxMouse.MouseDownGroupIndex != PaintBoxMouse.ClickGroupIndex)
-                {
-                    PaintBoxMouse.ClickType = PaintBoxMouseInfo.Type.TraceGroupDrag;
                 }
                 else if (e.Button == MouseButtons.Left)
                 {
@@ -1098,7 +1094,7 @@ namespace SehensWerte.Controls
                     switch (e.Button)
                     {
                         case MouseButtons.Left:
-                            if (PaintBoxMouse.MouseDownGroupIndex == index)
+                            if (PaintBoxMouse.MouseDownVisibleGroupIndex == index)
                             {
                                 PaintBox_MouseUp_LeftClick(control, shift, index, list, e);
                             }
@@ -1160,7 +1156,7 @@ namespace SehensWerte.Controls
 
             if (shift)
             {
-                SelectViewGroupRange(PaintBoxMouse.ClickGroupIndex, clickDivision);
+                SelectVisibleViewGroupRange(PaintBoxMouse.ClickGroupIndex, clickDivision);
             }
             else
             {
@@ -1343,7 +1339,7 @@ namespace SehensWerte.Controls
                 {
                     case PaintBoxMouseInfo.Type.TraceHeight:
                         {
-                            int mouseDownDivision = PaintBoxMouse.MouseDownGroupIndex;
+                            int mouseDownDivision = PaintBoxMouse.MouseDownVisibleGroupIndex;
                             double y = e.Y - PaintBoxMouse.MouseDownGroupDisplay.ProjectionArea.Top;
                             if (modifierKeys.HasFlag(Keys.Shift)) // just this trace
                             {
@@ -1363,7 +1359,6 @@ namespace SehensWerte.Controls
                         }
 
                     case PaintBoxMouseInfo.Type.DragTrace:
-                    case PaintBoxMouseInfo.Type.TraceGroupDrag:
                         {
                             if (PaintBox.PaintedTraces.VisibleTraceGroupList.Count > 0)
                             {
@@ -1477,31 +1472,24 @@ namespace SehensWerte.Controls
 
         private void PaintBox_MouseMove_DragTrace(MouseEventArgs e)
         {
-            int newDivision = MouseToGroupIndex(e.Y);
-            if (newDivision < 0 || newDivision >= PaintBox.PaintedTraces.VisibleTraceGroupList.Count) return;
+            int newVisibleDivision = MouseToGroupIndex(e.Y);
+            OnLog?.Invoke(new CsvLog.Entry($"drag {PaintBoxMouse.MouseDownVisibleGroupIndex} to {newVisibleDivision}", CsvLog.Priority.Info));
+            if (newVisibleDivision < 0 || newVisibleDivision >= PaintBox.PaintedTraces.VisibleTraceGroupList.Count) return;
 
-            TraceGroupDisplay traceDivision = PaintBox.TraceToGroupDisplayInfo(PaintBox.PaintedTraces.VisibleTraceGroupList[newDivision][0]);
+            TraceGroupDisplay traceDivision = PaintBox.TraceToGroupDisplayInfo(PaintBox.PaintedTraces.VisibleTraceGroupList[newVisibleDivision][0]);
             double num = (e.X - PaintBoxMouse.WipeStart?.X) * m_ZoomValue / traceDivision.ProjectionArea.Width - PaintBoxMouse.XDragPixels ?? 0;
 
             PaintBoxMouse.XDragPixels += num;
             SetZoomPan(m_ZoomValue, m_PanValue - num);
 
-            if (newDivision != PaintBoxMouse.MouseDownGroupIndex)
+            if (newVisibleDivision != PaintBoxMouse.MouseDownVisibleGroupIndex)
             {
-                if (PaintBoxMouse.ClickType == PaintBoxMouseInfo.Type.TraceGroupDrag)
-                {
-                    DeselectAll();
-                    SelectViewGroupRange(PaintBoxMouse.MouseDownGroupIndex, newDivision);
-                }
-                else
-                {
-                    ViewGroupTranspose(PaintBoxMouse.MouseDownGroupIndex, newDivision);
-                    PaintBoxMouse.MouseDownGroupIndex = newDivision;
-                }
+                VisibleViewGroupTranspose(PaintBoxMouse.MouseDownVisibleGroupIndex, newVisibleDivision);
+                PaintBoxMouse.MouseDownVisibleGroupIndex = newVisibleDivision;
             }
         }
 
-        private void SelectViewGroupRange(int start, int end)
+        private void SelectVisibleViewGroupRange(int start, int end)
         {
             for (int loop = Math.Min(start, end); loop <= Math.Max(start, end); loop++)
             {
@@ -1512,16 +1500,28 @@ namespace SehensWerte.Controls
             }
         }
 
-        private void ViewGroupTranspose(int group1, int group2)
+        private void VisibleViewGroupTranspose(int group1, int group2)
         {
-            lock (m_ViewGroupsLock)
+            try
             {
-                List<TraceView> value = m_ViewGroups[group1];
-                m_ViewGroups[group1] = m_ViewGroups[group2];
-                m_ViewGroups[group2] = value;
+                lock (m_ViewGroupsLock)
+                {
+                    int g1 = VisibleGroupToGroup(group1);
+                    int g2 = VisibleGroupToGroup(group2);
+                    (m_ViewGroups[g1], m_ViewGroups[g2]) = (m_ViewGroups[g2], m_ViewGroups[g1]);
+                }
+                ViewListChanged();
+                RecalculateProjection();
             }
-            ViewListChanged();
-            RecalculateProjection();
+            catch (ArgumentOutOfRangeException) { }
+
+            int VisibleGroupToGroup(int visibleIndex)
+            {
+                return m_ViewGroups
+                    .Select((group, i) => new { Group = group, RealIndex = i })
+                    .FirstOrDefault(x => x.Group.Any(y => y.Visible) && visibleIndex-- == 0)?.RealIndex
+                    ?? throw new ArgumentOutOfRangeException();
+            }
         }
 
         private void PaintBox_MouseMove_DragOverlayHitbox(MouseEventArgs e)

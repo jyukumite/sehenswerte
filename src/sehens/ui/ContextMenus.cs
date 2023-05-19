@@ -827,12 +827,12 @@ namespace SehensWerte.Controls.Sehens
                 ShownText = ScopeContextMenu.MenuItem.TextDisplay.NoChange,
                 Clicked = (a) =>
                 {
-                    using Form form = new Form { Text = "Sehens log" };
+                    Form form = new Form { Text = "Sehens log" };
                     LogControl control = new LogControl();
                     control.Parent = form;
                     control.Dock = DockStyle.Fill;
                     SehensControl scope = a.Scope;
-                    scope.OnLog += scope.OnLog;
+                    scope.OnLog += control.Add;
                     form.FormClosing += (s, o) => { SehensControl scope = a.Scope; scope.OnLog -= control.Add; };
                     form.Show();
                 },

@@ -328,7 +328,7 @@ namespace SehensWerte.Controls.Sehens
                 }
                 if (Scope.PaintBoxMouse.WipeStart != null && Scope.PaintBoxMouse.Click != null)
                 {
-                    List<TraceView> list = PaintedTraces.VisibleTraceGroupList[Scope.PaintBoxMouse.MouseDownGroupIndex];
+                    List<TraceView> list = PaintedTraces.VisibleTraceGroupList[Scope.PaintBoxMouse.MouseDownVisibleGroupIndex];
                     MouseEventArgs topLeft;
                     string text = WipeSelectMouseOver(list, out topLeft);
                     if (text.Length != 0)

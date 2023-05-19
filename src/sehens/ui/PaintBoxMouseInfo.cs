@@ -8,7 +8,6 @@ namespace SehensWerte.Controls.Sehens
             DragTrace,
             DragOverlayHitbox,
             TraceHeight,
-            TraceGroupDrag,
             WipeSelectStart,
             WipeSelect
         }
@@ -56,7 +55,7 @@ namespace SehensWerte.Controls.Sehens
         public double DownSeconds;
         public double XDragPixels;
         public int ClickGroupIndex;
-        public int MouseDownGroupIndex;
+        public int MouseDownVisibleGroupIndex;
         public int MouseMoveGroupIndex;
 
         public List<TraceView> CombinedSelectedTraces(List<List<TraceView>> groups)
