@@ -1,4 +1,6 @@
 using System.Collections.Concurrent;
+using System.Diagnostics;
+using Microsoft.Win32; // registry
 
 namespace SehensWerte.Controls
 {
@@ -17,6 +19,7 @@ namespace SehensWerte.Controls
         public bool MultiLine { get => m_MultiLine; set { m_MultiLine = value; UpdateControls(); } }
         public DialogResult Result => ResultButton;
         public string ResultString => EditResult.Text;
+
         public string DefaultResponse { set { EditResult.Text = value; EditResult.SelectAll(); } }
         public bool Password
         {
@@ -77,7 +80,7 @@ namespace SehensWerte.Controls
             ButtonCancel.Text = "Cancel";
         }
 
-        public static string? Show(string prompt, string title, object? defaultResponse = null, bool password = false, bool multiLine = false, bool cache = false,
+        public static string? Show(string prompt, string title, object? defaultResponse = null, bool password = false, bool multiLine = false, bool cache = false, bool save = false,
                          [System.Runtime.CompilerServices.CallerFilePath] string cacheFilePath = "",
                          [System.Runtime.CompilerServices.CallerLineNumber] int cacheLineNumber = 0)
         {
@@ -88,6 +91,16 @@ namespace SehensWerte.Controls
                 if (Cache.TryGetValue(key, out cached))
                 {
                     defaultResponse = cached;
+                }
+            }
+            string? filename = Process.GetCurrentProcess().MainModule?.FileName;
+            string? registryKey = filename == null ? null : $@"HKEY_CURRENT_USER\Software\{System.IO.Path.GetFileNameWithoutExtension(filename)}";
+            if (save && registryKey != null)
+            {
+                var savedValue = Registry.GetValue(registryKey, key, null) as string;
+                if (savedValue != null)
+                {
+                    defaultResponse = savedValue;
                 }
             }
 
@@ -106,10 +119,16 @@ namespace SehensWerte.Controls
                 {
                     Cache[key] = form.ResultString;
                 }
+                if (save && !password && registryKey != null)
+                {
+                    Registry.SetValue(registryKey, key, form.ResultString);
+                }
                 return form.ResultString;
             }
             else
+            {
                 return null;
+            }
         }
     }
 }

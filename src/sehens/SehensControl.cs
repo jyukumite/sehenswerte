@@ -1234,6 +1234,20 @@ namespace SehensWerte.Controls
             m_HoldZoomPan = false;
         }
 
+        protected override void WndProc(ref Message m)
+        {
+            base.WndProc(ref m);
+
+            const int WM_MOUSEHWHEEL = 0x020E; // horizontal wheel
+            if (m.Msg == WM_MOUSEHWHEEL)
+            {
+                int delta = (int)(short)(m.WParam.ToInt64() >> 16);
+                m_HoldZoomPan = true;
+                SetZoomPan(m_ZoomValue, m_PanValue + (delta / 120.0 * m_ZoomValue / 30.0));
+                m_HoldZoomPan = false;
+            }
+        }
+
         private void PaintBoxMouseWheelHorizontalZoom(MouseEventArgs e)
         {
             int index = MouseToGroupIndex(e.Y);
