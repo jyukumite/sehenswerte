@@ -1,7 +1,7 @@
 # Sehenswerte
 
 # License
-Free for reuse and embedding
+Free for use and embedding
 
 Attribution in an obvious place
 
