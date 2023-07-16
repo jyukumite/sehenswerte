@@ -10,13 +10,13 @@ namespace SehensWerte
             public int Samples = 100000;
             public double SamplesPerSecond = 48000;
 
-            public double NoiseAmplitude = 0;
-            public double NoisePan = 0.5;
+            public double NoiseAmplitude = 0.4;
+            public double NoisePan = 0.3;
 
             public double ToneFrequency = 1000;
-            public double ToneAmplitude = 0;
+            public double ToneAmplitude = .5;
             public double ToneTwist = 0;
-            public double TonePan = 0.5;
+            public double TonePan = 0.7;
             public bool ToneUseSin = false;
             public WaveformGenerator.Waveforms ToneWaveform = WaveformGenerator.Waveforms.Sine;
 
@@ -105,8 +105,8 @@ namespace SehensWerte
             ChainFilterOutput outputLeft = new ChainFilterOutput(mixLeft);
             ChainFilterOutput outputRight = new ChainFilterOutput(mixRight);
 
-            Scope["Left"].Update(outputLeft.Get(m_Data.Samples) ?? new double[0]);
-            Scope["Right"].Update(outputRight.Get(m_Data.Samples) ?? new double[0]);
+            Scope["Left"].Update(outputLeft.Get(m_Data.Samples) ?? new double[0], samplesPerSecond: m_Data.SamplesPerSecond);
+            Scope["Right"].Update(outputRight.Get(m_Data.Samples) ?? new double[0], samplesPerSecond: m_Data.SamplesPerSecond);
         }
     }
 }

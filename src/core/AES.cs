@@ -1,4 +1,5 @@
-﻿using System.Security.Cryptography;
+﻿using Microsoft.VisualStudio.TestTools.UnitTesting;
+using System.Security.Cryptography;
 using System.Text;
 
 namespace SehensWerte.Utils
@@ -51,6 +52,9 @@ namespace SehensWerte.Utils
             }
         }
 
+        /// <summary>
+        /// Encrypt a string, return base64 version
+        /// </summary>
         public static string EncryptString(string data, string pw)
         {
             byte[] bytes = Encoding.UTF8.GetBytes(data);
@@ -61,6 +65,9 @@ namespace SehensWerte.Utils
             return Convert.ToBase64String(result);
         }
 
+        /// <summary>
+        /// Decrypt a base64 coded string, return cleartext
+        /// </summary>
         public static string DecryptString(string data, string pw)
         {
             byte[] key32B = SHA256.Create().ComputeHash(Encoding.UTF8.GetBytes(pw + "-SehensWerte"));
@@ -69,6 +76,21 @@ namespace SehensWerte.Utils
             byte[] cypher = bytes.Skip(16).ToArray();
             byte[] result = Decrypt(cypher, key32B, iv16B) ?? new byte[0];
             return Encoding.Default.GetString(result);
+        }
+    }
+
+    [TestClass]
+    public class AESTests
+    {
+        [TestMethod]
+        public void TestAES()
+        {
+            const string cleartext = "Testing 1 2 3";
+            const string password = "password";
+            string cyphertext = AES.EncryptString(cleartext, password);
+
+            Assert.IsTrue(cyphertext != cleartext);
+            Assert.IsTrue(AES.DecryptString(cyphertext, password) == cleartext);
         }
     }
 }

@@ -1071,7 +1071,7 @@ namespace SehensWerte.Controls.Sehens
 
         public static void SaveStateXml(string filename, SehensControl scope)
         {
-            //fixme - save as xml othe rthan samples
+            //fixme - save as xml other than samples
         }
 
         public static bool LoadState(string filename, SehensControl scope)

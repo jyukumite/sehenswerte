@@ -7,6 +7,9 @@ namespace SehensWerte.Utils
 {
     public static class ObjectDumpExtension
     {
+        private const string NullName = "(null)";
+        private const string CNullName = "null";
+
         public enum DumpMode { Verbose, CSharp };
 
         public static string DumpObject(this object obj, DumpMode mode = DumpMode.Verbose)
@@ -26,16 +29,16 @@ namespace SehensWerte.Utils
             return obj == null ?
                 mode switch
                 {
-                    DumpMode.Verbose => "(null)",
-                    DumpMode.CSharp => "null",
+                    DumpMode.Verbose => NullName,
+                    DumpMode.CSharp => CNullName,
                 }
-                : Object(obj, obj.GetType(), "(null)", indent, mode);
+                : Object(obj, obj.GetType(), NullName, indent, mode);
         }
 
         private static string Object(object obj, Type type, string name, int indent, DumpMode mode)
         {
             string text = "";
-            if (type.IsPrimitive || type.IsSealed || obj is string)
+            if ((type.IsPrimitive || type.IsSealed || obj is string) && obj is not Array)
             {
                 return text + Primitive(obj, type, name, indent, mode);
             }
@@ -58,11 +61,15 @@ namespace SehensWerte.Utils
         {
             string text = mode switch
             {
-                DumpMode.Verbose => Pad(indent, "{0} ({1}):\r\n", name, type.Name),
-                DumpMode.CSharp => Pad(indent, "new {0}() {{\r\n", name == "(null)" ? "" : name)
+                DumpMode.Verbose => Pad(indent, "{0} ({1}):\r\n", name == NullName ? "" : name, type.Name),
+                DumpMode.CSharp => Pad(indent, "new {0}() {{\r\n", name == CNullName ? "" : name)
             };
 
-            if (obj is IDictionary)
+            if (obj is byte[])
+            {
+                text += ((byte[])obj).HexDump() + "\r\n";
+            }
+            else if (obj is IDictionary)
             {
                 text += Dictionary((IDictionary)obj, indent, mode);
             }
@@ -127,7 +134,7 @@ namespace SehensWerte.Utils
                     DumpMode.Verbose => Pad(indent + 1, "[{0}] ({1}):\r\n", key, key.GetType().Name),
                     DumpMode.CSharp => Pad(indent + 1, "{{ {0}.{1}, ", GetFullName(key), key)
                 };
-                text += Object(dictionary[key] ?? "null", indent + 2, mode);
+                text += Object(dictionary[key] ?? ((mode == DumpMode.CSharp) ? CNullName : NullName), indent + 2, mode);
                 text += mode switch
                 {
                     DumpMode.Verbose => "",
@@ -154,7 +161,7 @@ namespace SehensWerte.Utils
                     {
                         text = "#" + text;
                     }
-                    return Object(fieldInfo.GetValue(obj) ?? "(null)", fieldInfo.FieldType, text, indent + 1, mode);
+                    return Object(fieldInfo.GetValue(obj) ?? NullName, fieldInfo.FieldType, text, indent + 1, mode);
                 }
 
                 if (member is PropertyInfo)
@@ -168,7 +175,7 @@ namespace SehensWerte.Utils
                         {
                             text = "#" + text;
                         }
-                        return Object(propertyInfo.GetValue(obj, null) ?? "(null)", propertyInfo.PropertyType, text, indent + 1, mode);
+                        return Object(propertyInfo.GetValue(obj, null) ?? NullName, propertyInfo.PropertyType, text, indent + 1, mode);
                     }
                 }
             }
