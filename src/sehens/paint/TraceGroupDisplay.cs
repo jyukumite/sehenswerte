@@ -16,8 +16,9 @@ namespace SehensWerte.Controls
         public SehensControl Scope => View0.Scope;
 
         public Skin Skin => Scope.ActiveSkin;
-        public bool YTTrace => View0.Samples.ViewedIsYTTrace;
+        public bool YTTrace => View0.Samples.ViewedIsYTTrace && (View0.CanShowRealYT || View0.CanShowFakeYT);
         public int OverlayIndex => View0.Painted.TraceIndex;
+
 
         public PaintBoxMouseInfo MouseInfo;
         public PaintFlags Flags;

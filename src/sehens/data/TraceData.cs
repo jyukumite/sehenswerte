@@ -14,9 +14,7 @@ namespace SehensWerte.Controls.Sehens
             {
                 lock (DataLock)
                 {
-                    return m_InputData.UnixTime == null || m_InputData.UnixTime.Length == 0
-                        ? m_InputData.LeftmostUnixTime
-                        : m_InputData.UnixTime[0];
+                    return m_InputData.LeftmostUnixTime;
                 }
             }
             set

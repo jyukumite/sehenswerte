@@ -1775,7 +1775,9 @@ value=" + string.Format(VerticalUnitFormat, Clicks[0].SampleAtX.ToStringRound(5,
 
         public double[] ExecuteCalculate()
         {
-            double[][] sourceTraces = CalculatedSourceViews.Select(x => x.CalculatedBeforeZoom).ToArray();
+            //fixme: recursive invalidate with YT traces
+
+            double[][] sourceTraces = CalculatedSourceViews.Select(x => (x.CanShowRealYT ? x.Samples.ViewedSamplesInterpolatedAsDouble : x.CalculatedBeforeZoom) ?? new double[0]).ToArray();
             int sampleCount = sourceTraces.Min(x => x.Length);
             int traceCount = sourceTraces.Length;
 
