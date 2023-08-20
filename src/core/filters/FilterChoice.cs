@@ -3,7 +3,7 @@ using System.Reflection;
 
 namespace SehensWerte.Filters
 {
-    public class FilterChoice : AutoEditorForm.ValuesAttributeInterface
+    public class FilterChoice : AutoEditor.ValuesAttributeInterface
     {
         private static Dictionary<string, Func<string, Filter>> m_Factory;
         public static IEnumerable<string> FilterNames => m_Factory.Keys;

@@ -64,7 +64,7 @@ namespace SehensWerte.Comms
             {
                 if (m_SerialPort == null) return;
 
-                OnLog(new CsvLog.Entry($"Closing {ConfigString}", CsvLog.Priority.Info));
+                OnLog?.Invoke(new CsvLog.Entry($"Closing {ConfigString}", CsvLog.Priority.Info));
                 m_ThreadStop.Set();
                 m_Thread.Join();
                 if (m_SerialPort != null)
@@ -72,11 +72,11 @@ namespace SehensWerte.Comms
                     m_SerialPort.Close();
                     m_SerialPort = null;
                 }
-                OnLog(new CsvLog.Entry($"Closed {ConfigString}", CsvLog.Priority.Info));
+                OnLog?.Invoke(new CsvLog.Entry($"Closed {ConfigString}", CsvLog.Priority.Info));
             }
             catch (Exception e)
             {
-                OnLog(new CsvLog.Entry($"Exception closing port {ConfigString} {e.ToString()}", CsvLog.Priority.Exception));
+                OnLog?.Invoke(new CsvLog.Entry($"Exception closing port {ConfigString} {e.ToString()}", CsvLog.Priority.Exception));
             }
         }
 
@@ -86,13 +86,13 @@ namespace SehensWerte.Comms
 
             try
             {
-                OnLog(new CsvLog.Entry($"Opening {ConfigString}", CsvLog.Priority.Info));
+                OnLog?.Invoke(new CsvLog.Entry($"Opening {ConfigString}", CsvLog.Priority.Info));
                 m_SerialPort = new System.IO.Ports.SerialPort(Port, BaudRate, Parity, DataBits, StopBits);
                 m_SerialPort.ReadBufferSize = ReadBufferSize;
                 m_SerialPort.Open();
 
                 m_Thread.Start();
-                OnLog(new CsvLog.Entry($"Opened {ConfigString}", CsvLog.Priority.Info));
+                OnLog?.Invoke(new CsvLog.Entry($"Opened {ConfigString}", CsvLog.Priority.Info));
             }
             catch
             {
@@ -103,7 +103,7 @@ namespace SehensWerte.Comms
 
         private void Run()
         {
-            OnLog(new CsvLog.Entry($"Thread {ConfigString} started", CsvLog.Priority.Debug));
+            OnLog?.Invoke(new CsvLog.Entry($"Thread {ConfigString} started", CsvLog.Priority.Debug));
 
             try
             {
@@ -113,7 +113,7 @@ namespace SehensWerte.Comms
                 m_SerialPort.ReadTimeout = 1;
                 m_SerialPort.ErrorReceived += (o, e) =>
                 {
-                    OnLog(new CsvLog.Entry($"Error on {ConfigString}: {e.EventType}", CsvLog.Priority.Exception));
+                    OnLog?.Invoke(new CsvLog.Entry($"Error on {ConfigString}: {e.EventType}", CsvLog.Priority.Exception));
                 };
 
                 while (Thread.CurrentThread.ThreadState == ThreadState.Running
@@ -131,7 +131,7 @@ namespace SehensWerte.Comms
                             }
                             catch (IOException e)
                             {
-                                OnLog(new CsvLog.Entry($"{ConfigString} exception " + e.ToString(), CsvLog.Priority.Exception));
+                                OnLog?.Invoke(new CsvLog.Entry($"{ConfigString} exception " + e.ToString(), CsvLog.Priority.Exception));
                             }
                         }
                         catch (TimeoutException)
@@ -151,9 +151,9 @@ namespace SehensWerte.Comms
             }
             catch (Exception e)
             {
-                OnLog(new CsvLog.Entry($"Thread {ConfigString} exception: " + e.ToString(), CsvLog.Priority.Exception));
+                OnLog?.Invoke(new CsvLog.Entry($"Thread {ConfigString} exception: " + e.ToString(), CsvLog.Priority.Exception));
             }
-            OnLog(new CsvLog.Entry($"Thread {ConfigString} stopped: ", CsvLog.Priority.Debug));
+            OnLog?.Invoke(new CsvLog.Entry($"Thread {ConfigString} stopped: ", CsvLog.Priority.Debug));
         }
 
 

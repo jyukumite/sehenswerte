@@ -132,12 +132,12 @@ namespace SehensWerte.Controls.Sehens
         {
             public enum Destination { File, Clipboard, TemporaryFile }
 
-            [AutoEditorForm.Disabled]
-            [AutoEditorForm.DisplayOrder(-2)]
+            [AutoEditor.Disabled]
+            [AutoEditor.DisplayOrder(-2)]
             public string Filename = "";
 
-            [AutoEditorForm.Disabled]
-            [AutoEditorForm.DisplayName("Target")]
+            [AutoEditor.Disabled]
+            [AutoEditor.DisplayName("Target")]
             public Destination Result;
         }
 
@@ -145,30 +145,30 @@ namespace SehensWerte.Controls.Sehens
         {
             public enum Scope { SelectedDisplayedSamples, SelectedTracesBeforeZoom, VisibleTracesBeforeZoom, AllTracesBeforeZoom }
 
-            [AutoEditorForm.DisplayName("Scope")]
+            [AutoEditor.DisplayName("Scope")]
             virtual public Scope ExportScope { get; set; }
         }
 
         private class ExportImageForm : ExportDataFormBase
         {
-            [AutoEditorForm.DisplayName("High quality render")]
-            [AutoEditorForm.DisplayOrder(0)]
+            [AutoEditor.DisplayName("High quality render")]
+            [AutoEditor.DisplayOrder(0)]
             public bool HighQualityRender { get => Skin.HighQualityRender; set => Skin.HighQualityRender = value; }
 
-            [AutoEditorForm.DisplayName("Trace width (pixels)")]
-            [AutoEditorForm.DisplayOrder(-5)]
+            [AutoEditor.DisplayName("Trace width (pixels)")]
+            [AutoEditor.DisplayOrder(-5)]
             public int TraceWidth { get => Skin.TraceWidth; set => Skin.TraceWidth = value; }
 
-            [AutoEditorForm.DisplayName("Per trace height (pixels)")]
-            [AutoEditorForm.DisplayOrder(-5)]
+            [AutoEditor.DisplayName("Per trace height (pixels)")]
+            [AutoEditor.DisplayOrder(-5)]
             public int TraceHeight { get => Skin.TraceHeight; set => Skin.TraceHeight = value; }
 
-            [AutoEditorForm.DisplayName("Scope")]
-            [AutoEditorForm.DisplayOrder(-5)]
+            [AutoEditor.DisplayName("Scope")]
+            [AutoEditor.DisplayOrder(-5)]
             public Skin.TraceSelections ExportScope { get => Skin.ExportTraces; set => Skin.ExportTraces = value; }
 
-            [AutoEditorForm.DisplayOrder(0)]
-            [AutoEditorForm.SubEditor]
+            [AutoEditor.DisplayOrder(0)]
+            [AutoEditor.SubEditor]
             public Skin Skin = new Skin(Skin.CannedSkins.ScreenShot);
 
         }
@@ -177,25 +177,25 @@ namespace SehensWerte.Controls.Sehens
         {
             public enum Source { File, Clipboard, TemporaryFile }
 
-            [AutoEditorForm.Hidden]
+            [AutoEditor.Hidden]
             public string[] Filenames = new string[0];
 
-            [AutoEditorForm.Disabled]
-            [AutoEditorForm.DisplayOrder(-1)]
+            [AutoEditor.Disabled]
+            [AutoEditor.DisplayOrder(-1)]
             public ImportType FileType;
 
-            [AutoEditorForm.DisplayName("Data source")]
-            [AutoEditorForm.Disabled]
+            [AutoEditor.DisplayName("Data source")]
+            [AutoEditor.Disabled]
             public Source DataSource;
 
-            [AutoEditorForm.DisplayName("Append filename prefix")]
+            [AutoEditor.DisplayName("Append filename prefix")]
             public bool AppendFilenamePrefix = false;
 
-            [AutoEditorForm.DisplayName("Fix data length")]
+            [AutoEditor.DisplayName("Fix data length")]
             public int ForceDataLength = 0;
 
-            [AutoEditorForm.Disabled]
-            [AutoEditorForm.DisplayOrder(-2)]
+            [AutoEditor.Disabled]
+            [AutoEditor.DisplayOrder(-2)]
             public string Filename
             {
                 get => string.Join(", ", Filenames);
@@ -213,70 +213,70 @@ namespace SehensWerte.Controls.Sehens
 
         private class ImportDataVerticalCsvForm : ImportDataForm
         {
-            [AutoEditorForm.DisplayName("Samples per second")]
+            [AutoEditor.DisplayName("Samples per second")]
             public double SamplesPerSecond;
 
-            [AutoEditorForm.DisplayName("Header row prefix")]
+            [AutoEditor.DisplayName("Header row prefix")]
             public string HeaderLinePrefix = "";
 
-            [AutoEditorForm.DisplayName("Append index suffix")]
+            [AutoEditor.DisplayName("Append index suffix")]
             public bool AddIndex = true;
 
-            [AutoEditorForm.DisplayName("Column match regex")]
+            [AutoEditor.DisplayName("Column match regex")]
             public string ColumnMatchRegex = "";
 
-            [AutoEditorForm.DisplayName("Trace name suffix")]
+            [AutoEditor.DisplayName("Trace name suffix")]
             public string TraceNameSuffix = "";
 
-            [AutoEditorForm.DisplayName("Trace prefix")]
+            [AutoEditor.DisplayName("Trace prefix")]
             public string TraceNamePrefix = "Csv.";
 
-            [AutoEditorForm.DisplayName("Remove invalid samples")]
+            [AutoEditor.DisplayName("Remove invalid samples")]
             public bool RemoveNAN = true;
         }
 
         private class ImportDataWavForm : ImportDataForm
         {
-            [AutoEditorForm.DisplayName("Trace name suffix")]
+            [AutoEditor.DisplayName("Trace name suffix")]
             public string TraceNameSuffix = "";
 
-            [AutoEditorForm.DisplayName("Trace prefix")]
+            [AutoEditor.DisplayName("Trace prefix")]
             public string TraceNamePrefix = "Wave.";
         }
 
         private class ImportDataBinaryForm : ImportDataForm
         {
-            [AutoEditorForm.DisplayName("Samples per second")]
+            [AutoEditor.DisplayName("Samples per second")]
             public double SamplesPerSecond = 10000;
 
-            [AutoEditorForm.DisplayName("Decimation factor")]
+            [AutoEditor.DisplayName("Decimation factor")]
             public int DecimationFactor = 1;
 
-            [AutoEditorForm.DisplayName("Trace name suffix")]
+            [AutoEditor.DisplayName("Trace name suffix")]
             public string TraceNameSuffix = "";
 
-            [AutoEditorForm.DisplayName("Trace prefix")]
+            [AutoEditor.DisplayName("Trace prefix")]
             public string TraceNamePrefix = "Binary.";
         }
 
         private class ImportDataSaleaeAnalysisForm : ImportDataForm
         {
-            [AutoEditorForm.DisplayName("Samples per second")]
+            [AutoEditor.DisplayName("Samples per second")]
             public double SamplesPerSecond = 100000;
 
-            [AutoEditorForm.DisplayName("Target trace view name")]
+            [AutoEditor.DisplayName("Target trace view name")]
             public string TargetTrace = "";
 
-            [AutoEditorForm.DisplayName("Trace name suffix")]
+            [AutoEditor.DisplayName("Trace name suffix")]
             public string TraceNameSuffix = "";
 
-            [AutoEditorForm.DisplayName("Trace prefix")]
+            [AutoEditor.DisplayName("Trace prefix")]
             public string TraceNamePrefix = "Logic.";
         }
 
         private class ImportDataFeaturesForm : ImportDataForm
         {
-            [AutoEditorForm.DisplayName("Target trace view name")]
+            [AutoEditor.DisplayName("Target trace view name")]
             public string TargetTrace = "";
         }
 

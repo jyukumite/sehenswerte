@@ -2,9 +2,11 @@
 {
     public class AutoEditorBase
     {
+        [AutoEditor.Hidden]
         public Action? UpdateControls;
+        [AutoEditor.Hidden]
         public Action? OnChanged;
-        [AutoEditorForm.Hidden]
+        [AutoEditor.Hidden]
         public bool Updating;
     }
 }

@@ -11,83 +11,83 @@ namespace SehensWerte.Controls.Sehens
     {
         private class NoiseTraceForm
         {
-            [AutoEditorForm.DisplayName("Name")]
-            [AutoEditorForm.DisplayOrder(-1)]
+            [AutoEditor.DisplayName("Name")]
+            [AutoEditor.DisplayOrder(-1)]
             public string Name = "Noise";
-            [AutoEditorForm.DisplayName("Samples")]
+            [AutoEditor.DisplayName("Samples")]
             public int SampleCount = 10000;
-            [AutoEditorForm.DisplayName("Samples per second")]
+            [AutoEditor.DisplayName("Samples per second")]
             public double SamplesPerSecond = 10000.0;
-            [AutoEditorForm.DisplayName("Amplitude")]
+            [AutoEditor.DisplayName("Amplitude")]
             public double Amplitude = 1.0;
         }
 
         private class WaveformTraceForm
         {
-            [AutoEditorForm.DisplayName("Name")]
-            [AutoEditorForm.DisplayOrder(-1)]
+            [AutoEditor.DisplayName("Name")]
+            [AutoEditor.DisplayOrder(-1)]
             public string Name = "Waveform";
-            [AutoEditorForm.DisplayName("Samples")]
+            [AutoEditor.DisplayName("Samples")]
             public int SampleCount = 10000;
-            [AutoEditorForm.DisplayName("Samples per second")]
+            [AutoEditor.DisplayName("Samples per second")]
             public double SamplesPerSecond = 10000.0;
-            [AutoEditorForm.DisplayName("Frequency")]
+            [AutoEditor.DisplayName("Frequency")]
             public double Frequency = 1000.0;
-            [AutoEditorForm.DisplayName("Amplitude")]
+            [AutoEditor.DisplayName("Amplitude")]
             public double Amplitude = 1.0;
-            [AutoEditorForm.DisplayName("Phase (0-1)")]
+            [AutoEditor.DisplayName("Phase (0-1)")]
             public double Phase;
-            [AutoEditorForm.DisplayName("Waveform")]
+            [AutoEditor.DisplayName("Waveform")]
             public WaveformGenerator.Waveforms Waveform;
-            [AutoEditorForm.DisplayName("Use Sin function")]
+            [AutoEditor.DisplayName("Use Sin function")]
             public bool UseSin;
-            [AutoEditorForm.DisplayName("Window")]
+            [AutoEditor.DisplayName("Window")]
             public SampleWindow.WindowType Window = SampleWindow.WindowType.Rectangular;
         }
 
         private class SincTraceForm : AutoEditorBase
         {
-            [AutoEditorForm.DisplayName("Name")]
-            [AutoEditorForm.DisplayOrder(-1)]
+            [AutoEditor.DisplayName("Name")]
+            [AutoEditor.DisplayOrder(-1)]
             public string Name = "Sinc";
-            [AutoEditorForm.DisplayName("Amplitude")]
+            [AutoEditor.DisplayName("Amplitude")]
             public double Amplitude = 1.0;
-            [AutoEditorForm.DisplayName("Delay")]
+            [AutoEditor.DisplayName("Delay")]
             public double Delay;
-            [AutoEditorForm.DisplayName("Offset")]
+            [AutoEditor.DisplayName("Offset")]
             public double Offset;
-            [AutoEditorForm.DisplayName("Samples")]
+            [AutoEditor.DisplayName("Samples")]
             public int Count
             {
                 get => m_Count;
                 set { m_Count = value; CalculateFrequency(); }
             }
 
-            [AutoEditorForm.DisplayName("Samples per second")]
+            [AutoEditor.DisplayName("Samples per second")]
             public double SamplesPerSecond
             {
                 get => m_SamplesPerSecond;
                 set { m_SamplesPerSecond = value; CalculateFrequency(); }
             }
-            [AutoEditorForm.DisplayName("Left time")]
+            [AutoEditor.DisplayName("Left time")]
             public double LeftTime
             {
                 get => m_LeftTime;
                 set { m_LeftTime = value; CalculateFrequency(); }
             }
-            [AutoEditorForm.DisplayName("Right time")]
+            [AutoEditor.DisplayName("Right time")]
             public double RightTime
             {
                 get => m_RightTime;
                 set { m_RightTime = value; CalculateFrequency(); }
             }
-            [AutoEditorForm.DisplayName("Half width time")]
+            [AutoEditor.DisplayName("Half width time")]
             public double halfwidth
             {
                 get => m_HalfWidthTime;
                 set { m_HalfWidthTime = value; CalculateFrequency(); }
             }
-            [AutoEditorForm.DisplayName("Frequency")]
+            [AutoEditor.DisplayName("Frequency")]
             public double frequency
             {
                 get => m_Frequency;
@@ -108,107 +108,107 @@ namespace SehensWerte.Controls.Sehens
                 UpdateControls?.Invoke();
             }
 
-            [AutoEditorForm.Hidden]
+            [AutoEditor.Hidden]
             public int m_Count = 10000;
-            [AutoEditorForm.Hidden]
+            [AutoEditor.Hidden]
             private double m_Frequency;
-            [AutoEditorForm.Hidden]
+            [AutoEditor.Hidden]
             private double m_LeftTime = -10.0;
-            [AutoEditorForm.Hidden]
+            [AutoEditor.Hidden]
             private double m_RightTime = 10.0;
-            [AutoEditorForm.Hidden]
+            [AutoEditor.Hidden]
             private double m_SamplesPerSecond = 44100.0;
-            [AutoEditorForm.Hidden]
+            [AutoEditor.Hidden]
             public double m_HalfWidthTime = 1.0;
 
         }
 
         private class FilterGenTraceForm
         {
-            [AutoEditorForm.DisplayName("Name")]
-            [AutoEditorForm.DisplayOrder(-1)]
+            [AutoEditor.DisplayName("Name")]
+            [AutoEditor.DisplayOrder(-1)]
             public string Name = "FIR Filter";
 
             public double SamplesPerSecond = 10000;
 
             public int Width = 256;
 
-            [AutoEditorForm.DisplayName("Amplitude")]
+            [AutoEditor.DisplayName("Amplitude")]
             public double Amplitude = 1.0;
 
-            [AutoEditorForm.DisplayName("FFT Filter Style")]
+            [AutoEditor.DisplayName("FFT Filter Style")]
             public TraceView.FftFilterTypes FftFilterType = TraceView.FftFilterTypes.BandPass;
 
-            [AutoEditorForm.DisplayName("FFT Bandpass Window")]
+            [AutoEditor.DisplayName("FFT Bandpass Window")]
             public SampleWindow.WindowType FftBandpassWindow = SampleWindow.WindowType.RaisedCosine;
 
-            [AutoEditorForm.DisplayOrder(1)]
-            [AutoEditorForm.DisplayName("FFT Bandpass HPF 6dB Hz")]
+            [AutoEditor.DisplayOrder(1)]
+            [AutoEditor.DisplayName("FFT Bandpass HPF 6dB Hz")]
             public double FftBandpassHPF6dB = 50.0;
 
-            [AutoEditorForm.DisplayOrder(2)]
-            [AutoEditorForm.DisplayName("FFT Bandpass HPF 3dB Hz")]
+            [AutoEditor.DisplayOrder(2)]
+            [AutoEditor.DisplayName("FFT Bandpass HPF 3dB Hz")]
             public double FftBandpassHPF3dB = 300.0;
 
-            [AutoEditorForm.DisplayOrder(3)]
-            [AutoEditorForm.DisplayName("FFT Bandpass LPF 3dB Hz")]
+            [AutoEditor.DisplayOrder(3)]
+            [AutoEditor.DisplayName("FFT Bandpass LPF 3dB Hz")]
             public double FftBandpassLPF3dB = 3000.0;
 
-            [AutoEditorForm.DisplayOrder(4)]
-            [AutoEditorForm.DisplayName("FFT Bandpass LPF 6dB Hz")]
+            [AutoEditor.DisplayOrder(4)]
+            [AutoEditor.DisplayName("FFT Bandpass LPF 6dB Hz")]
             public double FftBandpassLPF6dB = 3500.0;
         }
 
         private class WindowTraceForm
         {
-            [AutoEditorForm.DisplayName("Name")]
-            [AutoEditorForm.DisplayOrder(-1)]
+            [AutoEditor.DisplayName("Name")]
+            [AutoEditor.DisplayOrder(-1)]
             public string Name = "Window";
 
-            [AutoEditorForm.DisplayName("Count")]
+            [AutoEditor.DisplayName("Count")]
             public int Count = 10000;
 
-            [AutoEditorForm.DisplayName("Samples per second")]
+            [AutoEditor.DisplayName("Samples per second")]
             public double samplesPerSecond = 10000;
 
-            [AutoEditorForm.DisplayName("Window type")]
+            [AutoEditor.DisplayName("Window type")]
             public SampleWindow.WindowType Window = SampleWindow.WindowType.RaisedCosine;
 
-            [AutoEditorForm.DisplayName("Amplitude")]
+            [AutoEditor.DisplayName("Amplitude")]
             public double Amplitude = 1.0;
 
-            [AutoEditorForm.DisplayName("Offset")]
+            [AutoEditor.DisplayName("Offset")]
             public double Offset;
         }
 
         private class SweepTraceInput
         {
-            [AutoEditorForm.DisplayName("Name")]
-            [AutoEditorForm.DisplayOrder(-1)]
+            [AutoEditor.DisplayName("Name")]
+            [AutoEditor.DisplayOrder(-1)]
             public string Name = "Sweep";
 
-            [AutoEditorForm.DisplayName("Count")]
+            [AutoEditor.DisplayName("Count")]
             public int Count = 10000;
 
-            [AutoEditorForm.DisplayName("Samples per second")]
+            [AutoEditor.DisplayName("Samples per second")]
             public double SamplesPerSecond = 10000;
 
-            [AutoEditorForm.DisplayName("Start frequency")]
+            [AutoEditor.DisplayName("Start frequency")]
             public double FrequencyStart = 1000.0;
 
-            [AutoEditorForm.DisplayName("End frequency")]
+            [AutoEditor.DisplayName("End frequency")]
             public double FrequencyEnd = 2000.0;
 
-            [AutoEditorForm.DisplayName("Sweeps per second")]
+            [AutoEditor.DisplayName("Sweeps per second")]
             public double SweepRate = 1.0;
 
-            [AutoEditorForm.DisplayName("Amplitude")]
+            [AutoEditor.DisplayName("Amplitude")]
             public double Amplitude = 1.0;
 
-            [AutoEditorForm.DisplayName("Waveform")]
+            [AutoEditor.DisplayName("Waveform")]
             public WaveformGenerator.Waveforms Waveform;
 
-            [AutoEditorForm.DisplayName("Use Sin function")]
+            [AutoEditor.DisplayName("Use Sin function")]
             public bool UseSinFunction;
         }
 
@@ -220,63 +220,63 @@ namespace SehensWerte.Controls.Sehens
                 m_View = view;
             }
 
-            [AutoEditorForm.DisplayOrder(-2)]
-            [AutoEditorForm.DisplayName("Filter")]
-            [AutoEditorForm.Values(typeof(FilterChoice))]
+            [AutoEditor.DisplayOrder(-2)]
+            [AutoEditor.DisplayName("Filter")]
+            [AutoEditor.Values(typeof(FilterChoice))]
             public string TraceFilter
             {
                 get => m_View.TraceFilter;
                 set { m_View.TraceFilter = value; }
             }
 
-            [AutoEditorForm.DisplayOrder(-1)]
-            [AutoEditorForm.DisplayName("Transform")]
+            [AutoEditor.DisplayOrder(-1)]
+            [AutoEditor.DisplayName("Transform")]
             public TraceView.FilterTransforms FilterTransform
             {
                 get => m_View.FilterTransform;
                 set { m_View.FilterTransform = value; }
             }
 
-            [AutoEditorForm.DisplayName("FFT Bandpass Window")]
+            [AutoEditor.DisplayName("FFT Bandpass Window")]
             public SampleWindow.WindowType FftBandpassWindow
             {
                 get => m_View.FftBandpassWindow;
                 set { m_View.FftBandpassWindow = value; }
             }
 
-            [AutoEditorForm.DisplayName("FFT Filter Style")]
+            [AutoEditor.DisplayName("FFT Filter Style")]
             public TraceView.FftFilterTypes FftFilterType
             {
                 get => m_View.FftFilterType;
                 set { m_View.FftFilterType = value; }
             }
 
-            [AutoEditorForm.DisplayOrder(1)]
-            [AutoEditorForm.DisplayName("FFT Bandpass HPF 6dB Hz")]
+            [AutoEditor.DisplayOrder(1)]
+            [AutoEditor.DisplayName("FFT Bandpass HPF 6dB Hz")]
             public double FftFilterHPF6dB
             {
                 get => m_View.FftBandpassHPF6dB;
                 set { m_View.FftBandpassHPF6dB = value; }
             }
 
-            [AutoEditorForm.DisplayOrder(2)]
-            [AutoEditorForm.DisplayName("FFT Bandpass HPF 3dB Hz")]
+            [AutoEditor.DisplayOrder(2)]
+            [AutoEditor.DisplayName("FFT Bandpass HPF 3dB Hz")]
             public double FftFilterHPF3dB
             {
                 get => m_View.FftBandpassHPF3dB;
                 set { m_View.FftBandpassHPF3dB = value; }
             }
 
-            [AutoEditorForm.DisplayOrder(3)]
-            [AutoEditorForm.DisplayName("FFT Bandpass LPF 3dB Hz")]
+            [AutoEditor.DisplayOrder(3)]
+            [AutoEditor.DisplayName("FFT Bandpass LPF 3dB Hz")]
             public double FftFilterLPF3dB
             {
                 get => m_View.FftBandpassLPF3dB;
                 set { m_View.FftBandpassLPF3dB = value; }
             }
 
-            [AutoEditorForm.DisplayOrder(4)]
-            [AutoEditorForm.DisplayName("FFT Bandpass LPF 6dB Hz")]
+            [AutoEditor.DisplayOrder(4)]
+            [AutoEditor.DisplayName("FFT Bandpass LPF 6dB Hz")]
             public double FftFilterLPF6dB
             {
                 get => m_View.FftBandpassHzLPF6dB;
@@ -290,37 +290,37 @@ namespace SehensWerte.Controls.Sehens
 
         public class OneDoubleEdit : ICalculatedTraceData
         {
-            [AutoEditorForm.DisplayName("Value")]
+            [AutoEditor.DisplayName("Value")]
             public double Param = 1.0;
         }
 
         public class QuantiseEdit : ICalculatedTraceData
         {
-            [AutoEditorForm.DisplayName("Offset")]
+            [AutoEditor.DisplayName("Offset")]
             public double Offset = 1.0;
 
-            [AutoEditorForm.DisplayName("Scale")]
+            [AutoEditor.DisplayName("Scale")]
             public double Scale = 32767.0;
         }
 
         public class WindowEdit : ICalculatedTraceData
         {
-            [AutoEditorForm.DisplayName("Window")]
+            [AutoEditor.DisplayName("Window")]
             public int Window = 100;
         }
 
         public class MinMaxEdit : ICalculatedTraceData
         {
-            [AutoEditorForm.DisplayName("Minimum Value")]
+            [AutoEditor.DisplayName("Minimum Value")]
             public int Min = 0;
 
-            [AutoEditorForm.DisplayName("Maximum Value")]
+            [AutoEditor.DisplayName("Maximum Value")]
             public int Max = 1;
         }
 
         public class CountEdit : ICalculatedTraceData
         {
-            [AutoEditorForm.DisplayName("Count")]
+            [AutoEditor.DisplayName("Count")]
             public int Count = 100;
         }
 

@@ -12,6 +12,66 @@ namespace SehensWerte.Controls
         private bool m_Updating;
         private static int m_UpdateRecursion;
 
+        [AttributeUsage(AttributeTargets.Property | AttributeTargets.Field)]
+        public class ValuesAttribute : Attribute
+        {
+            public string[] Values;
+            public ValuesAttribute() : this(new string[0]) { }
+            public ValuesAttribute(string[] values) { Values = values; }
+            public ValuesAttribute(Type type)
+            {
+                string name = nameof(ValuesAttributeInterface.GetValues);
+                object? obj = Activator.CreateInstance(type);
+                var array = type?.GetMethod(name)?.Invoke(obj, null);
+                Values = array == null ? new string[0] : ((IEnumerable<string>)array).ToArray();
+            }
+        }
+
+        [AttributeUsage(AttributeTargets.Property | AttributeTargets.Field)]
+        public class DisplayNameAttribute : Attribute
+        {
+            public string DisplayName;
+            public DisplayNameAttribute() : this("") { }
+            public DisplayNameAttribute(string displayName) { DisplayName = displayName; }
+        }
+
+        [AttributeUsage(AttributeTargets.Property | AttributeTargets.Field)]
+        public class DisplayOrderAttribute : Attribute
+        {
+            public int DisplayOrder;
+            public DisplayOrderAttribute() : this(0) { }
+            public DisplayOrderAttribute(int displayOrder) { DisplayOrder = displayOrder; }
+        }
+
+        [AttributeUsage(AttributeTargets.Property | AttributeTargets.Field)]
+        public class SubEditorAttribute : Attribute
+        {
+            public bool CloseOnClick;
+            public SubEditorAttribute(bool closeOnClick = false) { CloseOnClick = closeOnClick; }
+        }
+
+        [AttributeUsage(AttributeTargets.Property | AttributeTargets.Field)]
+        public class HiddenAttribute : Attribute
+        {
+        }
+
+        [AttributeUsage(AttributeTargets.Property | AttributeTargets.Field)]
+        public class DisabledAttribute : Attribute
+        {
+        }
+
+        [AttributeUsage(AttributeTargets.Property | AttributeTargets.Field)]
+        public class PushButtonAttribute : Attribute
+        {
+            public string Caption;
+            public PushButtonAttribute(string caption) { Caption = caption; }
+        }
+
+        public interface ValuesAttributeInterface
+        {
+            IEnumerable<string> GetValues();
+        }
+
         public AutoEditor(object source, Control.ControlCollection? controls)
         {
             Controls = controls;
@@ -25,6 +85,50 @@ namespace SehensWerte.Controls
                 SourceData = source;
             }
             WalkControls();
+        }
+
+        internal static string[]? Values(MemberInfo info)
+        {
+            object[] customAttributes = info.GetCustomAttributes(typeof(ValuesAttribute), inherit: false);
+            return ((customAttributes != null) && (customAttributes.Length != 0)) ? ((customAttributes[0] as ValuesAttribute)?.Values) : null;
+        }
+
+        internal static string DisplayName(MemberInfo info)
+        {
+            object[] customAttributes = info.GetCustomAttributes(typeof(DisplayNameAttribute), inherit: false);
+            return (customAttributes.Length == 0) ? info.Name : (customAttributes[0] as DisplayNameAttribute)?.DisplayName ?? info.Name;
+        }
+
+        internal static int DisplayOrder(MemberInfo info)
+        {
+            object[] customAttributes = info.GetCustomAttributes(typeof(DisplayOrderAttribute), inherit: false);
+            return (customAttributes.Length == 0) ? 0 : (customAttributes[0] as DisplayOrderAttribute)?.DisplayOrder ?? 0;
+        }
+
+        internal static bool IsHidden(MemberInfo info)
+        {
+            return info.GetCustomAttributes(typeof(HiddenAttribute), inherit: false).Length != 0;
+        }
+
+        internal static bool IsSubEditor(MemberInfo info)
+        {
+            return info.GetCustomAttributes(typeof(SubEditorAttribute), inherit: false).Length != 0;
+        }
+
+        internal static bool IsPushButton(MemberInfo info)
+        {
+            return info.GetCustomAttributes(typeof(PushButtonAttribute), inherit: false).Length != 0;
+        }
+
+        internal static string PushButtonCaption(MemberInfo info)
+        {
+            object[] customAttributes = info.GetCustomAttributes(typeof(PushButtonAttribute), inherit: false);
+            return ((customAttributes == null) || (customAttributes.Length == 0)) ? "" : ((customAttributes[0] as PushButtonAttribute)?.Caption ?? "");
+        }
+
+        internal static bool IsEnabled(MemberInfo info)
+        {
+            return info.GetCustomAttributes(typeof(DisabledAttribute), inherit: false).Length == 0;
         }
 
         private void WalkControls()
@@ -101,12 +205,16 @@ namespace SehensWerte.Controls
         {
             if (SourceData != null && Controls != null && !m_Updating && m_UpdateRecursion == 0)
             {
+
                 m_Updating = true;
                 if (SourceData is AutoEditorBase)
                 {
                     ((AutoEditorBase)SourceData).Updating = true;
                 }
-                UpdateControls(Controls, SourceData);
+                if (Controls.Count > 0)
+                {
+                    Controls[0].BeginInvokeIfRequired(() => UpdateControls(Controls, SourceData));
+                }
                 if (SourceData is AutoEditorBase)
                 {
                     ((AutoEditorBase)SourceData).Updating = false;
@@ -196,11 +304,12 @@ namespace SehensWerte.Controls
             }
             else if (control is Button && value != null)
             {
-                object[]? array = SourceData.GetType().GetMember(control.Name)[0].GetCustomAttributes(typeof(AutoEditorForm.SubEditorAttribute), inherit: false);
+                object[]? array = SourceData.GetType().GetMember(control.Name)[0].GetCustomAttributes(typeof(AutoEditor.SubEditorAttribute), inherit: false);
                 if (array != null && array.Length != 0)
                 {
+                    // sub editor
                     AutoEditorForm? autoEditorForm = ParentForm(control) as AutoEditorForm;
-                    bool closeOnClick = ((array[0] as AutoEditorForm.SubEditorAttribute)?.CloseOnClick ?? false) && autoEditorForm != null;
+                    bool closeOnClick = ((array[0] as AutoEditor.SubEditorAttribute)?.CloseOnClick ?? false) && autoEditorForm != null;
                     if (closeOnClick && autoEditorForm != null)
                     {
                         autoEditorForm.Visible = false;
@@ -211,7 +320,11 @@ namespace SehensWerte.Controls
                         autoEditorForm?.ButtonOK_Click(autoEditorForm, new EventArgs());
                     }
                 }
-                else
+                else if (value.GetType().IsSubclassOf(typeof(Delegate)))
+                {
+                    ((Delegate)value).DynamicInvoke();
+                }
+                else if (value.GetType() == typeof(bool))
                 {
                     SetValue(control.Name, true);
                     UpdateControls();

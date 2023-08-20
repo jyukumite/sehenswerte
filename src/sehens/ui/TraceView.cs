@@ -7,13 +7,13 @@ namespace SehensWerte.Controls.Sehens
 {
     public partial class TraceView : ITraceView, IDisposable
     {
-        [AutoEditorForm.Hidden]
+        [AutoEditor.Hidden]
         public SehensControl Scope;
 
-        [AutoEditorForm.Hidden]
+        [AutoEditor.Hidden]
         public IPaintTrace Painter = new Paint2dTrace();
 
-        [AutoEditorForm.Hidden]
+        [AutoEditor.Hidden]
         public PaintedInfo Painted = new PaintedInfo();
         internal List<TraceView> Group = new List<TraceView>(); //needs lock - get using Scope.GroupedTraces(this)
 
@@ -41,27 +41,27 @@ namespace SehensWerte.Controls.Sehens
         private Fftw? m_Fft;
         private MouseInfo[] Clicks = new MouseInfo[5];
 
-        [AutoEditorForm.Hidden]
+        [AutoEditor.Hidden]
         public double[]? RawBeforeZoom { get { lock (m_Samples.DataLock) { return m_RawBeforeZoom; } } }
-        [AutoEditorForm.Hidden]
+        [AutoEditor.Hidden]
         public double[]? CalculatedBeforeZoom { get { lock (m_Samples.DataLock) { return m_CalculatedBeforeZoom; } } }
-        [AutoEditorForm.Hidden]
+        [AutoEditor.Hidden]
         public double[]? DrawnSamples { get { lock (m_Samples.DataLock) { return m_DrawnSamples; } } }
-        [AutoEditorForm.Hidden]
+        [AutoEditor.Hidden]
         public double[]? PeakHoldMinDrawn { get { lock (m_Samples.DataLock) { return m_PeakHoldDrawn?.Min; } } }
-        [AutoEditorForm.Hidden]
+        [AutoEditor.Hidden]
         public double[]? PeakHoldMaxDrawn { get { lock (m_Samples.DataLock) { return m_PeakHoldDrawn?.Max; } } }
-        [AutoEditorForm.Hidden]
+        [AutoEditor.Hidden]
         public double[]? PeakHoldMinAll { get { lock (m_Samples.DataLock) { return m_PeakHoldAll?.Min; } } }
-        [AutoEditorForm.Hidden]
+        [AutoEditor.Hidden]
         public double[]? PeakHoldMaxAll { get { lock (m_Samples.DataLock) { return m_PeakHoldAll?.Max; } } }
 
-        [AutoEditorForm.Hidden]
+        [AutoEditor.Hidden]
         public int DrawnStartPosition => m_DrawnStartPosition;
 
         internal int ViewOriginalSampleCount;
 
-        [AutoEditorForm.Hidden]
+        [AutoEditor.Hidden]
         public bool IsViewer => true;
 
         public TraceView(SehensControl scope, TraceData samples, string viewName)
@@ -89,7 +89,7 @@ namespace SehensWerte.Controls.Sehens
         //Properties
 
         private TraceData m_Samples;
-        [AutoEditorForm.Hidden]
+        [AutoEditor.Hidden]
         public TraceData Samples
         {
             get => m_Samples;
@@ -132,7 +132,7 @@ namespace SehensWerte.Controls.Sehens
         }
 
         private string m_GroupWithView = "";
-        [AutoEditorForm.DisplayName("Group With Trace")] //fixme: AutoEditorForm.Values
+        [AutoEditor.DisplayName("Group With Trace")] //fixme: AutoEditorForm.Values
         public string GroupWithView
         {
             get => m_GroupWithView;
@@ -147,7 +147,7 @@ namespace SehensWerte.Controls.Sehens
         }
 
         private bool m_Selected;
-        [AutoEditorForm.Hidden]
+        [AutoEditor.Hidden]
         public bool Selected
         {
             get => m_Selected;
@@ -177,7 +177,7 @@ namespace SehensWerte.Controls.Sehens
             FFT2D,
         }
         private PaintModes m_PaintMode = PaintModes.PolygonDigital;
-        [AutoEditorForm.DisplayName("Paint Mode")]
+        [AutoEditor.DisplayName("Paint Mode")]
         public PaintModes PaintMode
         {
             get => m_PaintMode;
@@ -227,7 +227,7 @@ namespace SehensWerte.Controls.Sehens
         }
 
         private double m_ZoomValue = 1.0;
-        [AutoEditorForm.Hidden]
+        [AutoEditor.Hidden]
         public double ZoomValue
         {
             get => m_ZoomValue;
@@ -242,7 +242,7 @@ namespace SehensWerte.Controls.Sehens
         }
 
         private double m_PanValue = 0.0;
-        [AutoEditorForm.Hidden]
+        [AutoEditor.Hidden]
         public double PanValue
         {
             get => m_PanValue;
@@ -298,8 +298,8 @@ namespace SehensWerte.Controls.Sehens
 
 
         private double m_HighestValue = 1.0;
-        [AutoEditorForm.DisplayOrder(-2)]
-        [AutoEditorForm.DisplayName("Highest Value")]
+        [AutoEditor.DisplayOrder(-2)]
+        [AutoEditor.DisplayName("Highest Value")]
         public double HighestValue
         {
             get => m_HighestValue;
@@ -311,8 +311,8 @@ namespace SehensWerte.Controls.Sehens
         }
 
         private double m_LowestValue = 0;
-        [AutoEditorForm.DisplayOrder(-2)]
-        [AutoEditorForm.DisplayName("Lowest Value")]
+        [AutoEditor.DisplayOrder(-2)]
+        [AutoEditor.DisplayName("Lowest Value")]
         public double LowestValue
         {
             get => m_LowestValue;
@@ -339,7 +339,7 @@ namespace SehensWerte.Controls.Sehens
         }
 
         private bool m_PadLeftWithFirstValue;
-        [AutoEditorForm.DisplayName("Pad Left With First Value")]
+        [AutoEditor.DisplayName("Pad Left With First Value")]
         public bool PadLeftWithFirstValue
         {
             get => m_PadLeftWithFirstValue;
@@ -352,7 +352,7 @@ namespace SehensWerte.Controls.Sehens
         }
 
         private bool m_PadRightWithLastValue;
-        [AutoEditorForm.DisplayName("Pad Right With Last Value")]
+        [AutoEditor.DisplayName("Pad Right With Last Value")]
         public bool PadRightWithLastValue
         {
             get
@@ -368,7 +368,7 @@ namespace SehensWerte.Controls.Sehens
         }
 
         private bool m_Visible = true;
-        [AutoEditorForm.Hidden]
+        [AutoEditor.Hidden]
         public bool Visible
         {
             get => m_Visible;
@@ -381,7 +381,7 @@ namespace SehensWerte.Controls.Sehens
         }
 
         private bool m_LogVertical;
-        [AutoEditorForm.DisplayName("Log vertical axis")]
+        [AutoEditor.DisplayName("Log vertical axis")]
         public bool LogVertical
         {
             get => m_LogVertical;
@@ -409,8 +409,8 @@ namespace SehensWerte.Controls.Sehens
         }
 
         private TraceView? m_TriggerTrace;
-        //fixme [AutoEditorForm.Values(m_Display.)]
-        [AutoEditorForm.DisplayName("Trigger Trace")]
+        //fixme [AutoEditor.Values(m_Display.)]
+        [AutoEditor.DisplayName("Trigger Trace")]
         public TraceView? TriggerTrace
         {
             get => m_TriggerTrace;
@@ -424,7 +424,7 @@ namespace SehensWerte.Controls.Sehens
         }
 
         private double m_TriggerValue;
-        [AutoEditorForm.DisplayName("Trigger Value")]
+        [AutoEditor.DisplayName("Trigger Value")]
         public double TriggerValue
         {
             get => m_TriggerValue;
@@ -447,7 +447,7 @@ namespace SehensWerte.Controls.Sehens
             Falling
         }
         private TriggerModes m_TriggerMode;
-        [AutoEditorForm.DisplayName("Trigger Mode")]
+        [AutoEditor.DisplayName("Trigger Mode")]
         public TriggerModes TriggerMode
         {
             get => m_TriggerMode;
@@ -462,7 +462,7 @@ namespace SehensWerte.Controls.Sehens
         }
 
         private bool m_ViewOverrideEnabled;
-        [AutoEditorForm.Hidden]
+        [AutoEditor.Hidden]
         public bool ViewOverrideEnabled
         {
             get => m_ViewOverrideEnabled;
@@ -477,7 +477,7 @@ namespace SehensWerte.Controls.Sehens
         }
 
         private int m_ViewLengthOverride;
-        [AutoEditorForm.DisplayName("View Length")]
+        [AutoEditor.DisplayName("View Length")]
         public int ViewLengthOverride
         {
             get => m_ViewLengthOverride;
@@ -493,7 +493,7 @@ namespace SehensWerte.Controls.Sehens
         }
 
         private int m_ViewOffsetOverride;
-        [AutoEditorForm.DisplayName("View Offset")]
+        [AutoEditor.DisplayName("View Offset")]
         public int ViewOffsetOverride
         {
             get => m_ViewOffsetOverride;
@@ -509,11 +509,11 @@ namespace SehensWerte.Controls.Sehens
         }
 
         bool m_OverrideSamplesUnixTime = false;
-        [AutoEditorForm.Hidden]
+        [AutoEditor.Hidden]
         public bool OverrideSamplesUnixTime => m_OverrideSamplesUnixTime;
 
         private TraceData.TimeRange m_UnixTimeRange;
-        [AutoEditorForm.Hidden]
+        [AutoEditor.Hidden]
         public TraceData.TimeRange UnixTimeRange
         {
             get => m_UnixTimeRange;
@@ -530,7 +530,7 @@ namespace SehensWerte.Controls.Sehens
         double UnixTimeRangeRight { get => m_UnixTimeRange.Right; set { UnixTimeRange = new TraceData.TimeRange(m_UnixTimeRange.Right, value); } }
 
 
-        [AutoEditorForm.Hidden]
+        [AutoEditor.Hidden]
         public TraceData.TimeRange DrawnUnixTimeRange
         {
             get
@@ -546,7 +546,7 @@ namespace SehensWerte.Controls.Sehens
             }
         }
 
-        [AutoEditorForm.Hidden]
+        [AutoEditor.Hidden]
         public TraceData.TimeRange GroupUnixTimeRange => GetGroupUnixTimeRange(Group);
 
 
@@ -608,7 +608,7 @@ namespace SehensWerte.Controls.Sehens
 
 
         private int m_PreTriggerSampleCount;
-        [AutoEditorForm.DisplayName("PreTrigger Sample Count")]
+        [AutoEditor.DisplayName("PreTrigger Sample Count")]
         public int PreTriggerSampleCount
         {
             get => m_PreTriggerSampleCount;
@@ -718,8 +718,8 @@ namespace SehensWerte.Controls.Sehens
         }
 
         private SampleWindow.WindowType m_FftWindow = SampleWindow.WindowType.Rectangular;
-        [AutoEditorForm.DisplayOrder(-3)]
-        [AutoEditorForm.DisplayName("FFT Display Window")]
+        [AutoEditor.DisplayOrder(-3)]
+        [AutoEditor.DisplayName("FFT Display Window")]
         public SampleWindow.WindowType FftWindow
         {
             get => m_FftWindow;
@@ -792,8 +792,8 @@ namespace SehensWerte.Controls.Sehens
             FFT20Log10
         }
         private MathTypes m_MathType;
-        [AutoEditorForm.DisplayOrder(-3)]
-        [AutoEditorForm.DisplayName("Math Type")]
+        [AutoEditor.DisplayOrder(-3)]
+        [AutoEditor.DisplayName("Math Type")]
         public MathTypes MathType
         {
             get => m_MathType;
@@ -898,50 +898,50 @@ namespace SehensWerte.Controls.Sehens
 
         ////////////////////////////////////////////////////////////////
         //edit form helpers
-        [AutoEditorForm.DisplayName("Sample Name")]
+        [AutoEditor.DisplayName("Sample Name")]
         public string SamplesName
         {
             get => Samples.Name;
             set { Samples.Name = value; }
         }
 
-        [AutoEditorForm.DisplayOrder(-1)]
-        [AutoEditorForm.DisplayName("First Sample UnixTime")]
+        [AutoEditor.DisplayOrder(-1)]
+        [AutoEditor.DisplayName("First Sample UnixTime")]
         public double SamplesLeftmostUnixTime
         {
             get => Samples.InputLeftmostUnixTime;
             set { Samples.InputLeftmostUnixTime = value; }
         }
 
-        [AutoEditorForm.DisplayName("Samples Per Second")]
+        [AutoEditor.DisplayName("Samples Per Second")]
         public double SamplesPerSecond
         {
             get => Samples.InputSamplesPerSecond;
             set { Samples.InputSamplesPerSecond = value; }
         }
 
-        [AutoEditorForm.DisplayName("Vertical Unit")]
+        [AutoEditor.DisplayName("Vertical Unit")]
         public string SamplesVerticalUnit
         {
             get => Samples.VerticalUnit;
             set { Samples.VerticalUnit = value; }
         }
 
-        [AutoEditorForm.DisplayName("Axis Title Left")]
+        [AutoEditor.DisplayName("Axis Title Left")]
         public string SamplesAxisTitleLeft
         {
             get => Samples.AxisTitleLeft;
             set { Samples.AxisTitleLeft = value; }
         }
 
-        [AutoEditorForm.DisplayName("Axis Title Bottom")]
+        [AutoEditor.DisplayName("Axis Title Bottom")]
         public string SamplesAxisTitleBottom
         {
             get => Samples.AxisTitleBottom;
             set { Samples.AxisTitleBottom = value; }
         }
 
-        [AutoEditorForm.DisplayName("Sample Number Display Offset")]
+        [AutoEditor.DisplayName("Sample Number Display Offset")]
         public int SamplesNumberDisplayOffset
         {
             get => Samples.InputSampleNumberDisplayOffset;
