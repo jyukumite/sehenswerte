@@ -6,14 +6,20 @@ namespace SehensWerte.Utils
 {
     public static class SqlQuery
     {
+        static public String MainQuery(string sqlQuery)
+        {
+            Queue<string> tokens = Tokenise(sqlQuery);
+            return MainQuery(tokens);
+        }
+
         static public List<string> ExtractColumnNamesFromQuery(string sqlQuery)
         {
             Queue<string> tokens = Tokenise(sqlQuery);
 
             List<string> columnNames = new List<string>();
-            if (next(tokens).ToUpper() == "SELECT")
+            if (MainQuery(tokens).ToUpper() == "SELECT")
             {
-                while (peek(tokens).ToUpper() switch { "" => false, "FROM" => false, _ => true })
+                while (tokens.Count() != 0 && peek(tokens).ToUpper() switch { "" => false, "FROM" => false, _ => true })
                 {
                     columnNames.Add(ParseName(tokens));
                     if (peek(tokens) == ",")
@@ -31,12 +37,37 @@ namespace SehensWerte.Utils
             return columnNames;
         }
 
+        private static string MainQuery(Queue<string> tokens)
+        {
+            if (peek(tokens).ToUpper() == "BEGIN") // transaction
+            {
+                next(tokens); // BEGIN
+                if (!next(tokens).ToUpper().StartsWith("TRAN")) return "";
+                if (peek(tokens) != ";")
+                {
+                    next(tokens); // skip transaction name
+                }
+                if (next(tokens) != ";") return "";
+            }
+
+            while (tokens.Count() != 0 && peek(tokens).ToUpper() == "WITH") // temporary tables
+            {
+                // WITH temp_table AS (select 1,2,3) SELECT ...
+                next(tokens); // WITH
+                next(tokens); // name of temp table
+                if (next(tokens).ToUpper() != "AS") return "";
+                if (next(tokens).ToUpper() != "(") return "";
+                skipToClosingBracket(tokens);
+            }
+            return next(tokens);
+        }
+
         private static string ParseName(Queue<string> tokens)
         {
             string[] hideFunctions = { "to_json" };
             StringBuilder fullClause = new StringBuilder();
             string name = "";
-            while (peek(tokens).ToUpper() switch { "" => false, "," => false, "FROM" => false, _ => true })
+            while (tokens.Count() != 0 && peek(tokens).ToUpper() switch { "" => false, "," => false, "FROM" => false, _ => true })
             {
                 name = next(tokens, fullClause);
                 if (hideFunctions.Contains(name) && peek(tokens) == "(")
@@ -57,7 +88,7 @@ namespace SehensWerte.Utils
             string name;
             next(tokens, sum); // skip (
             name = "";
-            while (peek(tokens) != ")")
+            while (tokens.Count() != 0 && peek(tokens) != ")")
             {
                 name = name + next(tokens, sum) + " ";
             }
@@ -67,7 +98,7 @@ namespace SehensWerte.Utils
 
         private static void skipToClosingBracket(Queue<string> tokens, StringBuilder? sum = null)
         {
-            while (peek(tokens) != ")")
+            while (tokens.Count() != 0 && peek(tokens) != ")")
             {
                 if (next(tokens, sum) == "(")
                 {
@@ -111,22 +142,28 @@ namespace SehensWerte.Utils
         [TestMethod]
         public void TestExtractColumns()
         {
-            string test = @"select 
-            name_with_underscores_and_1_numbers_2_,
-            name,
-            table.name,
-            table_name.name,
-            table_1.col2,
-            to_json(jsondate),
-            count(simple.thing),
-            (select count(thing) from thing where thing=true and thing>1.234 and (other thing)) as user_sessions,
-            -123.456,
-            5,
-            0.5,
-            .5
-        from table_name
-        things following table name
+            string test = @"
+            begin transaction t1;
+            WITH temp_table AS (select a, b, c)
+            select 
+                name_with_underscores_and_1_numbers_2_,
+                name,
+                table.name,
+                table_name.name,
+                table_1.col2,
+                to_json(jsondate),
+                count(simple.thing),
+                (select count(thing) from thing where thing=true and thing>1.234 and (other thing)) as user_sessions,
+                -123.456,
+                5,
+                0.5,
+                .5
+            from table_name
+            things following table name
+            commit tran t1;
 ";
+            Assert.AreEqual("select", SqlQuery.MainQuery(test));
+
             var result = SqlQuery.ExtractColumnNamesFromQuery(test);
             CollectionAssert.AreEqual(
                 result,
