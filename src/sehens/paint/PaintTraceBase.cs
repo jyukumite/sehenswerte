@@ -223,8 +223,7 @@ namespace SehensWerte.Controls.Sehens
                 info,
                 graphics,
                 left: (double)(info.ShowHorizontalUnits ? info.LeftSampleNumberValue : info.LeftSampleNumber),
-                right: (double)(info.ShowHorizontalUnits ? info.RightSampleNumberValue : info.RightSampleNumber),
-                yt: false);
+                right: (double)(info.ShowHorizontalUnits ? info.RightSampleNumberValue : info.RightSampleNumber));
         }
 
         public virtual void PaintAxisTitleHorizontal(Graphics graphics, TraceGroupDisplay info)
@@ -290,6 +289,7 @@ namespace SehensWerte.Controls.Sehens
                 }
                 else
                 {
+                    // numbers aren't reprojected, could be 2d trace or FFT result
                     y = (float)(info.ProjectionArea.Top + (highestValue - num) * info.ProjectionArea.Height / (highestValue - lowestValue));
                 }
 
@@ -624,14 +624,14 @@ namespace SehensWerte.Controls.Sehens
             }
         }
 
-        protected void PaintGutterBottomPartition(TraceGroupDisplay info, Graphics graphics, double left, double right, bool yt)
+        protected void PaintGutterBottomPartition(TraceGroupDisplay info, Graphics graphics, double left, double right)
         {
             using Font font = info.Skin.AxisTextFont.Font;
             using Pen pen = new Pen(info.Skin.GraduationColour);
             using Brush brush = info.Skin.AxisTextFont.Brush;
             float typicalWidth = graphics.MeasureString("000.000", font).Width;
-            float val = graphics.MeasureString(ToHorizontalUnit(info, info.YTTrace ? info.LeftUnixTime : 500.005), font).Width * 1.2f;
-            val = Math.Max(val, typicalWidth);
+            float maxWidth = graphics.MeasureString(ToHorizontalUnit(info, info.YTTrace ? info.LeftUnixTime : 500.005), font).Width * 1.2f;
+            maxWidth = Math.Max(maxWidth, typicalWidth);
             int partitionCount = (int)Math.Max(5f, (float)info.ProjectionArea.Width / typicalWidth);
             double step = (right - left) / (double)partitionCount;
             step = step.RoundSignificantUp(1, step);
@@ -645,7 +645,7 @@ namespace SehensWerte.Controls.Sehens
             {
                 partitions[loop] = (loop + index) * step;
             }
-            int skip = (int)Math.Ceiling(val / typicalWidth);
+            int skip = (int)Math.Ceiling(maxWidth / typicalWidth);
             skip = ((skip == 0) ? 1 : skip);
             int textIndex = (int)(index % skip);
             graphics.SetClip(new Rectangle(info.ProjectionArea.Left, info.ProjectionArea.Top, info.ProjectionArea.Width, info.BottomGutter.Bottom - info.ProjectionArea.Top));

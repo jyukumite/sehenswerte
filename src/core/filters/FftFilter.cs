@@ -114,6 +114,18 @@ namespace SehensWerte.Filters
             return fft.Execute(input);
         }
 
+        public static double[] Notch(double[] input, double lowHz, double highHz, double samplesPerSecond, SampleWindow.WindowType windowType)
+        {
+            using FftFilter fft = new FftFilter(input.Length);
+            fft.Coefficients =
+                GenerateNotchCoefficient(
+                    fft.Bins,
+                    fft.HzToBin(lowHz, samplesPerSecond),
+                    fft.HzToBin(highHz, samplesPerSecond),
+                    windowType);
+            return fft.Execute(input);
+        }
+
         public static double[] BandPass(double[] input, double low6dBHz, double low3dBHz, double high3dBHz, double high6dBHz, double samplesPerSecond, SampleWindow.WindowType windowType)
         {
             using FftFilter fft = new FftFilter(input.Length);
@@ -126,6 +138,20 @@ namespace SehensWerte.Filters
                 fft.HzToBin(high6dBHz, samplesPerSecond), windowType);
             return fft.Execute(input);
         }
+
+        public static double[] Notch(double[] input, double low6dBHz, double low3dBHz, double high3dBHz, double high6dBHz, double samplesPerSecond, SampleWindow.WindowType windowType)
+        {
+            using FftFilter fft = new FftFilter(input.Length);
+            fft.Coefficients = GenerateNotchCoefficients(
+                fft.Bins,
+                0.5,
+                fft.HzToBin(low6dBHz, samplesPerSecond), 1.0 / Math.Sqrt(2.0),
+                fft.HzToBin(low3dBHz, samplesPerSecond), 1.0 / Math.Sqrt(2.0),
+                fft.HzToBin(high3dBHz, samplesPerSecond), 0.5,
+                fft.HzToBin(high6dBHz, samplesPerSecond), windowType);
+            return fft.Execute(input);
+        }
+
 
         public static double[] LowPass(double[] input, double high3dBHz, double high6dBHz, double samplesPerSecond, SampleWindow.WindowType windowType)
         {
@@ -178,6 +204,20 @@ namespace SehensWerte.Filters
             return array;
         }
 
+        public static double[] GenerateNotchCoefficient(int width, double low3dBIndex, double high3dBIndex, SampleWindow.WindowType windowType)
+        {
+            double[] array = new double[width];
+            double low3dB = windowType == SampleWindow.WindowType.Rectangular ? 0.5 : SampleWindow.Inverse(1.0 / Math.Sqrt(2.0), windowType);
+            double windowLength = (high3dBIndex - low3dBIndex) * (1.0 / (1.0 - low3dB * 2.0));
+            double left = (high3dBIndex + low3dBIndex - windowLength) / 2.0;
+            for (int loop = 0; loop < width; loop++)
+            {
+                double ratio = (loop - left) / windowLength;
+                array[loop] = 1 - SampleWindow.Coefficient(ratio < 0 ? 0 : ratio > 1 ? 1 : ratio, windowType);
+            }
+            return array;
+        }
+
         public static double[] GenerateBandpassCoefficients(int width,
             double lowCutValue, double lowCutIndex,
             double lowPassValue, double lowPassIndex,
@@ -188,6 +228,18 @@ namespace SehensWerte.Filters
             double[] hpf = GenerateHighPassCoefficients(width, lowCutValue, lowCutIndex, lowPassValue, lowPassIndex, windowType);
             double[] lpf = GenerateLowPassCoefficients(width, highPassValue, highPassIndex, highCutValue, highCutIndex, windowType);
             return hpf.ElementProduct(lpf);
+        }
+
+        public static double[] GenerateNotchCoefficients(int width,
+            double lowCutValue, double lowCutIndex,
+            double lowPassValue, double lowPassIndex,
+            double highPassValue, double highPassIndex,
+            double highCutValue, double highCutIndex,
+            SampleWindow.WindowType windowType)
+        {
+            double[] hpf = GenerateLowPassCoefficients(width, lowCutValue, lowCutIndex, lowPassValue, lowPassIndex, windowType);
+            double[] lpf = GenerateHighPassCoefficients(width, highPassValue, highPassIndex, highCutValue, highCutIndex, windowType);
+            return hpf.Add(lpf).Rescale(1.0); //fixme: not ideal
         }
 
         public static double[] GenerateLowPassCoefficients(int width, double passValue, double passIndex, double cutValue, double cutIndex, SampleWindow.WindowType windowType)

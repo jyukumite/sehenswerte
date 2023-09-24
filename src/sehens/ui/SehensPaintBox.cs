@@ -111,12 +111,6 @@ namespace SehensWerte.Controls.Sehens
         }
 
 
-        private bool MouseOnGutter(TraceGroupDisplay info)
-        {
-            return Scope.PaintBoxMouse.Click != null
-                    && info.BottomGutter.Contains(Scope.PaintBoxMouse.Click.X, Scope.PaintBoxMouse.Click.Y);
-        }
-
         public override Cursor Cursor
         {
             get => base.Cursor;
@@ -933,7 +927,8 @@ namespace SehensWerte.Controls.Sehens
         public TraceGroupDisplay TraceToGroupDisplayInfo(TraceView trace, TraceGroupDisplay.PaintFlags flags = TraceGroupDisplay.PaintFlags.None)
         {
             var info = new TraceGroupDisplay(Scope.PaintBoxMouse, PaintBoxScreenRect, this, trace, flags);
-            info.ShowHorizontalUnits = info.View0.Samples.InputSamplesPerSecond != 0.0 && !MouseOnGutter(info);
+            info.ShowHorizontalUnits = info.View0.Samples.InputSamplesPerSecond != 0.0 
+                && Scope.PaintBoxMouse.MouseGuiSection != PaintBoxMouseInfo.GuiSection.BottomGutter;
             return info;
         }
 

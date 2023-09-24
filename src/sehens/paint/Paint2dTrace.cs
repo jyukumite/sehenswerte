@@ -145,7 +145,18 @@ namespace SehensWerte.Controls.Sehens
             {
                 PaintHighestY = y;
             }
-            float num = (float)(PaintProjectionArea.Top + (PaintHighestValue - y) * PaintProjectionArea.Height / (PaintHighestValue - PaintLowestValue));
+            float num;
+            if (View.LogVertical)
+            {
+                ProjectLog(View.HighestValue, y, out var newMax, out var output);
+                num = (float)(PaintProjectionArea.Top + (newMax - output) * PaintProjectionArea.Height / newMax);
+            }
+            else
+            {
+                num = (float)(PaintProjectionArea.Top + (PaintHighestValue - y) * PaintProjectionArea.Height / (PaintHighestValue - PaintLowestValue));
+            }
+
+
             num = ((num < PaintProjectionArea.Top)
                 ? PaintProjectionArea.Top
                 : ((num > PaintProjectionArea.Bottom) ? PaintProjectionArea.Bottom : num));
@@ -522,7 +533,7 @@ namespace SehensWerte.Controls.Sehens
             {
                 double leftUnixTime = info.LeftUnixTime;
                 double rightUnixTime = info.RightUnixTime;
-                PaintGutterBottomPartition(info, graphics, leftUnixTime, rightUnixTime, yt: true);
+                PaintGutterBottomPartition(info, graphics, leftUnixTime, rightUnixTime);
             }
             else
             {

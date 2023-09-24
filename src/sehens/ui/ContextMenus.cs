@@ -165,18 +165,23 @@ namespace SehensWerte.Controls.Sehens
             [AutoEditor.DisplayOrder(-1)]
             public string Name = "Window";
 
+            [AutoEditor.DisplayOrder(0)]
             [AutoEditor.DisplayName("Count")]
             public int Count = 10000;
 
+            [AutoEditor.DisplayOrder(1)]
             [AutoEditor.DisplayName("Samples per second")]
             public double samplesPerSecond = 10000;
 
+            [AutoEditor.DisplayOrder(2)]
             [AutoEditor.DisplayName("Window type")]
             public SampleWindow.WindowType Window = SampleWindow.WindowType.RaisedCosine;
 
+            [AutoEditor.DisplayOrder(3)]
             [AutoEditor.DisplayName("Amplitude")]
             public double Amplitude = 1.0;
 
+            [AutoEditor.DisplayOrder(4)]
             [AutoEditor.DisplayName("Offset")]
             public double Offset;
         }
@@ -187,27 +192,35 @@ namespace SehensWerte.Controls.Sehens
             [AutoEditor.DisplayOrder(-1)]
             public string Name = "Sweep";
 
+            [AutoEditor.DisplayOrder(0)]
             [AutoEditor.DisplayName("Count")]
             public int Count = 10000;
 
+            [AutoEditor.DisplayOrder(1)]
             [AutoEditor.DisplayName("Samples per second")]
             public double SamplesPerSecond = 10000;
 
+            [AutoEditor.DisplayOrder(2)]
             [AutoEditor.DisplayName("Start frequency")]
             public double FrequencyStart = 1000.0;
 
+            [AutoEditor.DisplayOrder(3)]
             [AutoEditor.DisplayName("End frequency")]
             public double FrequencyEnd = 2000.0;
 
+            [AutoEditor.DisplayOrder(4)]
             [AutoEditor.DisplayName("Sweeps per second")]
             public double SweepRate = 1.0;
 
+            [AutoEditor.DisplayOrder(5)]
             [AutoEditor.DisplayName("Amplitude")]
             public double Amplitude = 1.0;
 
+            [AutoEditor.DisplayOrder(6)]
             [AutoEditor.DisplayName("Waveform")]
             public WaveformGenerator.Waveforms Waveform;
 
+            [AutoEditor.DisplayOrder(7)]
             [AutoEditor.DisplayName("Use Sin function")]
             public bool UseSinFunction;
         }
@@ -279,8 +292,8 @@ namespace SehensWerte.Controls.Sehens
             [AutoEditor.DisplayName("FFT Bandpass LPF 6dB Hz")]
             public double FftFilterLPF6dB
             {
-                get => m_View.FftBandpassHzLPF6dB;
-                set { m_View.FftBandpassHzLPF6dB = value; }
+                get => m_View.FftBandpassLPF6dB;
+                set { m_View.FftBandpassLPF6dB = value; }
             }
         }
 

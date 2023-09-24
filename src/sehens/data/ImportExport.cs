@@ -398,10 +398,9 @@ namespace SehensWerte.Controls.Sehens
                     if (text != null)
                     {
                         ImportType enumValueFromDescription = ValueFromDescription<ImportType>(text);
-                        TraceView traceView = a.Views[0];
                         string file = Path.GetTempFileName();
                         File.WriteAllText(file, Clipboard.GetText());
-                        Import(a.Scope, enumValueFromDescription, new[] { file }, "", traceView?.Samples?.Name ?? "", ImportDataForm.Source.Clipboard);
+                        Import(a.Scope, enumValueFromDescription, new[] { file }, "", "", ImportDataForm.Source.Clipboard);
                         File.Delete(file);
                     }
                 },

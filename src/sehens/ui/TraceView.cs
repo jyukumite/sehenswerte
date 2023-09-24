@@ -666,7 +666,7 @@ namespace SehensWerte.Controls.Sehens
         }
 
         private double m_FftBandpass3HighCutHz;
-        public double FftBandpassHzLPF6dB
+        public double FftBandpassLPF6dB
         {
             get => m_FftBandpass3HighCutHz;
             set
@@ -687,7 +687,9 @@ namespace SehensWerte.Controls.Sehens
             LowPass,
             LowPass3dBPerOctave,
             HighPass,
-            HighPass3dBPerOctave
+            HighPass3dBPerOctave,
+            Notch,
+            NotchFit
         }
         private FftFilterTypes m_FftFilterType;
         public FftFilterTypes FftFilterType
@@ -1352,6 +1354,12 @@ namespace SehensWerte.Controls.Sehens
                         result = FftFilter.BandPass(input, m_FftBandpass0LowCutHz, m_FftBandpass1LowPassHz, m_FftBandpass2HighPassHz, high6dBHz, m_Samples.InputSamplesPerSecond, m_FftBandpassWindow);
                         break;
                     }
+                case FftFilterTypes.Notch:
+                    {
+                        double high6dBHz = (m_FftBandpass3HighCutHz == 0.0) ? (m_Samples.InputSamplesPerSecond / 2.0) : m_FftBandpass3HighCutHz;
+                        result = FftFilter.Notch(input, m_FftBandpass0LowCutHz, m_FftBandpass1LowPassHz, m_FftBandpass2HighPassHz, high6dBHz, m_Samples.InputSamplesPerSecond, m_FftBandpassWindow);
+                        break;
+                    }
                 case FftFilterTypes.BandPassFit:
                     if (m_FftBandpass1LowPassHz == m_FftBandpass2HighPassHz)
                     {
@@ -1360,6 +1368,16 @@ namespace SehensWerte.Controls.Sehens
                     else
                     {
                         result = FftFilter.BandPass(input, m_FftBandpass1LowPassHz, m_FftBandpass2HighPassHz, m_Samples.InputSamplesPerSecond, m_FftBandpassWindow);
+                    }
+                    break;
+                case FftFilterTypes.NotchFit:
+                    if (m_FftBandpass1LowPassHz == m_FftBandpass2HighPassHz)
+                    {
+                        result = input;
+                    }
+                    else
+                    {
+                        result = FftFilter.Notch(input, m_FftBandpass1LowPassHz, m_FftBandpass2HighPassHz, m_Samples.InputSamplesPerSecond, m_FftBandpassWindow);
                     }
                     break;
                 case FftFilterTypes.HighPass:
@@ -1564,10 +1582,13 @@ namespace SehensWerte.Controls.Sehens
         {
             get
             {
-                string text = ((m_Samples == null) ? "" : m_Samples.VerticalUnit);
-                return text.Contains("{")
-                    ? IsLogarithmicY ? string.Format(text, "{0} dB") : text
-                    : "{0} " + text;
+                return m_Samples.VerticalUnit.Contains("{")
+                    ? (IsLogarithmicY
+                        ? string.Format(m_Samples.VerticalUnit, "{0} dB")
+                        : m_Samples.VerticalUnit)
+                    : (IsLogarithmicY
+                        ? "{0} dB" + m_Samples.VerticalUnit
+                        : "{0} " + m_Samples.VerticalUnit);
             }
         }
 
