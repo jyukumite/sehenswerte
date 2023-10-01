@@ -629,7 +629,7 @@ namespace SehensWerte.Controls
             private void Refilter()
             {
                 PushUndo();
-                FilteredData = UnfilteredData.Where(x => x.Visible).ToList();
+                FilteredData = UnfilteredData.Where(x => x.Visible).OrderBy(x=>x.ResortIndex).ToList();
                 ReshowFiltered();
             }
 
@@ -808,12 +808,12 @@ namespace SehensWerte.Controls
                     Cursor.Current = Cursors.WaitCursor;
                     PushUndo();
                     FilteredData?.Sort(new BoundDataRow.SortComparer(colIndex, direction));
+                    ReshowFiltered();
                 }
                 catch
                 {
                 }
                 Cursor.Current = prevCursor;
-                ListChanged?.Invoke(this, new ListChangedEventArgs(ListChangedType.Reset, 0));
             }
 
             void IBindingList.RemoveSort()

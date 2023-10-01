@@ -37,7 +37,21 @@ namespace SehensWerte.Controls
             SuspendLayout();
 
             UpdateControls();
-            EditResult.KeyPress += (sender, e) => { if (e.KeyChar == 13 && MultiLine) { e.Handled = true; ResultButton = DialogResult.OK; Close(); } };
+            EditResult.PreviewKeyDown += (sender, e) =>
+            {
+                if (sender != null && e.KeyCode == Keys.Enter)
+                {
+                    if (MultiLine)
+                    {
+                        e.IsInputKey = true;
+                    }
+                    else
+                    {
+                        ResultButton = DialogResult.OK;
+                        Close();
+                    }
+                }
+            };
             ButtonOK.Click += (sender, e) => { ResultButton = DialogResult.OK; Close(); };
             ButtonCancel.Click += (sender, e) => { ResultButton = DialogResult.Cancel; Close(); };
 
@@ -67,6 +81,7 @@ namespace SehensWerte.Controls
             EditResult.Multiline = MultiLine;
             EditResult.Size = new System.Drawing.Size(ClientSize.Width - 16, MultiLine ? 200 : 20);
             EditResult.TabIndex = 1;
+            EditResult.ScrollBars = MultiLine ? ScrollBars.Vertical : ScrollBars.None;
 
             ButtonOK.Location = new System.Drawing.Point(8, EditResult.Bottom + 8);
             ButtonOK.Size = new System.Drawing.Size((ClientSize.Width - 24) / 2, 32);
