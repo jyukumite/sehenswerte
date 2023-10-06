@@ -302,7 +302,7 @@ namespace SehensWerte.Controls.Sehens
             }
             else
             {
-                var line = projection.Where(point => float.IsFinite(point.Y)).ToArray();
+                var line = projection.Where(point => float.IsFinite(point.Y) && point.Y > -100000 && point.Y < 100000).ToArray();
                 if (line.Length > 0)
                 {
                     graphics.DrawLines(pen, line.ToArray());
