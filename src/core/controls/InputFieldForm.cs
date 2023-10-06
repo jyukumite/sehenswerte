@@ -1,6 +1,7 @@
 using System.Collections.Concurrent;
 using System.Diagnostics;
 using Microsoft.Win32; // registry
+using SehensWerte.Utils;
 
 namespace SehensWerte.Controls
 {
@@ -108,12 +109,9 @@ namespace SehensWerte.Controls
                     defaultResponse = cached;
                 }
             }
-            string? filename = Process.GetCurrentProcess().MainModule?.FileName;
-            string? registryKey = filename == null ? null : $@"HKEY_CURRENT_USER\Software\{System.IO.Path.GetFileNameWithoutExtension(filename)}";
-            if (save && registryKey != null)
+            if (save)
             {
-                var savedValue = Registry.GetValue(registryKey, key, null) as string;
-                if (savedValue != null)
+                if (WindowsRegistry.Read(key, out string? savedValue) && savedValue != null)
                 {
                     defaultResponse = savedValue;
                 }
@@ -134,9 +132,9 @@ namespace SehensWerte.Controls
                 {
                     Cache[key] = form.ResultString;
                 }
-                if (save && !password && registryKey != null)
+                if (save && !password)
                 {
-                    Registry.SetValue(registryKey, key, form.ResultString);
+                    WindowsRegistry.Write(key, form.ResultString);
                 }
                 return form.ResultString;
             }

@@ -205,7 +205,7 @@ namespace SehensWerte
             }
             else if (fieldType == typeof(Color))
             {
-                result = Color.FromArgb((int)Convert.ChangeType(element.InnerText, typeof(int)));
+                result = Color.FromArgb((int)Convert.ChangeType(element.InnerText, typeof(int), CultureInfo.InvariantCulture));
             }
             else if (fieldType.GetConstructor(new[] { typeof(string) }) != null)
             {
