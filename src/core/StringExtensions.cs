@@ -1,6 +1,7 @@
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using System.Globalization;
 using System.Text;
+using System.Xml;
 using System.Xml.Serialization;
 
 namespace SehensWerte
@@ -17,13 +18,13 @@ namespace SehensWerte
             return result == 0;
         }
 
-        public static T? FromXml<T>(this string data, T? defaultValue = default(T?))
+        public static T? FromXml<T>(this string data, T? defaultValue = default(T?), Type[]? derivedTypes = null)
         {
             try
             {
                 using (StringReader sr = new StringReader(data))
                 {
-                    object? obj = new XmlSerializer(typeof(T)).Deserialize((TextReader)sr);
+                    object? obj = new XmlSerializer(typeof(T), derivedTypes).Deserialize((TextReader)sr);
                     return obj == null ? defaultValue : (T)obj;
                 }
             }
@@ -171,13 +172,29 @@ namespace SehensWerte
                 : defaultValue;
         }
 
-        public static string ToXml<T>(this T source)
+        public static string ToXml<T>(this T source, Type[]? derivedTypes = null, bool compact = false)
         {
             if (source == null) return "";
-            XmlSerializer val = new XmlSerializer(source.GetType());
-            using StringWriter sw = new Utf8StringWriter();
+
+            XmlSerializer xs = new XmlSerializer(source.GetType(), derivedTypes);
+            XmlWriterSettings settings = new XmlWriterSettings
             {
-                val.Serialize((TextWriter)sw, (object)source);
+                Indent = !compact,
+                OmitXmlDeclaration = compact
+            };
+            using (StringWriter sw = new Utf8StringWriter())
+            using (XmlWriter writer = XmlWriter.Create(sw, settings))
+            {
+                if (compact)
+                {
+                    XmlSerializerNamespaces namespaces = new XmlSerializerNamespaces();
+                    namespaces.Add(string.Empty, string.Empty);
+                    xs.Serialize(writer, source, namespaces);
+                }
+                else
+                {
+                    xs.Serialize(writer, source);
+                }
                 return sw.ToString();
             }
         }
@@ -302,91 +319,6 @@ namespace SehensWerte
             Assert.AreEqual("-42.125".ToDouble(1), -42.125);
             Assert.AreEqual("-42.125E+10".ToDouble(1), -42.125E+10);
             Assert.AreEqual("42bob".ToDouble(1), 1);
-        }
-
-        public class XmlNestTest
-        {
-            public string a;
-            [XmlAttribute]
-            public string b;
-        }
-
-        public class XmlTest
-        {
-            public double a;
-            public double b;
-            public string c;
-
-            public XmlSerialisableDictionary<string, double> d;
-
-            public XmlNestTest e;
-            private double f = 2;
-            public double fget => f; // getter only
-            public void fset(double to) { f = to; } // not a property
-            public string[] g = new string[0];
-            public string[] h = new string[0];
-        }
-
-        [TestMethod]
-        public void TestXml()
-        {
-            XmlTest xmlTest = new XmlTest()
-            {
-                a = 1,
-                b = 2,
-                c = "§",
-                d = new XmlSerialisableDictionary<string, double>() { { "a", 1 }, { "b", 2 } },
-                e = new XmlNestTest() { a = "5", b = "6" },
-                g = new string[] { "hello", "world" },
-                h = new string[] { },
-            };
-            xmlTest.fset(42);
-
-            string xml = xmlTest.ToXml();
-            //Clipboard.SetText(xml);
-            string expected = @"
-<?xml version=""1.0"" encoding=""utf-8""?>
-<XmlTest xmlns:xsi=""http://www.w3.org/2001/XMLSchema-instance"" xmlns:xsd=""http://www.w3.org/2001/XMLSchema"">
-  <a>1</a>
-  <b>2</b>
-  <c>§</c>
-  <d>
-    <item>
-      <string>a</string>
-      <double>1</double>
-    </item>
-    <item>
-      <string>b</string>
-      <double>2</double>
-    </item>
-  </d>
-  <e b=""6"">
-    <a>5</a>
-  </e>
-  <g>
-    <string>hello</string>
-    <string>world</string>
-  </g>
-  <h />
-</XmlTest>
-";
-
-            Assert.AreEqual(
-                xml.Replace(" ", "").Replace("\r", "").Replace("\n", ""),
-                expected.Replace(" ", "").Replace("\r", "").Replace("\n", ""));
-
-            XmlTest? result = xml.FromXml<XmlTest>();
-            Assert.IsNotNull(result);
-
-            Assert.AreEqual(xmlTest.a, result!.a);
-            Assert.AreEqual(xmlTest.b, result!.b);
-            Assert.AreEqual(xmlTest.c, result!.c);
-            CollectionAssert.AreEqual(xmlTest.d, result!.d);
-            Assert.AreEqual(xmlTest.e.a, result!.e.a);
-            Assert.AreEqual(xmlTest.e.b, result!.e.b);
-            Assert.AreEqual(2, result!.fget);
-            CollectionAssert.AreEqual(xmlTest.g, result!.g);
-            CollectionAssert.AreEqual(xmlTest.h, result!.h);
         }
 
         [TestMethod]

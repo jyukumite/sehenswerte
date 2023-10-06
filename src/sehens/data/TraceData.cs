@@ -8,6 +8,7 @@ namespace SehensWerte.Controls.Sehens
     {
         public object? Tag;
 
+        [XmlSave]
         public double InputLeftmostUnixTime
         {
             get
@@ -27,7 +28,7 @@ namespace SehensWerte.Controls.Sehens
             }
         }
 
-        public string Name
+        public string Name // serialised by SehensSave
         {
             get => m_Name;
             set
@@ -41,6 +42,7 @@ namespace SehensWerte.Controls.Sehens
             }
         }
 
+        [XmlSave]
         public bool StopUpdates
         {
             get => m_StoppedData != null;
@@ -53,9 +55,15 @@ namespace SehensWerte.Controls.Sehens
                         m_StoppedData = value ? m_InputData.DeepClone() : null;
                     }
                 }
-                ForEachViewer(x => x.TraceDataSamplesChanged(this));
-                ForEachViewer(x => x.TraceDataSettingsChanged(this));
+                NotifyChanges();
+
             }
+        }
+
+        internal void NotifyChanges()
+        {
+            ForEachViewer(x => x.TraceDataSamplesChanged(this));
+            ForEachViewer(x => x.TraceDataSettingsChanged(this));
         }
 
         public bool HasVisibleViewer
@@ -102,6 +110,7 @@ namespace SehensWerte.Controls.Sehens
             }
         }
 
+        [XmlSave]
         public string AxisTitleBottom
         {
             get => m_AxisTitleBottom;
@@ -112,6 +121,7 @@ namespace SehensWerte.Controls.Sehens
             }
         }
 
+        [XmlSave]
         public string AxisTitleLeft
         {
             get => m_AxisTitleLeft;
@@ -122,6 +132,7 @@ namespace SehensWerte.Controls.Sehens
             }
         }
 
+        [XmlSave]
         public string VerticalUnit
         {
             get => m_VerticalUnit;
@@ -218,8 +229,7 @@ namespace SehensWerte.Controls.Sehens
                     {
                         m_InputData.SamplesPerSecond = value;
                     }
-                    ForEachViewer(x => x.TraceDataSamplesChanged(this));
-                    ForEachViewer(x => x.TraceDataSettingsChanged(this));
+                    NotifyChanges();
                 }
             }
         }
@@ -252,20 +262,27 @@ namespace SehensWerte.Controls.Sehens
         private List<ITraceView> m_ViewerList = new List<ITraceView>();
 
         internal object DataLock = new object();
-        private Data m_InputData = new Data();
-        private Data m_ViewedData => m_StoppedData ?? m_InputData;
+        private DataStore m_InputData = new DataStore();
+        private DataStore m_ViewedData => m_StoppedData ?? m_InputData;
+
+        internal DataStore SaveInputData { get => m_InputData; set { m_InputData = value; } }
+        internal DataStore? SaveViewedData { get => m_StoppedData; set { m_StoppedData = value; } }
 
         public TimeRange UnixTimeRange { get { lock (DataLock) { return m_ViewedData.UnixTimeRange; } } }
         public bool ViewedIsYTTrace { get { lock (DataLock) { return m_ViewedData.UnixTime != null || (m_ViewedData.LeftmostUnixTime != 0 && m_ViewedData.SamplesPerSecond != 0); } } }
 
-        private Data? m_StoppedData = null;
+        private DataStore? m_StoppedData = null;
 
-        private string m_Name;
+        private string m_Name = "";
         private string m_AxisTitleBottom = "";
         private string m_AxisTitleLeft = "";
         private string m_VerticalUnit = "";
 
         private bool m_Closing;
+
+        internal TraceData()
+        {
+        }
 
         public TraceData(string name)
         {
@@ -329,7 +346,7 @@ namespace SehensWerte.Controls.Sehens
         public virtual void Dispose()
         {
             m_ViewerList = new List<ITraceView>();
-            m_InputData = new Data();
+            m_InputData = new DataStore();
             m_StoppedData = null;
         }
 
@@ -369,10 +386,9 @@ namespace SehensWerte.Controls.Sehens
         {
             lock (DataLock)
             {
-                m_InputData = new Data();
+                m_InputData = new DataStore();
             }
-            ForEachViewer(x => x.TraceDataSettingsChanged(this));
-            ForEachViewer(x => x.TraceDataSamplesChanged(this));
+            NotifyChanges();
         }
 
 
@@ -462,7 +478,7 @@ namespace SehensWerte.Controls.Sehens
                     guiChange = true;
                 }
 
-                m_InputData.UnixTime = unixTime != null && unixTime.Length == Data.Count(samples) ? unixTime : null;
+                m_InputData.UnixTime = unixTime != null && unixTime.Length == DataStore.Count(samples) ? unixTime : null;
                 m_InputData.InputSamples = samples;
             }
             if (guiChange)
@@ -514,7 +530,7 @@ namespace SehensWerte.Controls.Sehens
             lock (DataLock)
             {
                 if (m_ViewedData.UnixTime == null) return;
-                var array = Data.CopyToDouble(m_ViewedData.InputSamples);
+                var array = DataStore.CopyToDouble(m_ViewedData.InputSamples);
                 for (int loop = leftSampleNumber; loop < rightSampleNumber; loop++)
                 {
                     if (loop >= 0 && loop < array.Length)
@@ -615,15 +631,18 @@ namespace SehensWerte.Controls.Sehens
             }
         }
 
-        internal class Data
+        internal class DataStore
         {
             public double[]? InputSampleCache;
             public double[]? InterpolatedSampleCache;
             public object InputSamples = new double[0];
             public double[]? UnixTime;
+            [XmlSave]
             public double SamplesPerSecond;
+            [XmlSave]
             public double LeftmostUnixTime;
             public List<TraceFeature> Features = new List<TraceFeature>();
+            [XmlSave]
             public int SampleNumberDisplayOffset;
 
             public TimeRange UnixTimeRange =>
@@ -631,7 +650,7 @@ namespace SehensWerte.Controls.Sehens
                 ? new TimeRange(LeftmostUnixTime, InputSampleCopy().Length / SamplesPerSecond)
                 : new TimeRange(UnixTime[0], UnixTime.Last());
 
-            public Data()
+            public DataStore()
             {
                 InputSamples = new double[0];
                 Features = new List<TraceFeature>();
@@ -766,9 +785,9 @@ namespace SehensWerte.Controls.Sehens
                 return result;
             }
 
-            public Data DeepClone()
+            public DataStore DeepClone()
             {
-                return new Data()
+                return new DataStore()
                 {
                     InputSamples = CopyToDouble(InputSamples),
                     UnixTime = UnixTime == null ? null : UnixTime.Copy(),
@@ -847,10 +866,12 @@ namespace SehensWerte.Controls.Sehens
             }
         }
 
-        public class TimeRange
+        public class TimeRange // xml serialised
         {
-            public double Left;
-            public double Right;
+            public double Left = 0;
+            public double Right = 0;
+
+            public TimeRange() { }
 
             public TimeRange(double left, double right)
             {
@@ -862,6 +883,21 @@ namespace SehensWerte.Controls.Sehens
             {
                 if (Left < traceTime.Left) Left = traceTime.Left;
                 if (Right > traceTime.Right) Right = traceTime.Right;
+            }
+
+            public override bool Equals(object? obj)
+            {
+                if (obj?.GetType() != GetType())
+                {
+                    return false;
+                }
+                TimeRange other = (TimeRange)obj;
+                return this.Left == other.Left && this.Right == other.Right;
+            }
+
+            public override int GetHashCode()
+            {
+                return (Left.GetHashCode() ^ Right.GetHashCode());
             }
         }
     }

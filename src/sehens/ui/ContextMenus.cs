@@ -297,46 +297,6 @@ namespace SehensWerte.Controls.Sehens
             }
         }
 
-        public interface ICalculatedTraceData
-        {
-        }
-
-        public class OneDoubleEdit : ICalculatedTraceData
-        {
-            [AutoEditor.DisplayName("Value")]
-            public double Param = 1.0;
-        }
-
-        public class QuantiseEdit : ICalculatedTraceData
-        {
-            [AutoEditor.DisplayName("Offset")]
-            public double Offset = 1.0;
-
-            [AutoEditor.DisplayName("Scale")]
-            public double Scale = 32767.0;
-        }
-
-        public class WindowEdit : ICalculatedTraceData
-        {
-            [AutoEditor.DisplayName("Window")]
-            public int Window = 100;
-        }
-
-        public class MinMaxEdit : ICalculatedTraceData
-        {
-            [AutoEditor.DisplayName("Minimum Value")]
-            public int Min = 0;
-
-            [AutoEditor.DisplayName("Maximum Value")]
-            public int Max = 1;
-        }
-
-        public class CountEdit : ICalculatedTraceData
-        {
-            [AutoEditor.DisplayName("Count")]
-            public int Count = 100;
-        }
-
         private static SincTraceForm SincInfo = new SincTraceForm();
         private static SweepTraceInput SweepInfo = new SweepTraceInput();
         private static NoiseTraceForm NoiseInfo = new NoiseTraceForm();
@@ -1398,7 +1358,7 @@ namespace SehensWerte.Controls.Sehens
                     TraceView view = a.Views[0];
                     a.Views[0].TriggerMode = view.TriggerMode;
                     a.Views[0].TriggerValue = view.TriggerValue;
-                    a.Views[0].TriggerTrace = view.TriggerTrace;
+                    a.Views[0].TriggerView = view.TriggerView;
                     a.Views[0].PreTriggerSampleCount = view.PreTriggerSampleCount;
                 },
             });
@@ -1592,7 +1552,7 @@ namespace SehensWerte.Controls.Sehens
 
         private static void AddMathSubMenu(List<ScopeContextMenu.MenuItem> contextMenu)
         {
-            void AddCalculatedView(ScopeContextMenu.DropDownArgs a, TraceView.CalculatedTypes type, ICalculatedTraceData? prompt = null)
+            void AddCalculatedView(ScopeContextMenu.DropDownArgs a, TraceView.CalculatedTypes type, TraceView.CalculatedTraceData? prompt = null)
             {
                 bool create = true;
                 if (prompt != null)
@@ -1646,7 +1606,7 @@ namespace SehensWerte.Controls.Sehens
                 ShownWhenMouse = PaintBoxMouseInfo.GuiSection.TraceArea,
                 Call = ScopeContextMenu.MenuItem.CallWhen.Once,
                 ShownText = ScopeContextMenu.MenuItem.TextDisplay.NoChange,
-                Clicked = (a) => AddCalculatedView(a, TraceView.CalculatedTypes.SubtractOffset, new OneDoubleEdit()),
+                Clicked = (a) => AddCalculatedView(a, TraceView.CalculatedTypes.SubtractOffset, new TraceView.CalculatedTraceDataOneDouble()),
             });
 
             contextMenu.Add(new ScopeContextMenu.MenuItem
@@ -1657,7 +1617,7 @@ namespace SehensWerte.Controls.Sehens
                 ShownWhenMouse = PaintBoxMouseInfo.GuiSection.TraceArea,
                 Call = ScopeContextMenu.MenuItem.CallWhen.Once,
                 ShownText = ScopeContextMenu.MenuItem.TextDisplay.NoChange,
-                Clicked = (a) => AddCalculatedView(a, TraceView.CalculatedTypes.ProductSimple, new OneDoubleEdit()),
+                Clicked = (a) => AddCalculatedView(a, TraceView.CalculatedTypes.ProductSimple, new TraceView.CalculatedTraceDataOneDouble()),
             });
 
             contextMenu.Add(new ScopeContextMenu.MenuItem
@@ -1668,7 +1628,7 @@ namespace SehensWerte.Controls.Sehens
                 ShownWhenMouse = PaintBoxMouseInfo.GuiSection.TraceArea,
                 Call = ScopeContextMenu.MenuItem.CallWhen.PerTrace,
                 ShownText = ScopeContextMenu.MenuItem.TextDisplay.NoChange,
-                Clicked = (a) => AddCalculatedView(a, TraceView.CalculatedTypes.Rescale, new MinMaxEdit()),
+                Clicked = (a) => AddCalculatedView(a, TraceView.CalculatedTypes.Rescale, new TraceView.CalculatedTraceDataMinMax()),
             });
 
             contextMenu.Add(new ScopeContextMenu.MenuItem
@@ -1679,7 +1639,7 @@ namespace SehensWerte.Controls.Sehens
                 ShownWhenMouse = PaintBoxMouseInfo.GuiSection.TraceArea,
                 Call = ScopeContextMenu.MenuItem.CallWhen.PerTrace,
                 ShownText = ScopeContextMenu.MenuItem.TextDisplay.NoChange,
-                Clicked = (a) => AddCalculatedView(a, TraceView.CalculatedTypes.Quantize, new QuantiseEdit()),
+                Clicked = (a) => AddCalculatedView(a, TraceView.CalculatedTypes.Quantize, new TraceView.CalculatedTraceDataQuantise()),
             });
 
             contextMenu.Add(new ScopeContextMenu.MenuItem
@@ -1690,7 +1650,7 @@ namespace SehensWerte.Controls.Sehens
                 ShownWhenMouse = PaintBoxMouseInfo.GuiSection.TraceArea,
                 Call = ScopeContextMenu.MenuItem.CallWhen.PerTrace,
                 ShownText = ScopeContextMenu.MenuItem.TextDisplay.NoChange,
-                Clicked = (a) => AddCalculatedView(a, TraceView.CalculatedTypes.RollingRMS, new WindowEdit()),
+                Clicked = (a) => AddCalculatedView(a, TraceView.CalculatedTypes.RollingRMS, new TraceView.CalculatedTraceDataWindow()),
             });
 
             contextMenu.Add(new ScopeContextMenu.MenuItem
@@ -1701,7 +1661,7 @@ namespace SehensWerte.Controls.Sehens
                 ShownWhenMouse = PaintBoxMouseInfo.GuiSection.TraceArea,
                 Call = ScopeContextMenu.MenuItem.CallWhen.PerTrace,
                 ShownText = ScopeContextMenu.MenuItem.TextDisplay.NoChange,
-                Clicked = (a) => AddCalculatedView(a, TraceView.CalculatedTypes.RollingMean, new WindowEdit()),
+                Clicked = (a) => AddCalculatedView(a, TraceView.CalculatedTypes.RollingMean, new TraceView.CalculatedTraceDataWindow()),
             });
 
             contextMenu.Add(new ScopeContextMenu.MenuItem
@@ -1712,7 +1672,7 @@ namespace SehensWerte.Controls.Sehens
                 ShownWhenMouse = PaintBoxMouseInfo.GuiSection.TraceArea,
                 Call = ScopeContextMenu.MenuItem.CallWhen.Once,
                 ShownText = ScopeContextMenu.MenuItem.TextDisplay.NoChange,
-                Clicked = (a) => AddCalculatedView(a, TraceView.CalculatedTypes.Resample, new CountEdit()),
+                Clicked = (a) => AddCalculatedView(a, TraceView.CalculatedTypes.Resample, new TraceView.CalculatedTraceDataCount()),
             });
         }
 

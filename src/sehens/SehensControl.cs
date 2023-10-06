@@ -1,3 +1,4 @@
+using Microsoft.VisualStudio.TestTools.UnitTesting;
 using SehensWerte.Controls.Sehens;
 using SehensWerte.Files;
 using SehensWerte.Maths;
@@ -40,8 +41,6 @@ namespace SehensWerte.Controls
         internal double m_ZoomValue = 1.0;
         internal double m_PanValue;
         internal const double ZoomExp = 200.0;
-        private bool m_ShowHoverInfo = true;
-        private bool m_ShowHoverValue = true;
 
         internal int m_BackgroundThreadCount;
 
@@ -60,6 +59,7 @@ namespace SehensWerte.Controls
         [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
         public Skin ScreenshotSkin { get => m_ScreenshotSkin; set => m_ScreenshotSkin = value; }
 
+        //serialisd by SehensSave
         private Skin m_ActiveSkin = new Skin(Skin.CannedSkins.Clean);
         [Browsable(false)]
         [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
@@ -72,6 +72,7 @@ namespace SehensWerte.Controls
         }
 
         private bool m_SimpleUi;
+        [XmlSave]
         public bool SimpleUi
         {
             get => m_SimpleUi;
@@ -91,6 +92,7 @@ namespace SehensWerte.Controls
         }
 
         private static bool m_ShowTraceContextLabels = true;
+        [XmlSave]
         public bool ShowTraceContextLabels
         {
             get => m_ShowTraceContextLabels;
@@ -109,12 +111,16 @@ namespace SehensWerte.Controls
             set { ActiveSkin.ShowAxisLabels = value; RecalculateProjection(); }
         }
 
+        private bool m_ShowHoverInfo = true;
+        [XmlSave]
         public bool ShowHoverInfo
         {
             get => m_ShowHoverInfo;
             set { m_ShowHoverInfo = value; PaintBox.InvalidateDelayed(); }
         }
 
+        private bool m_ShowHoverValue = true;
+        [XmlSave]
         public bool ShowHoverValue
         {
             get { return m_ShowHoverValue; }
@@ -129,6 +135,21 @@ namespace SehensWerte.Controls
                 {
                     return m_ViewGroups
                         .Select(x => x.Where(y => y.Visible).ToArray())
+                        .Where(x => x.Length > 0)
+                        .ToList();
+                }
+            }
+        }
+
+        //serialisd by SehensSave
+        public List<String[]> AllViewGroupNames
+        {
+            get
+            {
+                lock (m_ViewGroupsLock)
+                {
+                    return m_ViewGroups
+                        .Select(x => x.Select(x => x.ViewName).ToArray())
                         .Where(x => x.Length > 0)
                         .ToList();
                 }
@@ -181,6 +202,7 @@ namespace SehensWerte.Controls
             set { ActiveSkin.CursorMode = value; UpdateMouseCursor(); }
         }
 
+        [XmlSave]
         public bool ScopeBoxZoomPanBarsVisible
         {
             get => PaintBoxScrollBarContainer.Visible;
@@ -190,6 +212,7 @@ namespace SehensWerte.Controls
         public Color HoverLabelColour { get => ActiveSkin.HoverLabelColour; set => ActiveSkin.HoverLabelColour = value; }
 
         private bool m_TraceAutoRange = true;
+        [XmlSave]
         public bool TraceAutoRange { get => m_TraceAutoRange; set => m_TraceAutoRange = value; }
 
         public bool StopUpdates
@@ -205,6 +228,7 @@ namespace SehensWerte.Controls
             }
         }
 
+        [XmlSave]
         public bool TraceListVisible
         {
             get => !LeftRightSplit.Panel1Collapsed;
@@ -586,25 +610,34 @@ namespace SehensWerte.Controls
             if (m_Closing || trace == null) return;
 
             OnLog?.Invoke(new CsvLog.Entry("Adding trace " + trace.Name, CsvLog.Priority.Debug));
-            lock (m_ViewGroupsLock)
+            bool addTrace = true;
+            lock (m_TraceDataLock)
             {
-                TraceView? traceView = ViewByTrace(trace);
-                if (traceView != null) return;
-
-                lock (m_TraceDataLock)
+                if (m_Traces.TryGetValue(trace.Name, out var value))
                 {
-                    if (m_Traces.TryGetValue(trace.Name, out var value) && value != trace)
+                    if (value != trace)
                     {
                         throw new ArgumentException("Samples name already used");
                     }
-                    m_Traces[trace.Name] = trace;
+                    addTrace = false;
                 }
-                trace.StopUpdates = StopUpdates;
-                trace.AddViewer(ViewProxyCallback);
-                string viewName = EnsureUnique(trace.Name, x => TryGetView(x) != null);
-                traceView = new TraceView(this, trace, viewName);
+                m_Traces[trace.Name] = trace;
+            }
 
-                AddView(traceView);
+            trace.StopUpdates = StopUpdates;
+            if (addTrace)
+            {
+                trace.AddViewer(ViewProxyCallback);
+            }
+            lock (m_ViewGroupsLock)
+            {
+                string viewName = EnsureUnique(trace.Name, x => TryGetView(x) != null);
+                TraceView? traceView = ViewByTrace(trace);
+                if (traceView == null)
+                {
+                    traceView = new TraceView(this, trace, viewName);
+                    AddView(traceView);
+                }
             }
         }
 
@@ -641,9 +674,14 @@ namespace SehensWerte.Controls
                     view => view.UpdateLinkedRanges(group)));
         }
 
-        public TraceView? TraceByName(string traceName)
+        public TraceView? ViewByName(string viewName)
         {
-            return TryGetView(traceName);
+            return TryGetView(viewName);
+        }
+
+        public TraceData? TraceByName(string traceName)
+        {
+            return TryGetTrace(traceName);
         }
 
         public void CloseVisible()
@@ -1920,6 +1958,35 @@ namespace SehensWerte.Controls
             }
         }
 
+        public void Import(string filename)
+        {
+            ImportExport.LoadWaveformsUsingExtension(this, new string[] { filename });
+            /*
+            if (argv[0].ToLower().EndsWith(".csv") && Scope != null)
+            {
+                Scope.LoadWaveformsCSV(argv[0], 0);
+            }
+            else if (argv[0].ToLower().EndsWith(".sehens") && Scope != null)
+            {
+                Scope.LoadStateBinary(argv[0]);
+            }
+            SehensWerte.Controls.Sehens.ImportExport.LoadWaveformsCSV(argv[0], Scope, 0);
+            SehensWerte.Controls.Sehens.ImportExport.LoadStateBinary(argv[0], Scope);
+            */
+        }
 
+        [TestClass]
+        public class ScopeControlTests
+        {
+            [TestMethod]
+            public void TestImportExport()
+            {
+                var scope1 = new SehensControl();
+                string filename = System.IO.Path.GetTempFileName();
+                SehensSave.SaveStateXml(filename, scope1);
+                var scope2 = new SehensControl();
+                SehensSave.LoadStateXml(filename, scope2);
+            }
+        }
     }
 }

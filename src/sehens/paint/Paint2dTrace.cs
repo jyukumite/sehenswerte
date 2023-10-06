@@ -103,15 +103,22 @@ namespace SehensWerte.Controls.Sehens
             int y = 0;
             if (DrawnYT != null)
             {
-                y = (int)(DrawnYT[FindIndexOfX(DrawnYT, x)].Y + 0.5f);
+                int v = FindIndexOfX(DrawnYT, x);
+                if (v != -1)
+                {
+                    y = (int)(DrawnYT[v].Y + 0.5f);
+                }
             }
             else if (DrawnProjection1 != null && DrawnProjection1!.Length != 0)
             {
                 int index = FindIndexOfX(DrawnProjection1, x);
-                y = (int)(DrawnProjection1[index].Y + 0.5f);
-                if (DrawnProjection2 != null && DrawnProjection2!.Length != 0)
+                if (index != -1)
                 {
-                    y = (int)((y + DrawnProjection2[index].Y) / 2);
+                    y = (int)(DrawnProjection1[index].Y + 0.5f);
+                    if (DrawnProjection2 != null && DrawnProjection2!.Length != 0)
+                    {
+                        y = (int)((y + DrawnProjection2[index].Y) / 2);
+                    }
                 }
             }
             return y;
@@ -380,8 +387,14 @@ namespace SehensWerte.Controls.Sehens
 
             using Pen pen = new Pen(InterpolateColour(info.View0.Colour, info.Skin.BackgroundColour, 0, 1));
             using Brush brush = new SolidBrush(info.View0.Colour);
-            graphics.DrawLines(pen, DrawnYT);
-            PaintFilledCircles(graphics, brush, DrawnYT, 4f);
+            if (DrawnYT?.Length > 1)
+            {
+                graphics.DrawLines(pen, DrawnYT);
+            }
+            if (DrawnYT != null)
+            {
+                PaintFilledCircles(graphics, brush, DrawnYT, 4f);
+            }
         }
 
         private void PaintProjectionYTLine(TraceGroupDisplay info, Graphics graphics, int leftIndex, int rightIndex)

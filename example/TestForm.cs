@@ -35,16 +35,8 @@ namespace SehensWerte
             InitializeComponent();
             if (argv.Length > 0)
             {
-                if (argv[0].ToLower().EndsWith(".csv") && Scope != null)
-                {
-                    SehensWerte.Controls.Sehens.ImportExport.LoadWaveformsCSV(argv[0], Scope, 0);
-                }
-                else if (argv[0].ToLower().EndsWith(".sehens") && Scope != null)
-                {
-                    SehensWerte.Controls.Sehens.ImportExport.LoadState(argv[0], Scope);
-                }
+                Scope.Import(argv[0]);
             }
-
             Controls.AutoEditor ae = new SehensWerte.Controls.AutoEditor(m_Data, Split.Panel2.Controls);
         }
 

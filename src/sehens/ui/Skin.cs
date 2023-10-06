@@ -1,4 +1,5 @@
 using SehensWerte.Utils;
+using System.Xml.Serialization;
 
 namespace SehensWerte.Controls.Sehens
 {
@@ -70,187 +71,232 @@ namespace SehensWerte.Controls.Sehens
         }
 
         // screenshot
+        [XmlSave]
         [AutoEditor.DisplayName("High quality render")]
         [AutoEditor.DisplayOrder(-10)]
         public bool HighQualityRender = true;
 
+        [XmlSave]
         [AutoEditor.DisplayName("Trace width (pixels)")]
         [AutoEditor.DisplayOrder(-10)]
         public int TraceWidth = 1600;
 
+        [XmlSave]
         [AutoEditor.DisplayName("Per trace height (pixels)")]
         [AutoEditor.DisplayOrder(-10)]
         public int TraceHeight = 422;
 
+        [XmlSave]
         [AutoEditor.DisplayName("Scope of export/screenshot")]
         [AutoEditor.DisplayOrder(-10)]
         public TraceSelections ExportTraces = TraceSelections.SelectedTraces;
 
         //trace line
+        [XmlSave]
         [AutoEditor.DisplayName("Trace line width (pixels)")]
         [AutoEditor.DisplayOrder(-9)]
         public int TraceLineWidth = 2;
 
+        [XmlSave]
         [AutoEditor.DisplayName("Default trace colour")]
         [AutoEditor.DisplayOrder(-9)]
         public Color DefaultTraceColour = Color.Black;
 
         // axis
+        [XmlSave]
         [AutoEditor.DisplayName("Show Axes Titles")]
         [AutoEditor.DisplayOrder(-8)]
         public bool ShowAxisLabels = true;
 
+        [XmlSave]
         [AutoEditor.DisplayName("Axis Title font")]
         [AutoEditor.DisplayOrder(-8)]
         public string AxisTitleFontName { get => AxisTitleFont.Name; set => AxisTitleFont.Name = value; }
 
+        [XmlSave]
         [AutoEditor.DisplayName("Axis Title height")]
         [AutoEditor.DisplayOrder(-8)]
         public float AxisTitleFontHeight { get => AxisTitleFont.EmSize; set => AxisTitleFont.EmSize = value; }
 
+        [XmlSave]
         [AutoEditor.DisplayName("Axis Title colour")]
         [AutoEditor.DisplayOrder(-8)]
         public Color AxisTitleFontColour { get => AxisTitleFont.Color; set => AxisTitleFont.Color = value; }
 
+        [XmlSave]
         [AutoEditor.DisplayName("Axis Text font")]
         [AutoEditor.DisplayOrder(-8)]
         public string AxisTextFontName { get => AxisTextFont.Name; set => AxisTextFont.Name = value; }
 
+        [XmlSave]
         [AutoEditor.DisplayName("Axis Text height")]
         [AutoEditor.DisplayOrder(-8)]
         public float AxisTextFontHeight { get => AxisTextFont.EmSize; set => AxisTextFont.EmSize = value; }
 
+        [XmlSave]
         [AutoEditor.DisplayName("Axis Text colour")]
         [AutoEditor.DisplayOrder(-8)]
         public Color AxisTextFontColour { get => AxisTextFont.Color; set => AxisTextFont.Color = value; }
 
+        [XmlSave]
         [AutoEditor.DisplayName("Axis Lines")]
         [AutoEditor.DisplayOrder(-8)]
         public AxisLines AxisLineStyle;
 
+        [XmlSave]
         [AutoEditor.DisplayName("Axis Line colour")]
         [AutoEditor.DisplayOrder(-8)]
         public Color AxisLineColour = Color.Yellow;
 
+        [XmlSave]
         [AutoEditor.DisplayName("Vertical Axis Width")]
         [AutoEditor.DisplayOrder(-8)]
         public int VerticalAxisWidth = 80;
 
+        [XmlSave]
         [AutoEditor.DisplayName("Gutter Text rows")]
         [AutoEditor.DisplayOrder(-8)]
         public int LeftGutterTextRows = 4;
 
+        [XmlSave]
         [AutoEditor.DisplayName("Vertical Axis Position")]
         [AutoEditor.DisplayOrder(-8)]
         public VerticalAxisPositions VerticalAxisPosition = VerticalAxisPositions.Left;
 
+        [XmlSave]
         [AutoEditor.DisplayName("Legend Text font")]
         [AutoEditor.DisplayOrder(-8)]
         public string LegendTextFontName { get => LegendTextFont.Name; set => LegendTextFont.Name = value; }
 
+        [XmlSave]
         [AutoEditor.DisplayName("Legend Text height")]
         [AutoEditor.DisplayOrder(-8)]
         public float LegendTextFontHeight { get => LegendTextFont.EmSize; set => LegendTextFont.EmSize = value; }
 
         // display elements
+        [XmlSave]
         [AutoEditor.DisplayName("Trace features")]
         [AutoEditor.DisplayOrder(-7)]
         public bool ShowTraceFeatures = true;
 
+        [XmlSave]
         [AutoEditor.DisplayName("Feature Text font")]
         [AutoEditor.DisplayOrder(-7)]
         public string FeatureTextFontName { get => FeatureTextFont.Name; set => FeatureTextFont.Name = value; }
 
+        [XmlSave]
         [AutoEditor.DisplayName("Feature Text style")]
         [AutoEditor.DisplayOrder(-7)]
         public string FeatureTextFontStyle { get => FeatureTextFont.Style.ToString(); set => FeatureTextFont.Style = (FontStyle)FeatureTextFont.Style.EnumValue(value); }
 
+        [XmlSave]
         [AutoEditor.DisplayName("Feature Text height")]
         [AutoEditor.DisplayOrder(-7)]
         public float FeatureTextFontHeight { get => FeatureTextFont.EmSize; set => FeatureTextFont.EmSize = value; }
 
+        [XmlSave]
         [AutoEditor.DisplayName("Feature Text colour")]
         [AutoEditor.DisplayOrder(-7)]
         public Color FeatureTextFontColour { get => FeatureTextFont.Color; set => FeatureTextFont.Color = value; }
 
+        [XmlSave]
         [AutoEditor.DisplayName("Show Warnings")]
         [AutoEditor.DisplayOrder(-7)]
         public int TraceStatsWidth = 120;
 
+        [XmlSave]
         [AutoEditor.DisplayName("Warning font")]
         [AutoEditor.DisplayOrder(-7)]
         public string WarningFontName { get => WarningFont.Name; set => WarningFont.Name = value; }
 
+        [XmlSave]
         [AutoEditor.DisplayName("Warning height")]
         [AutoEditor.DisplayOrder(-7)]
         public float WarningFontHeight { get => WarningFont.EmSize; set => WarningFont.EmSize = value; }
 
+        [XmlSave]
         [AutoEditor.DisplayName("Warning colour")]
         [AutoEditor.DisplayOrder(-7)]
         public Color WarningFontColour { get => WarningFont.Color; set => WarningFont.Color = value; }
 
+        [XmlSave]
         [AutoEditor.DisplayName("Show Statistics")]
         [AutoEditor.DisplayOrder(-7)]
         public TraceStatistics TraceStats;
 
+        [XmlSave]
         [AutoEditor.DisplayName("Stats font")]
         [AutoEditor.DisplayOrder(-7)]
         public string StatsFontName { get => StatsFont.Name; set => StatsFont.Name = value; }
 
+        [XmlSave]
         [AutoEditor.DisplayName("Show Labels")]
         [AutoEditor.DisplayOrder(-7)]
         public TraceLabels TraceLabel = TraceLabels.Embedded;
 
+        [XmlSave]
         [AutoEditor.DisplayName("Cursor mode")]
         [AutoEditor.DisplayOrder(-7)]
         public Cursors CursorMode = Cursors.CrossHair;
 
         //major colours
 
+        [XmlSave]
         [AutoEditor.DisplayName("Foreground colour")]
         [AutoEditor.DisplayOrder(-6)]
         public Color ForegroundColour = Color.Black;
 
+        [XmlSave]
         [AutoEditor.DisplayName("Gutter colour")]
         [AutoEditor.DisplayOrder(-6)]
         public Color GutterColour = Color.FromKnownColor(KnownColor.Control);
 
+        [XmlSave]
         [AutoEditor.DisplayName("Pen colour")]
         [AutoEditor.DisplayOrder(-6)]
         public Color DefaultPenColour = Color.Black;
 
+        [XmlSave]
         [AutoEditor.DisplayName("Graduation colour")]
         [AutoEditor.DisplayOrder(-6)]
         public Color GraduationColour = Color.Green;
 
+        [XmlSave]
         [AutoEditor.DisplayName("Selected context colour")]
         [AutoEditor.DisplayOrder(-6)]
         public Color SelectedContextColour = Color.Gainsboro;
 
+        [XmlSave]
         [AutoEditor.DisplayName("Selected embed colour")]
         [AutoEditor.DisplayOrder(-6)]
         public Color SelectedEmbedColour = Color.LightSlateGray;
 
+        [XmlSave]
         [AutoEditor.DisplayName("Background colour")]
         [AutoEditor.DisplayOrder(-6)]
         public Color BackgroundColour = Color.White;
 
+        [XmlSave]
         [AutoEditor.DisplayName("Hover label colour")]
         [AutoEditor.DisplayOrder(-6)]
         public Color HoverLabelColour = Color.FromArgb(128, Color.Yellow.R, Color.Yellow.G, Color.Yellow.B);
 
+        [XmlSave]
         [AutoEditor.DisplayName("Hover Text font")]
         [AutoEditor.DisplayOrder(-6)]
         public string HoverTextFontName { get => HoverTextFont.Name; set => HoverTextFont.Name = value; }
 
+        [XmlSave]
         [AutoEditor.DisplayName("Hover Text height")]
         [AutoEditor.DisplayOrder(-6)]
         public float HoverTextFontHeight { get => HoverTextFont.EmSize; set => HoverTextFont.EmSize = value; }
 
+        [XmlSave]
         [AutoEditor.DisplayName("Hover Text colour")]
         [AutoEditor.DisplayOrder(-6)]
         public Color HoverTextFontColour { get => HoverTextFont.Color; set => HoverTextFont.Color = value; }
 
+        [XmlSave]
         [AutoEditor.DisplayName("Crosshair colour")]
         [AutoEditor.DisplayOrder(-6)]
         public Color CrossHairColour = Color.Red;

@@ -2,6 +2,7 @@
 using SehensWerte.Filters;
 using SehensWerte.Maths;
 using System.Text;
+using System.Xml.Serialization;
 
 namespace SehensWerte.Controls.Sehens
 {
@@ -42,19 +43,19 @@ namespace SehensWerte.Controls.Sehens
         private MouseInfo[] Clicks = new MouseInfo[5];
 
         [AutoEditor.Hidden]
-        public double[]? RawBeforeZoom { get { lock (m_Samples.DataLock) { return m_RawBeforeZoom; } } }
+        internal double[]? RawBeforeZoom { get { lock (m_Samples.DataLock) { return m_RawBeforeZoom; } } }
         [AutoEditor.Hidden]
-        public double[]? CalculatedBeforeZoom { get { lock (m_Samples.DataLock) { return m_CalculatedBeforeZoom; } } }
+        internal double[]? CalculatedBeforeZoom { get { lock (m_Samples.DataLock) { return m_CalculatedBeforeZoom; } } }
         [AutoEditor.Hidden]
-        public double[]? DrawnSamples { get { lock (m_Samples.DataLock) { return m_DrawnSamples; } } }
+        internal double[]? DrawnSamples { get { lock (m_Samples.DataLock) { return m_DrawnSamples; } } }
         [AutoEditor.Hidden]
-        public double[]? PeakHoldMinDrawn { get { lock (m_Samples.DataLock) { return m_PeakHoldDrawn?.Min; } } }
+        internal double[]? PeakHoldMinDrawn { get { lock (m_Samples.DataLock) { return m_PeakHoldDrawn?.Min; } } }
         [AutoEditor.Hidden]
-        public double[]? PeakHoldMaxDrawn { get { lock (m_Samples.DataLock) { return m_PeakHoldDrawn?.Max; } } }
+        internal double[]? PeakHoldMaxDrawn { get { lock (m_Samples.DataLock) { return m_PeakHoldDrawn?.Max; } } }
         [AutoEditor.Hidden]
-        public double[]? PeakHoldMinAll { get { lock (m_Samples.DataLock) { return m_PeakHoldAll?.Min; } } }
+        internal double[]? PeakHoldMinAll { get { lock (m_Samples.DataLock) { return m_PeakHoldAll?.Min; } } }
         [AutoEditor.Hidden]
-        public double[]? PeakHoldMaxAll { get { lock (m_Samples.DataLock) { return m_PeakHoldAll?.Max; } } }
+        internal double[]? PeakHoldMaxAll { get { lock (m_Samples.DataLock) { return m_PeakHoldAll?.Max; } } }
 
         [AutoEditor.Hidden]
         public int DrawnStartPosition => m_DrawnStartPosition;
@@ -79,7 +80,7 @@ namespace SehensWerte.Controls.Sehens
             Scope = scope;
             ViewName = trace.m_Samples.Name;
             m_Samples = trace.m_Samples;
-            TriggerTrace = trace.TriggerTrace;
+            TriggerView = trace.TriggerView;
             m_Samples.AddViewer(this);
             Scope.AddView(this);
             Scope.ViewNeedsRepaint(this);
@@ -104,7 +105,7 @@ namespace SehensWerte.Controls.Sehens
             }
         }
 
-        private string m_ViewName = "";
+        private string m_ViewName = ""; //serialsied by SehensSave
         public string ViewName
         {
             get => m_ViewName;
@@ -119,6 +120,7 @@ namespace SehensWerte.Controls.Sehens
         }
 
         private Color m_Colour = Color.Black;
+        [XmlSave]
         public Color Colour
         {
             get => m_Colour;
@@ -132,6 +134,7 @@ namespace SehensWerte.Controls.Sehens
         }
 
         private string m_GroupWithView = "";
+        [XmlSave]
         [AutoEditor.DisplayName("Group With Trace")] //fixme: AutoEditorForm.Values
         public string GroupWithView
         {
@@ -148,6 +151,7 @@ namespace SehensWerte.Controls.Sehens
 
         private bool m_Selected;
         [AutoEditor.Hidden]
+        [XmlSave]
         public bool Selected
         {
             get => m_Selected;
@@ -177,6 +181,7 @@ namespace SehensWerte.Controls.Sehens
             FFT2D,
         }
         private PaintModes m_PaintMode = PaintModes.PolygonDigital;
+        [XmlSave]
         [AutoEditor.DisplayName("Paint Mode")]
         public PaintModes PaintMode
         {
@@ -212,6 +217,7 @@ namespace SehensWerte.Controls.Sehens
         }
 
         private string m_TraceFilter = "None";
+        [XmlSave]
         public string TraceFilter
         {
             get => m_TraceFilter;
@@ -227,6 +233,7 @@ namespace SehensWerte.Controls.Sehens
         }
 
         private double m_ZoomValue = 1.0;
+        [XmlSave]
         [AutoEditor.Hidden]
         public double ZoomValue
         {
@@ -242,6 +249,7 @@ namespace SehensWerte.Controls.Sehens
         }
 
         private double m_PanValue = 0.0;
+        [XmlSave]
         [AutoEditor.Hidden]
         public double PanValue
         {
@@ -257,6 +265,7 @@ namespace SehensWerte.Controls.Sehens
         }
 
         private bool m_HoldPanZoom = false;
+        [XmlSave]
         public bool HoldPanZoom
         {
             get => m_HoldPanZoom;
@@ -271,6 +280,7 @@ namespace SehensWerte.Controls.Sehens
         }
 
         private int m_LineWidth = 0; // 0 = use from skin
+        [XmlSave]
         public int LineWidth
         {
             get => m_LineWidth;
@@ -283,6 +293,7 @@ namespace SehensWerte.Controls.Sehens
         }
 
         private bool m_AutoReduceRange;
+        [XmlSave]
         public bool AutoReduceRange
         {
             get => m_AutoReduceRange;
@@ -298,6 +309,7 @@ namespace SehensWerte.Controls.Sehens
 
 
         private double m_HighestValue = 1.0;
+        [XmlSave]
         [AutoEditor.DisplayOrder(-2)]
         [AutoEditor.DisplayName("Highest Value")]
         public double HighestValue
@@ -311,6 +323,7 @@ namespace SehensWerte.Controls.Sehens
         }
 
         private double m_LowestValue = 0;
+        [XmlSave]
         [AutoEditor.DisplayOrder(-2)]
         [AutoEditor.DisplayName("Lowest Value")]
         public double LowestValue
@@ -325,6 +338,7 @@ namespace SehensWerte.Controls.Sehens
 
 
         private double m_TraceHeightFactor = 1;
+        [XmlSave]
         public double HeightFactor
         {
             get => m_TraceHeightFactor;
@@ -339,6 +353,7 @@ namespace SehensWerte.Controls.Sehens
         }
 
         private bool m_PadLeftWithFirstValue;
+        [XmlSave]
         [AutoEditor.DisplayName("Pad Left With First Value")]
         public bool PadLeftWithFirstValue
         {
@@ -352,6 +367,7 @@ namespace SehensWerte.Controls.Sehens
         }
 
         private bool m_PadRightWithLastValue;
+        [XmlSave]
         [AutoEditor.DisplayName("Pad Right With Last Value")]
         public bool PadRightWithLastValue
         {
@@ -368,6 +384,7 @@ namespace SehensWerte.Controls.Sehens
         }
 
         private bool m_Visible = true;
+        [XmlSave]
         [AutoEditor.Hidden]
         public bool Visible
         {
@@ -381,6 +398,7 @@ namespace SehensWerte.Controls.Sehens
         }
 
         private bool m_LogVertical;
+        [XmlSave]
         [AutoEditor.DisplayName("Log vertical axis")]
         public bool LogVertical
         {
@@ -396,6 +414,7 @@ namespace SehensWerte.Controls.Sehens
         }
 
         private bool m_ShowPictureInPicture;
+        [XmlSave]
         public bool ShowPictureInPicture
         {
             get => m_ShowPictureInPicture;
@@ -411,7 +430,7 @@ namespace SehensWerte.Controls.Sehens
         private TraceView? m_TriggerTrace;
         //fixme [AutoEditor.Values(m_Display.)]
         [AutoEditor.DisplayName("Trigger Trace")]
-        public TraceView? TriggerTrace
+        public TraceView? TriggerView
         {
             get => m_TriggerTrace;
             set
@@ -424,6 +443,7 @@ namespace SehensWerte.Controls.Sehens
         }
 
         private double m_TriggerValue;
+        [XmlSave]
         [AutoEditor.DisplayName("Trigger Value")]
         public double TriggerValue
         {
@@ -447,6 +467,7 @@ namespace SehensWerte.Controls.Sehens
             Falling
         }
         private TriggerModes m_TriggerMode;
+        [XmlSave]
         [AutoEditor.DisplayName("Trigger Mode")]
         public TriggerModes TriggerMode
         {
@@ -462,6 +483,7 @@ namespace SehensWerte.Controls.Sehens
         }
 
         private bool m_ViewOverrideEnabled;
+        [XmlSave]
         [AutoEditor.Hidden]
         public bool ViewOverrideEnabled
         {
@@ -477,6 +499,7 @@ namespace SehensWerte.Controls.Sehens
         }
 
         private int m_ViewLengthOverride;
+        [XmlSave]
         [AutoEditor.DisplayName("View Length")]
         public int ViewLengthOverride
         {
@@ -493,6 +516,7 @@ namespace SehensWerte.Controls.Sehens
         }
 
         private int m_ViewOffsetOverride;
+        [XmlSave]
         [AutoEditor.DisplayName("View Offset")]
         public int ViewOffsetOverride
         {
@@ -512,14 +536,16 @@ namespace SehensWerte.Controls.Sehens
         [AutoEditor.Hidden]
         public bool OverrideSamplesUnixTime => m_OverrideSamplesUnixTime;
 
-        private TraceData.TimeRange m_UnixTimeRange;
+        private TraceData.TimeRange m_UnixTimeRange = new TraceData.TimeRange(0.0, 0.0);
+
+        [XmlSave(nestedXml: true)]
         [AutoEditor.Hidden]
         public TraceData.TimeRange UnixTimeRange
         {
             get => m_UnixTimeRange;
             set
             {
-                if (value.Equals(m_UnixTimeRange) && OverrideSamplesUnixTime) return;
+                if (value.Equals(m_UnixTimeRange)) return;
                 m_OverrideSamplesUnixTime = true;
                 m_UnixTimeRange = value;
                 UnixTimesChanged();
@@ -548,7 +574,6 @@ namespace SehensWerte.Controls.Sehens
 
         [AutoEditor.Hidden]
         public TraceData.TimeRange GroupUnixTimeRange => GetGroupUnixTimeRange(Group);
-
 
         internal static TraceData.TimeRange GetGroupUnixTimeRange(IEnumerable<TraceView> group)
         {
@@ -608,6 +633,7 @@ namespace SehensWerte.Controls.Sehens
 
 
         private int m_PreTriggerSampleCount;
+        [XmlSave]
         [AutoEditor.DisplayName("PreTrigger Sample Count")]
         public int PreTriggerSampleCount
         {
@@ -624,6 +650,7 @@ namespace SehensWerte.Controls.Sehens
 
 
         private double m_FftBandpass0LowCutHz;
+        [XmlSave]
         public double FftBandpassHPF6dB
         {
             get => m_FftBandpass0LowCutHz;
@@ -638,6 +665,7 @@ namespace SehensWerte.Controls.Sehens
         }
 
         private double m_FftBandpass1LowPassHz;
+        [XmlSave]
         public double FftBandpassHPF3dB
         {
             get => m_FftBandpass1LowPassHz;
@@ -652,6 +680,7 @@ namespace SehensWerte.Controls.Sehens
         }
 
         private double m_FftBandpass2HighPassHz;
+        [XmlSave]
         public double FftBandpassLPF3dB
         {
             get => m_FftBandpass2HighPassHz;
@@ -666,6 +695,7 @@ namespace SehensWerte.Controls.Sehens
         }
 
         private double m_FftBandpass3HighCutHz;
+        [XmlSave]
         public double FftBandpassLPF6dB
         {
             get => m_FftBandpass3HighCutHz;
@@ -692,6 +722,7 @@ namespace SehensWerte.Controls.Sehens
             NotchFit
         }
         private FftFilterTypes m_FftFilterType;
+        [XmlSave]
         public FftFilterTypes FftFilterType
         {
             get => m_FftFilterType;
@@ -706,6 +737,7 @@ namespace SehensWerte.Controls.Sehens
         }
 
         private SampleWindow.WindowType m_FftBandpassWindow = SampleWindow.WindowType.Rectangular;
+        [XmlSave]
         public SampleWindow.WindowType FftBandpassWindow
         {
             get => m_FftBandpassWindow;
@@ -720,6 +752,7 @@ namespace SehensWerte.Controls.Sehens
         }
 
         private SampleWindow.WindowType m_FftWindow = SampleWindow.WindowType.Rectangular;
+        [XmlSave]
         [AutoEditor.DisplayOrder(-3)]
         [AutoEditor.DisplayName("FFT Display Window")]
         public SampleWindow.WindowType FftWindow
@@ -741,6 +774,7 @@ namespace SehensWerte.Controls.Sehens
             AfterZoom
         }
         private CalculatePhases m_CalculatePhase = CalculatePhases.AfterZoom;
+        [XmlSave]
         public CalculatePhases MathPhase
         {
             get => m_CalculatePhase;
@@ -781,9 +815,60 @@ namespace SehensWerte.Controls.Sehens
             Sum,
             Subtract,
         }
+
+        public class CalculatedTraceData // XML Serialised
+        {
+        }
+
+        public class CalculatedTraceDataOneDouble : CalculatedTraceData // XML Serialised
+        {
+            [AutoEditor.DisplayName("Value")]
+            public double Param = 1.0;
+        }
+
+        public class CalculatedTraceDataQuantise : CalculatedTraceData // XML Serialised
+        {
+            [AutoEditor.DisplayName("Offset")]
+            public double Offset = 1.0;
+
+            [AutoEditor.DisplayName("Scale")]
+            public double Scale = 32767.0;
+        }
+
+        public class CalculatedTraceDataWindow : CalculatedTraceData // XML Serialised
+        {
+            [AutoEditor.DisplayName("Window")]
+            public int Window = 100;
+        }
+
+        public class CalculatedTraceDataMinMax : CalculatedTraceData // XML Serialised
+        {
+            [AutoEditor.DisplayName("Minimum Value")]
+            public int Min = 0;
+
+            [AutoEditor.DisplayName("Maximum Value")]
+            public int Max = 1;
+        }
+
+        public class CalculatedTraceDataCount : CalculatedTraceData // XML Serialised
+        {
+            [AutoEditor.DisplayName("Count")]
+            public int Count = 100;
+        }
+
+        [XmlSave]
         public CalculatedTypes CalculateType;
-        public ContextMenus.ICalculatedTraceData CalculatedParameter;
-        public List<TraceView> CalculatedSourceViews = new List<TraceView>();
+
+        [XmlSave(nestedXml: true, nestedDerivedTypes: new Type[]
+        {
+            typeof(CalculatedTraceDataOneDouble),
+            typeof(CalculatedTraceDataQuantise),
+            typeof(CalculatedTraceDataWindow),
+            typeof(CalculatedTraceDataMinMax),
+            typeof(CalculatedTraceDataCount)
+        })]
+        public CalculatedTraceData CalculatedParameter = new CalculatedTraceData();
+        public List<TraceView> CalculatedSourceViews = new List<TraceView>();        //serialised by ScopeSave
 
         public enum MathTypes
         {
@@ -794,6 +879,7 @@ namespace SehensWerte.Controls.Sehens
             FFT20Log10
         }
         private MathTypes m_MathType;
+        [XmlSave]
         [AutoEditor.DisplayOrder(-3)]
         [AutoEditor.DisplayName("Math Type")]
         public MathTypes MathType
@@ -816,6 +902,7 @@ namespace SehensWerte.Controls.Sehens
             DifferentiateIntegrate
         }
         private FilterTransforms m_FilterTransform;
+        [XmlSave]
         public FilterTransforms FilterTransform
         {
             get => m_FilterTransform;
@@ -1853,7 +1940,7 @@ value=" + string.Format(VerticalUnitFormat, Clicks[0].SampleAtX.ToStringRound(5,
 
                 case CalculatedTypes.SubtractOffset:
                     exact(1);
-                    double simpleOffset = ((ContextMenus.OneDoubleEdit)CalculatedParameter).Param;
+                    double simpleOffset = ((TraceView.CalculatedTraceDataOneDouble)CalculatedParameter).Param;
                     result = sourceTraces[0].Select(x => x - simpleOffset).ToArray();
                     break;
 
@@ -1864,7 +1951,7 @@ value=" + string.Format(VerticalUnitFormat, Clicks[0].SampleAtX.ToStringRound(5,
 
                 case CalculatedTypes.ProductSimple:
                     exact(1);
-                    double simpleProduct = ((ContextMenus.OneDoubleEdit)CalculatedParameter).Param;
+                    double simpleProduct = ((TraceView.CalculatedTraceDataOneDouble)CalculatedParameter).Param;
                     result = sourceTraces[0].Select(x => x * simpleProduct).ToArray();
                     break;
 
@@ -1875,7 +1962,7 @@ value=" + string.Format(VerticalUnitFormat, Clicks[0].SampleAtX.ToStringRound(5,
 
                 case CalculatedTypes.Rescale:
                     exact(1);
-                    var rescale = (ContextMenus.MinMaxEdit)CalculatedParameter;
+                    var rescale = (TraceView.CalculatedTraceDataMinMax)CalculatedParameter;
                     result = sourceTraces[0].Rescale(rescale.Min, rescale.Max);
                     break;
 
@@ -1896,19 +1983,19 @@ value=" + string.Format(VerticalUnitFormat, Clicks[0].SampleAtX.ToStringRound(5,
 
                 case CalculatedTypes.Quantize:
                     exact(1);
-                    var quantize = (ContextMenus.QuantiseEdit)CalculatedParameter;
+                    var quantize = (TraceView.CalculatedTraceDataQuantise)CalculatedParameter;
                     result = sourceTraces[0].Subtract(quantize.Offset).Quantize(quantize.Scale);
                     break;
 
                 case CalculatedTypes.RollingRMS:
                     exact(1);
-                    int rmsWindow = ((ContextMenus.WindowEdit)CalculatedParameter).Window;
+                    int rmsWindow = ((TraceView.CalculatedTraceDataWindow)CalculatedParameter).Window;
                     result = sourceTraces[0].RollingRms(rmsWindow);
                     break;
 
                 case CalculatedTypes.RollingMean:
                     exact(1);
-                    int meanWindow = ((ContextMenus.WindowEdit)CalculatedParameter).Window;
+                    int meanWindow = ((TraceView.CalculatedTraceDataWindow)CalculatedParameter).Window;
                     result = sourceTraces[0].RollingMean(meanWindow);
                     break;
 
@@ -1929,7 +2016,7 @@ value=" + string.Format(VerticalUnitFormat, Clicks[0].SampleAtX.ToStringRound(5,
 
                 case CalculatedTypes.Resample:
                     exact(1);
-                    int resampleCount = ((ContextMenus.CountEdit)CalculatedParameter).Count;
+                    int resampleCount = ((TraceView.CalculatedTraceDataCount)CalculatedParameter).Count;
                     result = sourceTraces[0].Resample(resampleCount);
                     break;
 

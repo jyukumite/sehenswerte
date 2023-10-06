@@ -284,7 +284,7 @@ namespace SehensWerte.Controls.Sehens
                 {
                     item.CalculateOrder =
                         item.CalculateType == TraceView.CalculatedTypes.None
-                            ? (item.TriggerTrace == null ? 0 : 1)
+                            ? (item.TriggerView == null ? 0 : 1)
                             : (item.Samples.InputSampleCount == 0 ? 3 : 2);
                 });
 

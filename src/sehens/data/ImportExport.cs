@@ -559,32 +559,32 @@ namespace SehensWerte.Controls.Sehens
                 filename = Path.GetTempFileName() + GetExtension(type);
             }
 
-            bool flag = true;
+            bool canSave = true;
             if (edit == null)
             {
                 using AutoEditorForm autoEditorForm = new AutoEditorForm();
                 edit = (ExportDataFormBase?)ImportExportEdit(type, autoEditorForm);
                 if (edit == null)
                 {
-                    flag = false;
+                    canSave = type == ExportType.SehensXML || type == ExportType.SehensBinary;
                 }
                 else
                 {
                     edit.Filename = filename;
                     edit.Result = dest;
-                    flag = autoEditorForm.ShowDialog("Export " + GetExtension(type) + "file", GetDescription(type), edit);
+                    canSave = autoEditorForm.ShowDialog("Export " + GetExtension(type) + "file", GetDescription(type), edit);
                 }
             }
-            if (flag && edit is ExportDataForm)
+            if (canSave && edit is ExportDataForm)
             {
                 waveforms = ExtractWaveformsToSave(a, (ExportDataForm)edit);
                 if (waveforms.Extracted.Count == 0)
                 {
                     MessageBox.Show("Result would be empty");
-                    flag = false;
+                    canSave = false;
                 }
             }
-            if (flag)
+            if (canSave)
             {
                 switch (type)
                 {
@@ -595,6 +595,8 @@ namespace SehensWerte.Controls.Sehens
                     case ExportType.SinglePng: SaveImage((ExportImageForm)edit, a.Scope, filename); break;
                     case ExportType.MultiplePng: SaveImages((ExportImageForm)edit, a.Scope, filename); break;
                     case ExportType.TraceNames: SaveNames(filename, a); break;
+                    case ExportType.SehensXML: SehensSave.SaveStateXml(filename, a.Scope); break;
+                    case ExportType.SehensBinary: SehensSave.SaveStateBinary(filename, a.Scope); break;
                 }
                 switch (dest)
                 {
@@ -756,7 +758,7 @@ namespace SehensWerte.Controls.Sehens
                         string[] array = fileNames;
                         for (int i = 0; i < array.Length; i++)
                         {
-                            LoadState(array[i], display);
+                            SehensSave.LoadStateBinary(array[i], display);
                         }
                         break;
                     }
@@ -765,7 +767,7 @@ namespace SehensWerte.Controls.Sehens
                         string[] array = fileNames;
                         for (int i = 0; i < array.Length; i++)
                         {
-                            LoadStateXml(array[i], display);
+                            SehensSave.LoadStateXml(array[i], display);
                         }
                         break;
                     }
@@ -1017,7 +1019,7 @@ namespace SehensWerte.Controls.Sehens
         {
             foreach (string filename in edit.Filenames)
             {
-                var traceView = display.TraceByName(edit.TargetTrace);
+                var traceView = display.ViewByName(edit.TargetTrace);
                 if (traceView != null)
                 {
                     var samples = traceView.Samples.InputSamplesAsDouble;
@@ -1058,30 +1060,6 @@ namespace SehensWerte.Controls.Sehens
                     MessageBox.Show("Can't find " + edit.TargetTrace);
                 }
             }
-        }
-
-        ////////////////////////////////////////////
-        // save and load state files
-
-        public static void SaveState(string filename, SehensControl scope)
-        {
-            //fixme: grobuf
-        }
-
-        public static void SaveStateXml(string filename, SehensControl scope)
-        {
-            //fixme - save as xml other than samples
-        }
-
-        public static bool LoadState(string filename, SehensControl scope)
-        {
-            //fixme - use grobuf
-            return false;
-        }
-
-        public static void LoadStateXml(string filename, SehensControl scope)
-        {
-            //fixme - load xml other than samples
         }
 
         ////////////////////////////////////////////

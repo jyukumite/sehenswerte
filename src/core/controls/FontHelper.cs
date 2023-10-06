@@ -23,6 +23,7 @@ namespace SehensWerte.Controls
             }
         }
         public Pen Pen => new Pen(Color);
+
         public Brush Brush => new SolidBrush(Color);
 
         public float EmSize
