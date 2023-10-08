@@ -5,7 +5,10 @@
     <Nullable>enable</Nullable>
     <UseWindowsForms>true</UseWindowsForms>
     <ImplicitUsings>enable</ImplicitUsings>
-  </PropertyGroup>
+    <PlatformTarget>x64</PlatformTarget>
+    <!-- otherwise the whole .Net Framework will be included in your bin folder -->
+    <SelfContained Condition="'$(SelfContained)' == ''">false</SelfContained>
+</PropertyGroup>
 
   <ItemGroup>
     <PackageReference Include="GroBuf" Version="1.9.2" />
