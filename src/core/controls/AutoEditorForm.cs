@@ -82,6 +82,8 @@ namespace SehensWerte.Controls
 
             this.MoveOnScreen();
             ShowDialog();
+            Panel.RemoveDelegates();
+
             return ResultButton == DialogResult.OK;
         }
 

@@ -135,13 +135,6 @@ namespace SehensWerte.Controls
         {
             if (Controls == null || SourceData == null) return;
 
-            if (SourceData is AutoEditorBase)
-            {
-                AutoEditorBase obj = (AutoEditorBase)SourceData;
-                obj.UpdateControls = (Action)Delegate.Combine(obj.UpdateControls, (Action)delegate
-                {
-                });
-            }
             foreach (Control item in Controls)
             {
                 if (item is Button)
@@ -197,7 +190,17 @@ namespace SehensWerte.Controls
             if (SourceData != null && SourceData is AutoEditorBase)
             {
                 AutoEditorBase obj = (AutoEditorBase)SourceData;
-                obj.UpdateControls = (Action)Delegate.Combine(obj.UpdateControls, new Action(UpdateControls));
+                obj.UpdateControls -= UpdateControls;
+                obj.UpdateControls += UpdateControls;
+            }
+        }
+
+        internal void RemoveDelegates()
+        {
+            if (SourceData != null && SourceData is AutoEditorBase)
+            {
+                AutoEditorBase obj = (AutoEditorBase)SourceData;
+                obj.UpdateControls -= UpdateControls;
             }
         }
 
@@ -205,7 +208,6 @@ namespace SehensWerte.Controls
         {
             if (SourceData != null && Controls != null && !m_Updating && m_UpdateRecursion == 0)
             {
-
                 m_Updating = true;
                 if (SourceData is AutoEditorBase)
                 {

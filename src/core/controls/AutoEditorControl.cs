@@ -10,13 +10,17 @@ namespace SehensWerte.Controls
         private Dictionary<string, object> m_StartValues = new Dictionary<string, object>();
         internal TableLayoutPanel? LayoutPanel;
 
-
         public AutoEditorControl()
         {
             SuspendLayout();
             base.Name = "AutoEditorControl";
             ResumeLayout(performLayout: false);
             PerformLayout();
+        }
+
+        internal void RemoveDelegates()
+        {
+            m_Editor?.RemoveDelegates();
         }
 
         internal void Revert()
@@ -151,7 +155,16 @@ namespace SehensWerte.Controls
                     items.AddRange(items2 ?? new object[0]);
                     comboBox.Enabled = AutoEditor.IsEnabled(member);
                 }
-                else if (type == typeof(byte) || type == typeof(int) || type == typeof(long) || type == typeof(ulong) || type == typeof(uint) || type == typeof(string) || type == typeof(float) || type == typeof(double))
+                else if (type == typeof(byte) 
+                    || type == typeof(int) 
+                    || type == typeof(long) 
+                    || type == typeof(ulong) 
+                    || type == typeof(uint) 
+                    || type == typeof(short) 
+                    || type == typeof(ushort) 
+                    || type == typeof(string) 
+                    || type == typeof(float) 
+                    || type == typeof(double))
                 {
                     TextBox textBox = new TextBox
                     {
@@ -248,6 +261,5 @@ namespace SehensWerte.Controls
                 tableLayout.Controls.Add(errorControl, 1, tableLayout.RowCount);
             }
         }
-
     }
 }

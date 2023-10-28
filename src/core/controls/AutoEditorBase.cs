@@ -6,7 +6,7 @@ namespace SehensWerte.Controls
     {
         [AutoEditor.Hidden]
         [XmlIgnore]
-        public Action? UpdateControls;
+        public Action? UpdateControls; // uses BeginInvoke if required
 
         [AutoEditor.Hidden]
         [XmlIgnore]
