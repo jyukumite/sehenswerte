@@ -9,8 +9,8 @@ namespace SehensWerte.Controls
 {
     public class DataGridViewControl : UserControl
     {
-        public DataGridViewCellEventHandler CellDoubleClick = (s, e) => { };
-        public DataGridViewCellContextMenuStripNeededEventHandler CellContextMenuStripNeeded = (s, e) => { };
+        public event DataGridViewCellEventHandler CellDoubleClick = (s, e) => { };
+        public event DataGridViewCellContextMenuStripNeededEventHandler CellContextMenuStripNeeded = (s, e) => { };
         public DataGridViewDoubleBuffered Grid;
         private StatusStrip StatusStrip;
         private ToolStripStatusLabel StatusFilterText;
