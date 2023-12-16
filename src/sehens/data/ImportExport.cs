@@ -442,40 +442,38 @@ namespace SehensWerte.Controls.Sehens
             string error = "";
             foreach (TraceView traceView in views)
             {
-                if (traceView.ZoomValue != 1.0 || (!traceView.IsRebasedResult && traceView.Samples.InputSampleCount != 0 && traceView.DrawnSamples != null && traceView.DrawnSamples!.Length != traceView.Samples.InputSampleCount))
+                try
                 {
-                    error = "Different lengths";
-                }
-                if (traceView.PaintMode == TraceView.PaintModes.PeakHold)
-                {
-                    double[]? min = drawnSamples ? traceView.PeakHoldMinDrawn : traceView.PeakHoldMinAll;
-                    if (min != null)
+                    if (traceView.PaintMode == TraceView.PaintModes.PeakHold)
                     {
-                        waveforms.Extracted.Add(min);
-                        waveforms.Names.Add("\"" + traceView.ViewName + ".Min\"");
-                        waveforms.SamplesPerSeconds.Add(traceView.Samples.InputSamplesPerSecond);
-                        waveforms.SampleOffsets.Add(traceView.Samples.InputSampleNumberDisplayOffset + (drawnSamples ? traceView.DrawnStartPosition : 0));
+                        double[]? min = drawnSamples ? traceView.PeakHoldMinDrawn : traceView.PeakHoldMinAll;
+                        add(min, "\"" + traceView.ViewName + ".Min\"");
+
+                        double[]? max = drawnSamples ? traceView.PeakHoldMaxDrawn : traceView.PeakHoldMaxAll;
+                        add(max, "\"" + traceView.ViewName + ".Max\"");
+                    }
+                    else
+                    {
+                        double[]? item = drawnSamples ? traceView.DrawnSamples : traceView.CalculatedBeforeZoom;
+                        add(item, "\"" + traceView.ViewName + "\"");
                     }
 
-                    double[]? max = drawnSamples ? traceView.PeakHoldMaxDrawn : traceView.PeakHoldMaxAll;
-                    if (max != null)
+                    void add(double[]? data, string traceName)
                     {
-                        waveforms.Extracted.Add(max);
-                        waveforms.Names.Add("\"" + traceView.ViewName + ".Max\"");
-                        waveforms.SamplesPerSeconds.Add(traceView.Samples.InputSamplesPerSecond);
-                        waveforms.SampleOffsets.Add(traceView.Samples.InputSampleNumberDisplayOffset + (drawnSamples ? traceView.DrawnStartPosition : 0));
+                        if (data != null)
+                        {
+                            waveforms.Extracted.Add(data);
+                            waveforms.Names.Add(traceName);
+                            waveforms.SamplesPerSeconds.Add(traceView.Samples.InputSamplesPerSecond);
+                            waveforms.SampleOffsets.Add(traceView.Samples.InputSampleNumberDisplayOffset + (drawnSamples ? traceView.DrawnStartPosition : 0));
+                        }
                     }
                 }
-                else
+                catch (Exception ex)
                 {
-                    double[]? item = drawnSamples ? traceView.DrawnSamples : traceView.CalculatedBeforeZoom;
-                    if (item != null)
-                    {
-                        waveforms.Extracted.Add(item);
-                        waveforms.Names.Add("\"" + traceView.ViewName + "\"");
-                        waveforms.SamplesPerSeconds.Add(traceView.Samples.InputSamplesPerSecond);
-                        waveforms.SampleOffsets.Add(traceView.Samples.InputSampleNumberDisplayOffset + (drawnSamples ? traceView.DrawnStartPosition : 0));
-                    }
+                    error = error + ex.ToString() + @"
+";
+
                 }
             }
 
