@@ -888,7 +888,12 @@ namespace SehensWerte.Controls
 
         public void MatchUnixTimes(IEnumerable<string> views)
         {
-            MatchUnixTimes(views.Select(x => TryGetView(Name)).Where(x => x != null).Select(x => x!).ToList());
+            MatchUnixTimes(
+                views
+                .Select(name => TryGetView(name))
+                .Where(view => view != null)
+                .Select(view => view!)
+                .ToList());
         }
 
         public class TraceViewComparer : IComparer<List<TraceView>>

@@ -879,10 +879,10 @@ namespace SehensWerte.Controls.Sehens
                 Right = right;
             }
 
-            public void Expand(TimeRange traceTime)
+            public void Expand(TimeRange to)
             {
-                if (Left < traceTime.Left) Left = traceTime.Left;
-                if (Right > traceTime.Right) Right = traceTime.Right;
+                if (to.Left < Left) Left = to.Left;
+                if (to.Right > Right) Right = to.Right;
             }
 
             public override bool Equals(object? obj)

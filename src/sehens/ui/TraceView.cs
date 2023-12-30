@@ -578,7 +578,6 @@ namespace SehensWerte.Controls.Sehens
         internal static TraceData.TimeRange GetGroupUnixTimeRange(IEnumerable<TraceView> group)
         {
             TraceData.TimeRange range = new TraceData.TimeRange(0.0, 0.0);
-            bool overrideYt = group.Any(item => { lock (item.Samples.DataLock) { return item.CanShowRealYT && item.OverrideSamplesUnixTime; } });
 
             bool first = true;
             void expand(TraceData.TimeRange traceTime)
@@ -600,7 +599,7 @@ namespace SehensWerte.Controls.Sehens
                 {
                     if (item.CanShowRealYT)
                     {
-                        TraceData.TimeRange traceTime = overrideYt ? item.m_UnixTimeRange : item.Samples.UnixTimeRange;
+                        TraceData.TimeRange traceTime = item.OverrideSamplesUnixTime ? item.m_UnixTimeRange : item.Samples.UnixTimeRange;
                         expand(traceTime);
                     }
                     if (item.CanShowFakeYT)
