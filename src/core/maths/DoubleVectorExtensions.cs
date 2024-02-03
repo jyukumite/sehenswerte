@@ -654,6 +654,16 @@ namespace SehensWerte.Maths
             return sum;
         }
 
+        public static double Product(this double[] lhs)
+        {
+            double sum = lhs.Count() == 0 ? 0 : 1.0;
+            foreach (var num in lhs)
+            {
+                sum *= num;
+            }
+            return sum;
+        }
+
         public static double SumSquares(this double[] lhs)
         {
             double sum = 0.0;
@@ -860,6 +870,10 @@ namespace SehensWerte.Maths
             Assert.IsTrue(Math.Abs(new double[] { 5, 3, 1, 5 }.Rms() - 3.873) < 0.001);
             Assert.IsTrue(Math.Abs(new double[] { 5, 3, 1, 5 }.Stdev() - 1.658) < 0.001);
             Assert.IsTrue(new double[] { 5, 3, 1, 5 }.Sum() == 14);
+            Assert.IsTrue(new double[] { 5, 3, 1, 5 }.Product() == 5 * 3 * 1 * 5);
+            Assert.IsTrue(new double[] { 5 }.Product() == 5);
+            Assert.IsTrue(new double[] { }.Product() == 0);
+
             Assert.IsTrue(new double[] { 5, 3, 1, 5 }.SumSquares() == 25 + 9 + 1 + 25);
             Assert.IsTrue(Math.Abs(new double[] { 0.129, 0.387, -0.645, 0.645 }.Magnitude() - 1) < 0.01);
             Assert.IsTrue(Math.Abs(new double[] { 5, 3, 1, 5 }.Variance() - 2.75) < 0.001);

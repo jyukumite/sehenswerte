@@ -4,6 +4,7 @@ using SehensWerte.Generators;
 using SehensWerte.Maths;
 using SehensWerte.Utils;
 using System.Media;
+using System.Security.Policy;
 
 namespace SehensWerte.Controls.Sehens
 {
@@ -1552,128 +1553,79 @@ namespace SehensWerte.Controls.Sehens
 
         private static void AddMathSubMenu(List<ScopeContextMenu.MenuItem> contextMenu)
         {
-            void AddCalculatedView(ScopeContextMenu.DropDownArgs a, TraceView.CalculatedTypes type, TraceView.CalculatedTraceData? prompt = null)
+            foreach (var math in Enum.GetValues<TraceView.CalculatedTypes>())
+            {
+
+                var menuItem = math switch
+                {
+                    TraceView.CalculatedTypes.None => null,
+
+                    TraceView.CalculatedTypes.Differentiate => Create("Differentiate", math, ScopeContextMenu.MenuItem.ShowWhen.OnePlusSelected, ScopeContextMenu.MenuItem.CallWhen.PerTrace),
+                    TraceView.CalculatedTypes.Integrate => Create("Integrate", math, ScopeContextMenu.MenuItem.ShowWhen.OnePlusSelected, ScopeContextMenu.MenuItem.CallWhen.PerTrace),
+                    TraceView.CalculatedTypes.ProjectYTtoY => Create("ProjectYTtoY", math, ScopeContextMenu.MenuItem.ShowWhen.OnePlusSelected, ScopeContextMenu.MenuItem.CallWhen.PerTrace),
+                    TraceView.CalculatedTypes.Normalised => Create("Normalised", math, ScopeContextMenu.MenuItem.ShowWhen.OnePlusSelected, ScopeContextMenu.MenuItem.CallWhen.PerTrace),
+                    TraceView.CalculatedTypes.Abs => Create("Abs", math, ScopeContextMenu.MenuItem.ShowWhen.OnePlusSelected, ScopeContextMenu.MenuItem.CallWhen.PerTrace),
+
+                    TraceView.CalculatedTypes.SubtractOffset => Create("SubtractOffset", math, ScopeContextMenu.MenuItem.ShowWhen.OnePlusSelected, ScopeContextMenu.MenuItem.CallWhen.PerTrace, new TraceView.CalculatedTraceDataOneDouble()),
+                    TraceView.CalculatedTypes.ProductSimple => Create("ProductSimple", math, ScopeContextMenu.MenuItem.ShowWhen.OnePlusSelected, ScopeContextMenu.MenuItem.CallWhen.PerTrace, new TraceView.CalculatedTraceDataOneDouble()),
+                    TraceView.CalculatedTypes.Rescale => Create("Rescale", math, ScopeContextMenu.MenuItem.ShowWhen.OnePlusSelected, ScopeContextMenu.MenuItem.CallWhen.PerTrace, new TraceView.CalculatedTraceDataMinMax()),
+                    TraceView.CalculatedTypes.Quantize => Create("Quantize", math, ScopeContextMenu.MenuItem.ShowWhen.OnePlusSelected, ScopeContextMenu.MenuItem.CallWhen.PerTrace, new TraceView.CalculatedTraceDataQuantise()),
+                    TraceView.CalculatedTypes.RollingRMS => Create("RollingRMS", math, ScopeContextMenu.MenuItem.ShowWhen.OnePlusSelected, ScopeContextMenu.MenuItem.CallWhen.PerTrace, new TraceView.CalculatedTraceDataWindow()),
+                    TraceView.CalculatedTypes.RollingMean => Create("RollingMean", math, ScopeContextMenu.MenuItem.ShowWhen.OnePlusSelected, ScopeContextMenu.MenuItem.CallWhen.PerTrace, new TraceView.CalculatedTraceDataWindow()),
+                    TraceView.CalculatedTypes.Resample => Create("Resample", math, ScopeContextMenu.MenuItem.ShowWhen.OnePlusSelected, ScopeContextMenu.MenuItem.CallWhen.PerTrace, new TraceView.CalculatedTraceDataCount()),
+
+                    TraceView.CalculatedTypes.Atan2 => Create("Atan2", math, ScopeContextMenu.MenuItem.ShowWhen.TwoSelected, ScopeContextMenu.MenuItem.CallWhen.Once),
+                    TraceView.CalculatedTypes.RescaledError => Create("RescaledError", math, ScopeContextMenu.MenuItem.ShowWhen.TwoSelected, ScopeContextMenu.MenuItem.CallWhen.Once),
+                    TraceView.CalculatedTypes.NormalisedError => Create("NormalisedError", math, ScopeContextMenu.MenuItem.ShowWhen.TwoSelected, ScopeContextMenu.MenuItem.CallWhen.Once),
+                    TraceView.CalculatedTypes.FIR => Create("FIR", math, ScopeContextMenu.MenuItem.ShowWhen.TwoSelected, ScopeContextMenu.MenuItem.CallWhen.Once),
+                    TraceView.CalculatedTypes.Subtract => Create("Subtract", math, ScopeContextMenu.MenuItem.ShowWhen.TwoSelected, ScopeContextMenu.MenuItem.CallWhen.Once),
+                    TraceView.CalculatedTypes.Difference => Create("Difference", math, ScopeContextMenu.MenuItem.ShowWhen.TwoSelected, ScopeContextMenu.MenuItem.CallWhen.Once),
+
+                    TraceView.CalculatedTypes.Sum => Create("Sum", math, ScopeContextMenu.MenuItem.ShowWhen.TwoPlusSelected, ScopeContextMenu.MenuItem.CallWhen.Once),
+                    TraceView.CalculatedTypes.Magnitude => Create("Magnitude", math, ScopeContextMenu.MenuItem.ShowWhen.TwoPlusSelected, ScopeContextMenu.MenuItem.CallWhen.Once),
+                    TraceView.CalculatedTypes.Product => Create("Product", math, ScopeContextMenu.MenuItem.ShowWhen.TwoPlusSelected, ScopeContextMenu.MenuItem.CallWhen.Once),
+                    TraceView.CalculatedTypes.Mean => Create("Mean", math, ScopeContextMenu.MenuItem.ShowWhen.TwoPlusSelected, ScopeContextMenu.MenuItem.CallWhen.Once),
+
+                    TraceView.CalculatedTypes.PythonScript => null,
+                };
+                if (menuItem != null)
+                {
+                    contextMenu.Add(menuItem);
+                }
+            }
+
+            ScopeContextMenu.MenuItem Create(string text, TraceView.CalculatedTypes type, ScopeContextMenu.MenuItem.ShowWhen when, ScopeContextMenu.MenuItem.CallWhen call, TraceView.CalculatedTraceData? prompt = null)
+            {
+                return new ScopeContextMenu.MenuItem
+                {
+                    SubMenuText = "Math",
+                    Text = text,
+                    ShownWhenTrace = when,
+                    ShownWhenMouse = PaintBoxMouseInfo.GuiSection.TraceArea,
+                    Call = call,
+                    ShownText = ScopeContextMenu.MenuItem.TextDisplay.NoChange,
+                    Clicked = (a) => Click(type, prompt, a)
+                };
+            }
+
+            static void Click(TraceView.CalculatedTypes type, TraceView.CalculatedTraceData? prompt, ScopeContextMenu.DropDownArgs a)
             {
                 bool create = true;
                 if (prompt != null)
                 {
-                    using AutoEditorForm autoEditorForm4 = new AutoEditorForm();
-                    create = autoEditorForm4.ShowDialog("Information", "Calculated view", prompt);
+                    using AutoEditorForm form = new AutoEditorForm();
+                    create = form.ShowDialog("Information", "Calculated view", prompt);
                 }
                 if (create)
                 {
                     string viewName = type.ToString() + "(" + string.Join(",", a.Views.Select(x => x.Samples.Name)) + ")";
                     TraceView view = a.Scope.EnsureView(viewName);
-                    view.CalculatedParameter = prompt;
+                    view.CalculatedParameter = prompt ?? new TraceView.CalculatedTraceData();
                     view.Samples.InputSamplesPerSecond = a.Views[0].Samples.InputSamplesPerSecond;
                     view.CalculatedSourceViews = a.Views.ToList();
                     view.CalculateType = type;
                 }
             }
-
-            foreach (var math in new[] {
-                    TraceView.CalculatedTypes.Sum,
-                    TraceView.CalculatedTypes.Magnitude,
-                    TraceView.CalculatedTypes.Atan2,
-                    TraceView.CalculatedTypes.Subtract,
-                    TraceView.CalculatedTypes.Normalised,
-                    TraceView.CalculatedTypes.Differentiate,
-                    TraceView.CalculatedTypes.Integrate,
-                    TraceView.CalculatedTypes.ProjectYTtoY,
-                    TraceView.CalculatedTypes.RescaledError,
-                    TraceView.CalculatedTypes.NormalisedError,
-                    TraceView.CalculatedTypes.Product,
-                    TraceView.CalculatedTypes.FIR,
-                })
-            {
-                contextMenu.Add(new ScopeContextMenu.MenuItem
-                {
-                    SubMenuText = "Math",
-                    Text = math.ToString(),
-                    ShownWhenTrace = ScopeContextMenu.MenuItem.ShowWhen.TwoPlusSelected,
-                    ShownWhenMouse = PaintBoxMouseInfo.GuiSection.TraceArea,
-                    Call = ScopeContextMenu.MenuItem.CallWhen.Once,
-                    ShownText = ScopeContextMenu.MenuItem.TextDisplay.NoChange,
-                    Clicked = (a) => AddCalculatedView(a, math),
-                });
-            }
-
-            contextMenu.Add(new ScopeContextMenu.MenuItem
-            {
-                SubMenuText = "Math",
-                Text = "Subtract offset",
-                ShownWhenTrace = ScopeContextMenu.MenuItem.ShowWhen.OneSelected,
-                ShownWhenMouse = PaintBoxMouseInfo.GuiSection.TraceArea,
-                Call = ScopeContextMenu.MenuItem.CallWhen.Once,
-                ShownText = ScopeContextMenu.MenuItem.TextDisplay.NoChange,
-                Clicked = (a) => AddCalculatedView(a, TraceView.CalculatedTypes.SubtractOffset, new TraceView.CalculatedTraceDataOneDouble()),
-            });
-
-            contextMenu.Add(new ScopeContextMenu.MenuItem
-            {
-                SubMenuText = "Math",
-                Text = "Product",
-                ShownWhenTrace = ScopeContextMenu.MenuItem.ShowWhen.OneSelected,
-                ShownWhenMouse = PaintBoxMouseInfo.GuiSection.TraceArea,
-                Call = ScopeContextMenu.MenuItem.CallWhen.Once,
-                ShownText = ScopeContextMenu.MenuItem.TextDisplay.NoChange,
-                Clicked = (a) => AddCalculatedView(a, TraceView.CalculatedTypes.ProductSimple, new TraceView.CalculatedTraceDataOneDouble()),
-            });
-
-            contextMenu.Add(new ScopeContextMenu.MenuItem
-            {
-                SubMenuText = "Math",
-                Text = "Rescale",
-                ShownWhenTrace = ScopeContextMenu.MenuItem.ShowWhen.OnePlusSelected,
-                ShownWhenMouse = PaintBoxMouseInfo.GuiSection.TraceArea,
-                Call = ScopeContextMenu.MenuItem.CallWhen.PerTrace,
-                ShownText = ScopeContextMenu.MenuItem.TextDisplay.NoChange,
-                Clicked = (a) => AddCalculatedView(a, TraceView.CalculatedTypes.Rescale, new TraceView.CalculatedTraceDataMinMax()),
-            });
-
-            contextMenu.Add(new ScopeContextMenu.MenuItem
-            {
-                SubMenuText = "Math",
-                Text = "Quantize",
-                ShownWhenTrace = ScopeContextMenu.MenuItem.ShowWhen.OnePlusSelected,
-                ShownWhenMouse = PaintBoxMouseInfo.GuiSection.TraceArea,
-                Call = ScopeContextMenu.MenuItem.CallWhen.PerTrace,
-                ShownText = ScopeContextMenu.MenuItem.TextDisplay.NoChange,
-                Clicked = (a) => AddCalculatedView(a, TraceView.CalculatedTypes.Quantize, new TraceView.CalculatedTraceDataQuantise()),
-            });
-
-            contextMenu.Add(new ScopeContextMenu.MenuItem
-            {
-                SubMenuText = "Math",
-                Text = "Rolling RMS",
-                ShownWhenTrace = ScopeContextMenu.MenuItem.ShowWhen.OnePlusSelected,
-                ShownWhenMouse = PaintBoxMouseInfo.GuiSection.TraceArea,
-                Call = ScopeContextMenu.MenuItem.CallWhen.PerTrace,
-                ShownText = ScopeContextMenu.MenuItem.TextDisplay.NoChange,
-                Clicked = (a) => AddCalculatedView(a, TraceView.CalculatedTypes.RollingRMS, new TraceView.CalculatedTraceDataWindow()),
-            });
-
-            contextMenu.Add(new ScopeContextMenu.MenuItem
-            {
-                SubMenuText = "Math",
-                Text = "Rolling Mean",
-                ShownWhenTrace = ScopeContextMenu.MenuItem.ShowWhen.OnePlusSelected,
-                ShownWhenMouse = PaintBoxMouseInfo.GuiSection.TraceArea,
-                Call = ScopeContextMenu.MenuItem.CallWhen.PerTrace,
-                ShownText = ScopeContextMenu.MenuItem.TextDisplay.NoChange,
-                Clicked = (a) => AddCalculatedView(a, TraceView.CalculatedTypes.RollingMean, new TraceView.CalculatedTraceDataWindow()),
-            });
-
-            contextMenu.Add(new ScopeContextMenu.MenuItem
-            {
-                SubMenuText = "Math",
-                Text = "Resample",
-                ShownWhenTrace = ScopeContextMenu.MenuItem.ShowWhen.OnePlusSelected,
-                ShownWhenMouse = PaintBoxMouseInfo.GuiSection.TraceArea,
-                Call = ScopeContextMenu.MenuItem.CallWhen.Once,
-                ShownText = ScopeContextMenu.MenuItem.TextDisplay.NoChange,
-                Clicked = (a) => AddCalculatedView(a, TraceView.CalculatedTypes.Resample, new TraceView.CalculatedTraceDataCount()),
-            });
         }
 
         private static void AddTraceFilterSubMenu(List<ScopeContextMenu.MenuItem> contextMenu)

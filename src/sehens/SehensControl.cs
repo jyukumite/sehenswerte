@@ -1703,37 +1703,16 @@ namespace SehensWerte.Controls
                 .ForEach(menu =>
                 {
                     var list = PaintBoxMouse.CombinedSelectedTraces(PaintBox.PaintedTraces.VisibleTraceGroupList);
-                    switch (menu.Call)
-                    {
-                        case ScopeContextMenu.MenuItem.CallWhen.Once:
-                            ContextClick(menu: menu, traces: list);
-                            break;
-
-                        case ScopeContextMenu.MenuItem.CallWhen.PerTrace:
-                            list.ForEach(x => ContextClick(menu: menu, traces: new List<TraceView> { x }));
-                            break;
-
-                        case ScopeContextMenu.MenuItem.CallWhen.PerTraceGroup:
-                            PaintBox.PaintedTraces.VisibleTraceGroupList
-                                .Where(x => x.Count() > 0)
-                                .ForEach(x => ContextClick(menu: menu, traces: x));
-                            break;
-                    }
+                    ContextClick(menu: menu, traces: list);
                 });
         }
 
         internal void ContextMenuClick(ScopeContextMenu.MenuItem menu)
         {
             var list = PaintBoxMouse.CombinedSelectedTraces(PaintBox.PaintedTraces.VisibleTraceGroupList);
-            if (list.Count == 0 && menu.ShownWhenTrace == ScopeContextMenu.MenuItem.ShowWhen.Always)
-            {
-                ContextClick(menu: menu, traces: list);
-            }
-            else if (PaintBoxMouse.Click != null && list.Count > 0 && menu.Call == ScopeContextMenu.MenuItem.CallWhen.Once)
-            {
-                ContextClick(menu: menu, traces: list);
-            }
-            else if (PaintBoxMouse.Click != null)
+            if ((list.Count == 0 && menu.ShownWhenTrace == ScopeContextMenu.MenuItem.ShowWhen.Always)
+                || (PaintBoxMouse.Click != null && list.Count > 0 && menu.Call == ScopeContextMenu.MenuItem.CallWhen.Once)
+                || PaintBoxMouse.Click != null)
             {
                 ContextClick(menu: menu, traces: list);
             }
@@ -1741,22 +1720,52 @@ namespace SehensWerte.Controls
 
         private void ContextClick(ScopeContextMenu.MenuItem menu, List<TraceView> traces)
         {
-            ScopeContextMenu.DropDownArgs a = new ScopeContextMenu.DropDownArgs()
+            switch (menu.Call)
             {
-                Scope = this,
-                Menu = menu,
-                Views = traces,
-                Mouse = PaintBoxMouse,
-            };
+                case ScopeContextMenu.MenuItem.CallWhen.Once:
+                    click(new ScopeContextMenu.DropDownArgs()
+                    {
+                        Scope = this,
+                        Menu = menu,
+                        Views = traces,
+                        Mouse = PaintBoxMouse,
+                    });
+                    break;
 
-            try
-            {
-                menu.Clicked?.Invoke(a);
+                case ScopeContextMenu.MenuItem.CallWhen.PerTrace:
+                    traces.ForEach(view =>
+                        click(new ScopeContextMenu.DropDownArgs()
+                        {
+                            Scope = this,
+                            Menu = menu,
+                            Views = new List<TraceView> { view },
+                            Mouse = PaintBoxMouse,
+                        }));
+                    break;
+
+                case ScopeContextMenu.MenuItem.CallWhen.PerTraceGroup:
+                    traces.GroupBy(s => s.Group).ForEach(group =>
+                        click(new ScopeContextMenu.DropDownArgs()
+                        {
+                            Scope = this,
+                            Menu = menu,
+                            Views = group.ToList(),
+                            Mouse = PaintBoxMouse,
+                        }));
+                    break;
             }
-            catch (Exception e)
+
+            void click(ScopeContextMenu.DropDownArgs a)
             {
-                OnLog?.Invoke(new CsvLog.Entry(e.ToString(), CsvLog.Priority.Exception));
-                MessageBox.Show(e.Message);
+                try
+                {
+                    menu.Clicked?.Invoke(a);
+                }
+                catch (Exception e)
+                {
+                    OnLog?.Invoke(new CsvLog.Entry(e.ToString(), CsvLog.Priority.Exception));
+                    MessageBox.Show(e.Message);
+                }
             }
         }
 

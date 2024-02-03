@@ -1,6 +1,7 @@
 ﻿using SehensWerte.Files;
 using SehensWerte.Filters;
 using SehensWerte.Maths;
+using System;
 using System.Text;
 using System.Xml.Serialization;
 
@@ -813,6 +814,7 @@ namespace SehensWerte.Controls.Sehens
             Abs,
             Sum,
             Subtract,
+            Mean
         }
 
         public class CalculatedTraceData // XML Serialised
@@ -1885,13 +1887,19 @@ value=" + string.Format(VerticalUnitFormat, Clicks[0].SampleAtX.ToStringRound(5,
             //fixme: recursive invalidate with YT traces
 
             double[][] sourceTraces = CalculatedSourceViews.Select(x => (x.CanShowRealYT ? x.Samples.ViewedSamplesInterpolatedAsDouble : x.CalculatedBeforeZoom) ?? new double[0]).ToArray();
-            int sampleCount = sourceTraces.Min(x => x.Length);
+            int minLength = sourceTraces.Min(x => x.Length);
+            int maxLength = sourceTraces.Max(x => x.Length);
             int traceCount = sourceTraces.Length;
 
             void exact(int count) { if (traceCount != count) throw new Exception($"Type {CalculateType} expects {count} traces"); }
             void minimum(int count) { if (traceCount < count) throw new Exception($"Type {CalculateType} expects {count} or more traces"); }
 
             double[] result = new double[0];
+
+            var transposedMax = Enumerable.Range(0, maxLength).Select(index => sourceTraces.Where(arr => index < arr.Length).Select(arr => arr[index]));
+            var transposedMin = Enumerable.Range(0, minLength).Select(index => sourceTraces.Select(arr => arr[index]));
+
+            //todo: check performance - linq might be too painful
 
             switch (CalculateType)
             {
@@ -1900,26 +1908,22 @@ value=" + string.Format(VerticalUnitFormat, Clicks[0].SampleAtX.ToStringRound(5,
 
                 case CalculatedTypes.Magnitude:
                     minimum(2);
-                    result = new double[sampleCount];
-                    for (int loop = 0; loop < sampleCount; loop++)
-                    {
-                        double sum = 0;
-                        for (int x = 0; x < traceCount; loop++)
-                        {
-                            sum += sourceTraces[x][loop] * sourceTraces[x][loop];
-                        }
-                        result[loop] = Math.Sqrt(sum);
-                    }
-                    return result;
+                    result = transposedMax.Select(x => x.ToArray().Aggregate(0.0, (prod, arr) => prod + arr * arr)).ToArray().Sqrt();
+                    break;
 
                 case CalculatedTypes.Atan2:
                     exact(2);
-                    result = sourceTraces[0].Zip(sourceTraces[1]).Select(x => Math.Atan2(x.First, x.Second)).ToArray();
+                    result = transposedMin.Select(x => x.ToArray()).Select(x => Math.Atan2(x[0], x[1])).ToArray();
                     break;
 
                 case CalculatedTypes.Difference:
                     exact(2);
-                    result = sourceTraces[0].Zip(sourceTraces[1]).Select(x => x.First - x.Second).ToArray();
+                    result = transposedMin.Select(x => x.ToArray()).Select(x => Math.Abs(x[0] - x[1])).ToArray();
+                    break;
+
+                case CalculatedTypes.Subtract:
+                    exact(2);
+                    result = transposedMin.Select(x => x.ToArray()).Select(x => x[0] - x[1]).ToArray();
                     break;
 
                 case CalculatedTypes.Abs:
@@ -1929,12 +1933,7 @@ value=" + string.Format(VerticalUnitFormat, Clicks[0].SampleAtX.ToStringRound(5,
 
                 case CalculatedTypes.Sum:
                     minimum(2);
-                    result = sourceTraces[0].Zip(sourceTraces[1]).Select(x => x.First + x.Second).ToArray();
-                    break;
-
-                case CalculatedTypes.Subtract:
-                    minimum(2);
-                    result = sourceTraces[0].Zip(sourceTraces[1]).Select(x => x.First - x.Second).ToArray();
+                    result = transposedMax.Select(x => x.Sum()).ToArray();
                     break;
 
                 case CalculatedTypes.SubtractOffset:
@@ -1943,9 +1942,14 @@ value=" + string.Format(VerticalUnitFormat, Clicks[0].SampleAtX.ToStringRound(5,
                     result = sourceTraces[0].Select(x => x - simpleOffset).ToArray();
                     break;
 
+                case CalculatedTypes.Mean:
+                    minimum(2);
+                    result = transposedMax.Select(x => x.ToArray()).Select(x => x.Sum() / x.Count()).ToArray();
+                    break;
+
                 case CalculatedTypes.Product:
                     minimum(2);
-                    result = sourceTraces[0].Zip(sourceTraces[1]).Select(x => x.First * x.Second).ToArray();
+                    result = transposedMax.Select(x => x.ToArray().Product()).ToArray();
                     break;
 
                 case CalculatedTypes.ProductSimple:
@@ -1966,8 +1970,8 @@ value=" + string.Format(VerticalUnitFormat, Clicks[0].SampleAtX.ToStringRound(5,
                     break;
 
                 case CalculatedTypes.Normalised:
-                    result = sourceTraces[0].Normalised();
                     exact(1);
+                    result = sourceTraces[0].Normalised();
                     break;
 
                 case CalculatedTypes.Differentiate:
@@ -2005,21 +2009,18 @@ value=" + string.Format(VerticalUnitFormat, Clicks[0].SampleAtX.ToStringRound(5,
 
                 case CalculatedTypes.RescaledError:
                     exact(2);
-                    // rescale(a,0,1) - rescale(b,0,1)
+                    result = sourceTraces[0].Rescale(0, 1).Copy(0, minLength).Subtract(sourceTraces[1].Rescale(0, 1).Copy(0, minLength));
                     break;
 
                 case CalculatedTypes.NormalisedError:
                     exact(2);
-                    // a/rms(a)-b/rms(b)
+                    result = sourceTraces[0].Normalised().Copy(0, minLength).Subtract(sourceTraces[1].Normalised().Copy(0, minLength));
                     break;
 
                 case CalculatedTypes.Resample:
                     exact(1);
-                    int resampleCount = ((TraceView.CalculatedTraceDataCount)CalculatedParameter).Count;
-                    result = sourceTraces[0].Resample(resampleCount);
+                    result = sourceTraces[0].Resample(((TraceView.CalculatedTraceDataCount)CalculatedParameter).Count);
                     break;
-
-
             }
             return result;
         }
