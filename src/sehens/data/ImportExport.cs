@@ -1,4 +1,5 @@
 using SehensWerte.Files;
+using SehensWerte.Maths;
 using SehensWerte.Utils;
 using System.ComponentModel;
 using System.Drawing.Imaging;
@@ -147,6 +148,9 @@ namespace SehensWerte.Controls.Sehens
 
             [AutoEditor.DisplayName("Scope")]
             virtual public Scope ExportScope { get; set; }
+
+            //[AutoEditor.DisplayName("Resample to same timebase")]
+            //virtual public bool Resample { get; set; }
         }
 
         private class ExportImageForm : ExportDataFormBase
@@ -415,7 +419,7 @@ namespace SehensWerte.Controls.Sehens
             bool drawnSamples;
 
             TraceView[] views;
-            switch (edit?.ExportScope ?? ExportDataForm.Scope.SelectedDisplayedSamples)
+            switch (edit.ExportScope)
             {
                 case ExportDataForm.Scope.SelectedDisplayedSamples:
                     views = ((a.Views.Count == 0) ? a.Scope.VisibleViews : a.Views.ToArray());
@@ -444,7 +448,25 @@ namespace SehensWerte.Controls.Sehens
             {
                 try
                 {
-                    if (traceView.PaintMode == TraceView.PaintModes.PeakHold)
+                    //if (edit.Resample && !traceView.HoldPanZoom)
+                    //{
+                    //    all samples (!drawnSamples) - use lefttime/righttime
+                    //    not YT and no samplerate? drop
+                    //    no lefttime/righttime? 
+                    //    expand unixtime to largest extents
+                    //}
+                    //else
+                    if (traceView.Samples.ViewedIsYTTrace)
+                    {
+                        var info = a.Scope.PaintBox.TraceToGroupDisplayInfo(traceView);
+                        var snapshot = drawnSamples
+                            ? traceView.Samples.SnapshotYTProjection(info.LeftUnixTime, info.RightUnixTime)
+                            : traceView.Samples.SnapshotYTProjection(traceView.Samples.UnixTimeRange.Left, traceView.Samples.UnixTimeRange.Right);
+
+                        add((double[]?)snapshot.time.Copy(snapshot.leftIndex, snapshot.rightIndex - snapshot.leftIndex + 1), "\"" + traceView.ViewName + ".Time\"");
+                        add((double[]?)snapshot.samples.Copy(snapshot.leftIndex, snapshot.rightIndex - snapshot.leftIndex + 1), "\"" + traceView.ViewName + ".Value\"");
+                    }
+                    else if (traceView.PaintMode == TraceView.PaintModes.PeakHold)
                     {
                         double[]? min = drawnSamples ? traceView.PeakHoldMinDrawn : traceView.PeakHoldMinAll;
                         add(min, "\"" + traceView.ViewName + ".Min\"");
