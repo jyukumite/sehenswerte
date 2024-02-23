@@ -38,10 +38,12 @@ namespace SehensWerte.Controls.Sehens
             public int Compare(TraceFeature? left, TraceFeature? right)
             {
                 double byTime = (left?.UnixTime ?? 0) - (right?.UnixTime ?? 0);
-                int bySample = (left?.SampleNumber ?? 0) - (right?.SampleNumber ?? 0);
-                int byText = (left?.Type ?? Feature.Text) - (right?.Type ?? Feature.Text);
                 if (byTime != 0) return byTime < 0 ? -1 : 1;
+
+                int bySample = (left?.SampleNumber ?? 0) - (right?.SampleNumber ?? 0);
                 if (bySample != 0) return bySample;
+
+                int byText = (left?.Type ?? Feature.Text) - (right?.Type ?? Feature.Text);
                 return byText;
             }
         }

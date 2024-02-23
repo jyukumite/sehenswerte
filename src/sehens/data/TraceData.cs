@@ -728,10 +728,10 @@ namespace SehensWerte.Controls.Sehens
                 return Interpolate(UnixTime, samples);
             }
 
-            public double CalculateSamplesPerSecond()
+            internal void CalculateSamplesPerSecond()
             {
-                if (SamplesPerSecond != 0) return SamplesPerSecond;
-                if (UnixTime == null) return 0;
+                if (SamplesPerSecond != 0) return;
+                if (UnixTime == null) return;
 
                 int length = UnixTime.Length;
                 double delta = 1.0;
@@ -743,7 +743,7 @@ namespace SehensWerte.Controls.Sehens
                         delta = loop == 1 ? diff : Math.Min(delta, diff);
                     }
                 }
-                return SamplesPerSecond = delta == 0.0 ? 0.0 : (1.0 / delta);
+                SamplesPerSecond = delta == 0.0 ? 0.0 : (1.0 / delta);
             }
 
             private double[] Interpolate(double[] unixTime, double[] samples)

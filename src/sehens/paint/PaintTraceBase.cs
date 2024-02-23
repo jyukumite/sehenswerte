@@ -366,16 +366,16 @@ namespace SehensWerte.Controls.Sehens
                             {
                                 lastX = xLeft; // put the text where we want it
                             }
-                            else if (lastX > xLeft + info.Skin.FeatureTextFont.LineSpacing * 5)
+                            else// if (lastX > xLeft + info.Skin.FeatureTextFont.LineSpacing * 5)
                             {
                                 // too far right of where we want it, bunching up
                                 lastX += 2;
                                 //draw=false;
                             }
-                            else
-                            {
-                                xLeft = lastX = lastX + info.Skin.FeatureTextFont.LineSpacing;
-                            }
+                            //else
+                            //{ // fixme: This makes features confusing. Find another method
+                            //    xLeft = lastX = lastX + info.Skin.FeatureTextFont.LineSpacing;
+                            //}
                             if (draw)
                             {
                                 float y = (info.ProjectionArea.Top + info.ProjectionArea.Bottom) / 2;

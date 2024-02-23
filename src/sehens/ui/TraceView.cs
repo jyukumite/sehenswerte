@@ -1864,7 +1864,7 @@ value=" + string.Format(VerticalUnitFormat, Clicks[0].SampleAtX.ToStringRound(5,
                 array = new double[0];
             }
             else
-            {
+            {       
                 sampleCount = Math.Min(sampleCount, (int)(count * m_ZoomValue));
                 sampleCount = Math.Min(sampleCount, count);
                 sampleCount = Math.Max(1, sampleCount);
