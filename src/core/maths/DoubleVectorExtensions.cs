@@ -1,6 +1,8 @@
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using SehensWerte.Filters;
 
+//fixme? consider replacing some of the more complex functions with mat.net numerics https://numerics.mathdotnet.com/Matrix
+
 namespace SehensWerte.Maths
 {
     public static class DoubleVectorExtensions
