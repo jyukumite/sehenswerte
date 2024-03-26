@@ -2,7 +2,6 @@ using SehensWerte.Files;
 using System.Collections;
 using System.ComponentModel;
 using System.Data;
-using System.Linq;
 using System.Text.RegularExpressions;
 
 namespace SehensWerte.Controls
@@ -513,15 +512,16 @@ namespace SehensWerte.Controls
 
         public class BoundData : IBindingList
         {
+            private DataGridView DataGrid;
+
             public string CsvFileName { get; private set; }
             public List<BoundDataRow> UnfilteredData;
             public List<BoundDataRow> FilteredData;
-            private PropertyDescriptor? CurrentSortProperty;
-            private ListSortDirection CurrentSortDirection = ListSortDirection.Ascending;
             private Stack<List<BoundDataRow>> UndoList = new Stack<List<BoundDataRow>>();
             private List<BoundDataRow> IndexToRow = new List<BoundDataRow>();
             public List<String> ColumnNames;
             public event ListChangedEventHandler? ListChanged;
+
             bool IBindingList.AllowNew => false;
             bool IBindingList.AllowEdit => false;
             bool IBindingList.AllowRemove => false;
@@ -529,13 +529,20 @@ namespace SehensWerte.Controls
             bool IBindingList.SupportsSearching => false;
             bool IBindingList.SupportsSorting => true;
             bool IBindingList.IsSorted => false;
+
+            private PropertyDescriptor? CurrentSortProperty;
             PropertyDescriptor? IBindingList.SortProperty => CurrentSortProperty;
+
+            private int CurrentSortColIndex = -1;
+            private ListSortDirection CurrentSortDirection = ListSortDirection.Ascending;
             ListSortDirection IBindingList.SortDirection => CurrentSortDirection;
+
             bool IList.IsReadOnly => true;
             bool IList.IsFixedSize => true;
             int ICollection.Count => FilteredData?.Count ?? 0;
             object ICollection.SyncRoot { get { throw new NotImplementedException(); } }
             bool ICollection.IsSynchronized { get { throw new NotImplementedException(); } }
+
             void IList.Clear() { throw new NotImplementedException(); }
             bool IList.Contains(object? value) { throw new NotImplementedException(); }
             void ICollection.CopyTo(Array? array, int index) { throw new NotImplementedException(); }
@@ -593,6 +600,8 @@ namespace SehensWerte.Controls
 
             public void Setup(DataGridView dataGrid)
             {
+                DataGrid = dataGrid;
+
                 dataGrid.AutoGenerateColumns = false;
                 dataGrid.Columns.Clear();
                 UndoList = new Stack<List<BoundDataRow>>();
@@ -629,7 +638,7 @@ namespace SehensWerte.Controls
             private void Refilter()
             {
                 PushUndo();
-                FilteredData = UnfilteredData.Where(x => x.Visible).OrderBy(x=>x.ResortIndex).ToList();
+                FilteredData = UnfilteredData.Where(x => x.Visible).OrderBy(x => x.ResortIndex).ToList();
                 ReshowFiltered();
             }
 
@@ -667,7 +676,6 @@ namespace SehensWerte.Controls
                 var union = rows.Union(cells).Where(x => x != null).Select(y => (int)(y ?? 0));
                 return union.ToArray();
             }
-
 
             public string[] GetSelectedRowsOfColumn(string column, DataGridView dataGrid)
             {
@@ -797,18 +805,34 @@ namespace SehensWerte.Controls
                 set { throw new NotImplementedException(); }
             }
 
-            void IBindingList.ApplySort(PropertyDescriptor property, ListSortDirection direction)
+
+            void IBindingList.ApplySort(PropertyDescriptor property, ListSortDirection direction /*ignored*/)
             {
-                CurrentSortProperty = property;
-                CurrentSortDirection = direction;
                 var prevCursor = Cursor.Current;
                 try
                 {
+                    CurrentSortProperty = property;
+
                     int colIndex = int.Parse(property.Name.Replace("col", ""));
+                    if (CurrentSortColIndex == colIndex)
+                    {
+                        CurrentSortDirection = (CurrentSortDirection == ListSortDirection.Ascending) ? ListSortDirection.Descending : ListSortDirection.Ascending;
+                    }
+                    else
+                    {
+                        CurrentSortDirection = ListSortDirection.Ascending;
+                    }
+                    CurrentSortColIndex = colIndex;
                     Cursor.Current = Cursors.WaitCursor;
                     PushUndo();
-                    FilteredData?.Sort(new BoundDataRow.SortComparer(colIndex, direction));
+                    FilteredData?.Sort(new BoundDataRow.SortComparer(colIndex, CurrentSortDirection));
                     ReshowFiltered();
+
+                    foreach (DataGridViewColumn column in DataGrid.Columns)
+                    {
+                        column.HeaderCell.SortGlyphDirection = SortOrder.None;
+                    }
+                    DataGrid.Columns[colIndex].HeaderCell.SortGlyphDirection = CurrentSortDirection == ListSortDirection.Ascending ? SortOrder.Ascending : SortOrder.Descending;
                 }
                 catch
                 {
