@@ -2,7 +2,9 @@ using SehensWerte.Files;
 using System.Collections;
 using System.ComponentModel;
 using System.Data;
+using System.Data.Common;
 using System.Text.RegularExpressions;
+using static System.Windows.Forms.VisualStyles.VisualStyleElement;
 
 namespace SehensWerte.Controls
 {
@@ -444,6 +446,13 @@ namespace SehensWerte.Controls
             }
         }
 
+        public void ShowRowsOfColumn(string columnName, string value)
+        {
+            DataGridBind?.ShowAll();
+            DataGridBind?.HideRowsNotMatching(columnName, value);
+        }
+
+
         public class BoundDataRow
         {
             public string[] SourceRow;
@@ -677,11 +686,11 @@ namespace SehensWerte.Controls
                 return union.ToArray();
             }
 
-            public string[] GetSelectedRowsOfColumn(string column, DataGridView dataGrid)
+            public string[]? GetSelectedRowsOfColumn(string column, DataGridView dataGrid)
             {
                 int colIndex = ColumnNames.IndexOf(column);
                 return colIndex == -1
-                    ? new string[] { }
+                    ? null
                     : RowsWithSelection(dataGrid).Select(x => IndexToRow[x].SourceRow[colIndex]).ToArray();
             }
 
