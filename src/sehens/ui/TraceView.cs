@@ -48,7 +48,16 @@ namespace SehensWerte.Controls.Sehens
         [AutoEditor.Hidden]
         internal double[]? CalculatedBeforeZoom { get { lock (m_Samples.DataLock) { return m_CalculatedBeforeZoom; } } }
         [AutoEditor.Hidden]
-        internal double[]? DrawnSamples { get { lock (m_Samples.DataLock) { return m_DrawnSamples; } } }
+        public double[]? DrawnSamples { get { lock (m_Samples.DataLock) { return m_DrawnSamples; } } }
+        [AutoEditor.Hidden]
+        public SnapshotYT? DrawnSamplesYT
+        {
+            get
+            {
+                var extents = DrawnExtents();
+                return m_Samples.SnapshotYTProjection(extents.leftUnixTime, extents.rightUnixTime);
+            }
+        }
         [AutoEditor.Hidden]
         internal double[]? PeakHoldMinDrawn { get { lock (m_Samples.DataLock) { return m_PeakHoldDrawn?.Min; } } }
         [AutoEditor.Hidden]
@@ -57,6 +66,10 @@ namespace SehensWerte.Controls.Sehens
         internal double[]? PeakHoldMinAll { get { lock (m_Samples.DataLock) { return m_PeakHoldAll?.Min; } } }
         [AutoEditor.Hidden]
         internal double[]? PeakHoldMaxAll { get { lock (m_Samples.DataLock) { return m_PeakHoldAll?.Max; } } }
+
+        public record struct SnapshotYT(int leftIndex, int rightIndex, double[] samples, double[] time)
+        {
+        }
 
         [AutoEditor.Hidden]
         public int DrawnStartPosition => m_DrawnStartPosition;
@@ -903,6 +916,7 @@ namespace SehensWerte.Controls.Sehens
             DifferentiateIntegrate
         }
         private FilterTransforms m_FilterTransform;
+
         [XmlSave]
         public FilterTransforms FilterTransform
         {
@@ -1315,7 +1329,7 @@ namespace SehensWerte.Controls.Sehens
             };
         }
 
-        public (int leftSampleNumber, int rightSampleNumber, double leftSampleNumberValue, double rightSampleNumberValue, double leftUnixTime, double rightUnixTime, string sampleValueUnit, int viewLengthOverride, int viewOffsetOverride) DrawnExtents()
+        internal (int leftSampleNumber, int rightSampleNumber, double leftSampleNumberValue, double rightSampleNumberValue, double leftUnixTime, double rightUnixTime, string sampleValueUnit, int viewLengthOverride, int viewOffsetOverride) DrawnExtents()
         {
             int leftSampleNumber;
             int rightSampleNumber;
@@ -1864,7 +1878,7 @@ value=" + string.Format(VerticalUnitFormat, Clicks[0].SampleAtX.ToStringRound(5,
                 array = new double[0];
             }
             else
-            {       
+            {
                 sampleCount = Math.Min(sampleCount, (int)(count * m_ZoomValue));
                 sampleCount = Math.Min(sampleCount, count);
                 sampleCount = Math.Max(1, sampleCount);
@@ -1876,7 +1890,7 @@ value=" + string.Format(VerticalUnitFormat, Clicks[0].SampleAtX.ToStringRound(5,
             return array;
         }
 
-        internal (int leftIndex, int rightIndex, double[] samples, double[] time) SnapshotYTProjection(double leftTime, double rightTime, out bool recalculateProjectionRequired)
+        internal SnapshotYT SnapshotYTProjection(double leftTime, double rightTime, out bool recalculateProjectionRequired)
         {
             recalculateProjectionRequired = Interlocked.Exchange(ref m_RecalculateProjectionRequired, 0) > 0;
             return m_Samples.SnapshotYTProjection(leftTime, rightTime);

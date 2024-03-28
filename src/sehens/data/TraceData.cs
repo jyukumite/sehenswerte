@@ -543,7 +543,7 @@ namespace SehensWerte.Controls.Sehens
             ForEachViewer(x => x.TraceDataSamplesChanged(this));
         }
 
-        internal (int leftIndex, int rightIndex, double[] samples, double[] time) SnapshotYTProjection(double leftTime, double rightTime)
+        internal TraceView.SnapshotYT SnapshotYTProjection(double leftTime, double rightTime)
         {
             lock (DataLock)
             {
@@ -571,7 +571,7 @@ namespace SehensWerte.Controls.Sehens
                     if (left > 0) left--;
                     if (right < time.Length - 1) right++;
                 }
-                return (left, right, samples, time);
+                return new TraceView.SnapshotYT(left, right, samples, time);
             }
         }
 

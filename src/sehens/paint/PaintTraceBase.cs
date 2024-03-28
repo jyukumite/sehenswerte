@@ -101,7 +101,7 @@ namespace SehensWerte.Controls.Sehens
             return result;
         }
 
-        protected (int leftIndex, int rightIndex, double[] samples, double[] times) SnapshotYTProjection(TraceGroupDisplay info, double overscan)
+        protected TraceView.SnapshotYT SnapshotYTProjection(TraceGroupDisplay info, double overscan)
         {
             bool reprocessCurve;
             var result = info.View0.SnapshotYTProjection(info.LeftUnixTime - overscan, info.RightUnixTime + overscan, out reprocessCurve);

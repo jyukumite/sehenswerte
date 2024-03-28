@@ -16,6 +16,8 @@ namespace SehensWerte.Controls
 
         internal Action<CsvLog.Entry>? OnLog;
         public Action<SehensControl>? OnViewListChanged;
+        public Action<SehensControl>? OnPanZoomChanged;
+
         internal PaintBoxMouseInfo PaintBoxMouse = new PaintBoxMouseInfo();
         private Control? FocusRestore;
         private ViewProxy ViewProxyCallback;
@@ -1487,6 +1489,7 @@ namespace SehensWerte.Controls
                 HorizontalScrollPanBar.Value = Math.Max(0, Math.Min(HorizontalScrollPanBar.Maximum - HorizontalScrollPanBar.LargeChange, (int)m_PanBarValue));
                 HorizontalScrollZoomBar.Value = Math.Max(0, Math.Min(HorizontalScrollZoomBar.Maximum, (int)m_ZoomBarValue));
                 ReprocessMathAfterZoom();
+                OnPanZoomChanged?.Invoke(this);
             }
             m_HoldZoomPan = false;
         }
@@ -1500,6 +1503,7 @@ namespace SehensWerte.Controls
             (m_ZoomBarValue, m_PanBarValue) = CalculateZoomPanScrollbar();
             ReprocessMathAfterZoom();
             m_HoldZoomPan = false;
+            OnPanZoomChanged?.Invoke(this);
         }
 
         private void HorizontalScrollZoomBar_ValueChanged(object sender, EventArgs e)
@@ -1514,6 +1518,7 @@ namespace SehensWerte.Controls
             HorizontalScrollPanBar.Value = (int)m_PanBarValue;
             ReprocessMathAfterZoom();
             m_HoldZoomPan = false;
+            OnPanZoomChanged?.Invoke(this);
         }
 
         private static Control? GetFocusedControl(Control? control = null)

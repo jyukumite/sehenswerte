@@ -11,6 +11,7 @@ namespace SehensWerte.Controls
     public class DataGridViewControl : UserControl
     {
         public event DataGridViewCellEventHandler CellDoubleClick = (s, e) => { };
+        public event DataGridViewCellEventHandler CellClick = (s, e) => { };
         public event DataGridViewCellContextMenuStripNeededEventHandler CellContextMenuStripNeeded = (s, e) => { };
         public DataGridViewDoubleBuffered Grid;
         private StatusStrip StatusStrip;
@@ -73,6 +74,7 @@ namespace SehensWerte.Controls
             this.Grid.RowPostPaint += this.DataGrid_RowPostPaint;
             this.Grid.SelectionChanged += this.Grid_SelectionChanged;
             this.Grid.CellDoubleClick += (s, e) => CellDoubleClick.Invoke(s, e);
+            this.Grid.CellClick += (s, e) => CellClick.Invoke(s, e);
             this.Grid.CellContextMenuStripNeeded += (s, e) => CellContextMenuStripNeeded.Invoke(s, e);
 
             this.StatusStrip.ImageScalingSize = new System.Drawing.Size(24, 24);
