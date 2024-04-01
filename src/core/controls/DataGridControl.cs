@@ -1,3 +1,4 @@
+using Microsoft.VisualBasic;
 using SehensWerte.Files;
 using System.Collections;
 using System.ComponentModel;
@@ -13,7 +14,7 @@ namespace SehensWerte.Controls
         public event DataGridViewCellEventHandler CellDoubleClick = (s, e) => { };
         public event DataGridViewCellEventHandler CellClick = (s, e) => { };
         public event DataGridViewCellContextMenuStripNeededEventHandler CellContextMenuStripNeeded = (s, e) => { };
-        public DataGridViewDoubleBuffered Grid;
+        public DataGridView Grid;
         private StatusStrip StatusStrip;
         private ToolStripStatusLabel StatusFilterText;
         private ToolStripDropDownButton ShowAllStatus;
@@ -304,9 +305,10 @@ namespace SehensWerte.Controls
                     return;
                 }
 
+                string header = Grid.CurrentCell.OwningColumn.HeaderText;
                 DataGridBind?.HideRowsMatching(
-                    Convert.ToString(Grid.CurrentCell.OwningColumn.HeaderText) ?? "",
-                    Convert.ToString(Grid.CurrentCell.Value) ?? "");
+                    Convert.ToString(header) ?? "",
+                    GetSelectedRowsOfColumn(header));
             });
         }
 
@@ -319,9 +321,10 @@ namespace SehensWerte.Controls
                     return;
                 }
 
+                string header = Grid.CurrentCell.OwningColumn.HeaderText;
                 DataGridBind?.HideRowsNotMatching(
-                    Convert.ToString(Grid.CurrentCell.OwningColumn.HeaderText) ?? "",
-                    Convert.ToString(Grid.CurrentCell.Value) ?? "");
+                    Convert.ToString(header) ?? "",
+                    GetSelectedRowsOfColumn(header));
             });
         }
 
@@ -451,7 +454,7 @@ namespace SehensWerte.Controls
         public void ShowRowsOfColumn(string columnName, string value)
         {
             DataGridBind?.ShowAll();
-            DataGridBind?.HideRowsNotMatching(columnName, value);
+            DataGridBind?.HideRowsNotMatching(columnName, new string[] { value });
         }
 
 
@@ -782,18 +785,18 @@ namespace SehensWerte.Controls
                 Refilter();
             }
 
-            public void HideRowsMatching(string column, string text)
+            public void HideRowsMatching(string column, IEnumerable<string> rows)
             {
-                string lowerText = text.ToLower();
+                List<string> strings = rows.Select(x => x.ToLower()).ToList();
                 int colIndex = ColumnNames.IndexOf(column);
-                HideRowsIf(x => x.SourceRow[colIndex].ToLower() == lowerText);
+                HideRowsIf(x => strings.Contains(x.SourceRow[colIndex].ToLower()));
             }
 
-            public void HideRowsNotMatching(string column, string text)
+            public void HideRowsNotMatching(string column, IEnumerable<string> rows)
             {
-                string lowerText = text.ToLower();
+                List<string> strings = rows.Select(x => x.ToLower()).ToList();
                 int colIndex = ColumnNames.IndexOf(column);
-                HideRowsIf(x => x.SourceRow[colIndex].ToLower() != lowerText);
+                HideRowsIf(x => !strings.Contains(x.SourceRow[colIndex].ToLower()));
             }
 
             public void ShowRowsMatchingRegex(string regex, string column)

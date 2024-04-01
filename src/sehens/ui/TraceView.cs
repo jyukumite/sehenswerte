@@ -1,6 +1,7 @@
 ﻿using SehensWerte.Files;
 using SehensWerte.Filters;
 using SehensWerte.Maths;
+using SehensWerte.Utils;
 using System;
 using System.Text;
 using System.Xml.Serialization;
@@ -163,6 +164,8 @@ namespace SehensWerte.Controls.Sehens
             }
         }
 
+        public double SelectTime;// HighResTimer.StaticSeconds;
+
         private bool m_Selected;
         [AutoEditor.Hidden]
         [XmlSave]
@@ -172,6 +175,10 @@ namespace SehensWerte.Controls.Sehens
             set
             {
                 if (m_Selected == value) return;
+                if (value)
+                {
+                    SelectTime = HighResTimer.StaticSeconds;
+                }
                 m_Selected = value;
                 Scope.ViewNeedsRepaint(this);
                 GuiUpdateControls?.Invoke(this);

@@ -1,18 +1,23 @@
+using System;
+using System.IO;
 using System.Text;
 
 namespace SehensWerte.Files
 {
     public class RiffReader
     {
-        private int m_ChannelCount;
-        public int ChannelCount => m_ChannelCount;
-        public double SamplesPerSecond;
-        public double[][]? Buffer;
+        public int ChannelCount { get; private set; }
+        public double SamplesPerSecond { get; private set; }
+        public int BitDepth { get; private set; }
+        public double[][]? Buffer { get; private set; }
+
+        private ushort AudioFormat;
 
         public double[] Channel(int channel)
         {
             return (Buffer == null || Buffer.Length <= channel) ? new double[] { } : Buffer[channel];
         }
+
 
         public RiffReader(string fileName) : this(new FileStream(fileName, FileMode.Open, FileAccess.Read))
         {
@@ -20,95 +25,105 @@ namespace SehensWerte.Files
 
         public RiffReader(Stream waveStream)
         {
-            string fileType = ReadString(waveStream, 4);
-            ReadInt4(waveStream);
-            string blockType = ReadString(waveStream, 4);
-            int formatChunkSize = 0;
-            string? formatType = FindChunk(ref waveStream, SeekOrigin.Current, "fmt ", out formatChunkSize);
-            int format = ReadInt2(waveStream);
-            m_ChannelCount = ReadInt2(waveStream);
-            SamplesPerSecond = ReadInt4(waveStream);
-            ReadBytes(waveStream, 6);
-            int bitdepth = ReadInt2(waveStream);
-            waveStream.Seek(formatChunkSize - 16, SeekOrigin.Current);
-            int dataChunkSize;
-            string? dataType = FindChunk(ref waveStream, SeekOrigin.Current, "data", out dataChunkSize);
-
-            if (dataChunkSize == 0)
+            try
             {
-                dataChunkSize = (int)(waveStream.Length - waveStream.Position);
-            }
-
-            if (fileType == "RIFF" && blockType == "WAVE" && formatType == "fmt " && dataType == "data" && format == 1 && bitdepth == 16)
-            {
-                byte[] array = ReadBytes(waveStream, dataChunkSize);
-                int count = dataChunkSize / ChannelCount / (bitdepth / 8);
-                Buffer = new double[ChannelCount][];
-                for (int i = 0; i < ChannelCount; i++)
+                using (BinaryReader reader = new BinaryReader(waveStream, Encoding.UTF8, leaveOpen: true))
                 {
-                    Buffer[i] = new double[count];
-                }
-                int index = 0;
-                for (int sample = 0; sample < count; sample++)
-                {
-                    for (int channel = 0; channel < ChannelCount; channel++)
+                    string fileType = new string(reader.ReadChars(4));
+                    if (fileType != "RIFF")
                     {
-                        short value = (short)(array[index++] | (array[index++] << 8));
-                        Buffer[channel][sample] = (double)value / 32767.0;
+                        throw new NotSupportedException("This is not a valid RIFF file.");
+                    }
+                    int fileSize = reader.ReadInt32();
+                    string riffType = new string(reader.ReadChars(4));
+                    if (riffType != "WAVE")
+                    {
+                        throw new NotSupportedException("This is not a valid WAVE file.");
+                    }
+                    string formatChunkId = new string(reader.ReadChars(4));
+                    if (formatChunkId != "fmt ")
+                    {
+                        throw new NotSupportedException("Invalid format chunk ID in WAVE file.");
+                    }
+                    int formatChunkSize = reader.ReadInt32();
+                    AudioFormat = reader.ReadUInt16();
+                    ChannelCount = reader.ReadUInt16();
+                    SamplesPerSecond = reader.ReadInt32();
+                    int byteRate = reader.ReadInt32();
+                    ushort blockAlign = reader.ReadUInt16();
+                    BitDepth = reader.ReadUInt16();
+
+                    if (AudioFormat != 1 && AudioFormat != 3) // 1 = PCM, 3 = IEEE float
+                    {
+                        throw new NotSupportedException("WAVE file encoding not supported.");
+                    }
+
+                    reader.BaseStream.Seek(formatChunkSize - 16, SeekOrigin.Current); // Skip the rest of the fmt chunk
+
+                    // Find the data chunk
+                    while (reader.BaseStream.Position < reader.BaseStream.Length)
+                    {
+                        string chunkId = new string(reader.ReadChars(4));
+                        int chunkSize = reader.ReadInt32();
+                        if (chunkId.ToLower() == "data")
+                        {
+                            ReadDataChunk(reader, chunkSize);
+                            break;
+                        }
+                        else
+                        {
+                            reader.BaseStream.Seek(chunkSize, SeekOrigin.Current);
+                        }
                     }
                 }
             }
-            else
+            catch (Exception ex)
             {
-                throw new NotImplementedException("");
+                throw new InvalidDataException("Error reading WAVE file.", ex);
             }
         }
 
-        private string? FindChunk(ref Stream waveStream, SeekOrigin seekOrigin, string chunkName, out int chunkSize)
+        private void ReadDataChunk(BinaryReader reader, int chunkSize)
         {
-            chunkSize = 0;
-            long offset = waveStream.Seek(0L, seekOrigin);
-            string? text = null;
-            do
+            int bytesPerSample = BitDepth / 8;
+            int totalSamples = chunkSize / bytesPerSample / ChannelCount;
+
+            Buffer = new double[ChannelCount][];
+            for (int i = 0; i < ChannelCount; i++)
             {
-                if (waveStream.Seek(chunkSize, SeekOrigin.Current) == waveStream.Length)
+                Buffer[i] = new double[totalSamples];
+            }
+
+            for (int sample = 0; sample < totalSamples; sample++)
+            {
+                for (int channel = 0; channel < ChannelCount; channel++)
                 {
-                    waveStream.Seek(offset, SeekOrigin.Begin);
-                    return null;
+                    double sampleValue;
+                    if (BitDepth == 16)
+                    {
+                        // ushort
+                        sampleValue = reader.ReadInt16() / (double)short.MaxValue;
+                    }
+                    else if (BitDepth == 24)
+                    {
+                        // 24-bit sample
+                        byte[] sampleBytes = reader.ReadBytes(3);
+                        int sampleInt = sampleBytes[0] | (sampleBytes[1] << 8) | (sampleBytes[2] << 16);
+                        sampleInt = (sampleInt & 0x800000) > 0 ? (sampleInt | ~0xFFFFFF) : sampleInt; // sign extend
+                        sampleValue = sampleInt / (double)(1 << 23);
+                    }
+                    else if (BitDepth == 32 && AudioFormat == 3) // 32-bit float
+                    {
+                        sampleValue = reader.ReadSingle();
+                    }
+                    else
+                    {
+                        throw new NotSupportedException($"Unsupported bit depth: {BitDepth}.");
+                    }
+
+                    Buffer[channel][sample] = sampleValue;
                 }
-                text = ReadString(waveStream, 4);
-                chunkSize = ReadInt4(waveStream);
-            } while (text != chunkName);
-            return text;
-        }
-
-        private int ReadInt2(Stream waveStream)
-        {
-            byte[] array = ReadBytes(waveStream, 2);
-            return array[0] | (array[1] << 8);
-        }
-
-        private int ReadInt4(Stream waveStream)
-        {
-            byte[] array = ReadBytes(waveStream, 4);
-            return array[0] | (array[1] << 8) | (array[2] << 16) | (array[3] << 24);
-        }
-
-        private string ReadString(Stream waveStream, int length)
-        {
-            byte[] array = ReadBytes(waveStream, length);
-            return ASCIIEncoding.ASCII.GetString(array, 0, array.Length);
-        }
-
-        private static byte[] ReadBytes(Stream waveStream, int length)
-        {
-            byte[] array = new byte[length];
-            int num = waveStream.Read(array, 0, length);
-            if (num != length)
-            {
-                throw new Exception($"Read {num} of {length} bytes");
             }
-            return array;
         }
 
         public static double[] ToDouble(string fileName, out double samplesPerSecond)

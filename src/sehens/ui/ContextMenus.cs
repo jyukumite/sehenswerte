@@ -298,12 +298,35 @@ namespace SehensWerte.Controls.Sehens
             }
         }
 
+        private class TriggeredSliceForm
+        {
+            [AutoEditor.DisplayOrder(0)]
+            [AutoEditor.DisplayName("Trigger value")]
+            public double TriggerValue = 0.1;
+
+            [AutoEditor.DisplayOrder(1)]
+            [AutoEditor.DisplayName("Pre-trigger samples")]
+            public int PreTriggerSamples = 100;
+
+            [AutoEditor.DisplayOrder(1)]
+            [AutoEditor.DisplayName("Post-trigger minimum samples")]
+            public int PostTriggerMinimumSamples = 100;
+
+            public enum TriggerPhase { Rising, Falling };
+            [AutoEditor.DisplayOrder(1)]
+            [AutoEditor.DisplayName("Phase")]
+            public TriggerPhase Phase = TriggerPhase.Rising;
+
+            //fixme? lpf?
+        }
+
         private static SincTraceForm SincInfo = new SincTraceForm();
         private static SweepTraceInput SweepInfo = new SweepTraceInput();
         private static NoiseTraceForm NoiseInfo = new NoiseTraceForm();
         private static WaveformTraceForm WaveformInfo = new WaveformTraceForm();
         private static FilterGenTraceForm FilterGenInfo = new FilterGenTraceForm();
         private static WindowTraceForm WindowInfo = new WindowTraceForm();
+        private static TriggeredSliceForm TriggeredSliceInfo = new TriggeredSliceForm();
 
         public static void AddContextMenus(List<ScopeContextMenu.MenuItem> contextMenu, List<ScopeContextMenu.EmbeddedMenu> embeddedContextMenu)
         {
@@ -453,6 +476,24 @@ namespace SehensWerte.Controls.Sehens
                 ShownText = ScopeContextMenu.MenuItem.TextDisplay.AddViewNames,
                 Clicked = (a) => a.Scope.DuplicateTraceData(a.Views[0]),
             });
+
+            contextMenu.Add(new ScopeContextMenu.MenuItem
+            {
+                Text = "Combine to new YT trace (copy) - ",
+                ShownWhenTrace = ScopeContextMenu.MenuItem.ShowWhen.TwoSelected,
+                ShownWhenMouse = PaintBoxMouseInfo.GuiSection.TraceArea,
+                Call = ScopeContextMenu.MenuItem.CallWhen.Once,
+                ShownText = ScopeContextMenu.MenuItem.TextDisplay.AddViewNames,
+                Clicked = (a) =>
+                {
+                    var y = a.Views[0].Samples;
+                    var t = a.Views[1].Samples;
+                    string s = a.Scope.EnsureUnique($"y={y.Name} t={t.Name}",
+                                    x => a.Scope.TryGetTrace(x) != null || a.Scope.TryGetView(x) != null);
+                    a.Scope[s].Update(y.InputSamplesAsDouble, t.InputSamplesAsDouble);
+                }
+            });
+
 
             contextMenu.Add(new ScopeContextMenu.MenuItem
             {
@@ -1553,9 +1594,24 @@ namespace SehensWerte.Controls.Sehens
 
         private static void AddMathSubMenu(List<ScopeContextMenu.MenuItem> contextMenu)
         {
+            const string subMenuText = "Math";
+
+            contextMenu.Add(new ScopeContextMenu.MenuItem
+            {
+                SubMenuText = subMenuText,
+                Text = "Triggered slice",
+                ShownWhenTrace = ScopeContextMenu.MenuItem.ShowWhen.OneSelected,
+                ShownWhenMouse = PaintBoxMouseInfo.GuiSection.TraceArea,
+                Call = ScopeContextMenu.MenuItem.CallWhen.Once,
+                ShownText = ScopeContextMenu.MenuItem.TextDisplay.NoChange,
+                Clicked = (a) =>
+                {
+                    TriggeredSliceTrace(a);
+                },
+            });
+
             foreach (var math in Enum.GetValues<TraceView.CalculatedTypes>())
             {
-
                 var menuItem = math switch
                 {
                     TraceView.CalculatedTypes.None => null,
@@ -1598,7 +1654,7 @@ namespace SehensWerte.Controls.Sehens
             {
                 return new ScopeContextMenu.MenuItem
                 {
-                    SubMenuText = "Math",
+                    SubMenuText = subMenuText,
                     Text = text,
                     ShownWhenTrace = when,
                     ShownWhenMouse = PaintBoxMouseInfo.GuiSection.TraceArea,
@@ -1608,23 +1664,92 @@ namespace SehensWerte.Controls.Sehens
                 };
             }
 
-            static void Click(TraceView.CalculatedTypes type, TraceView.CalculatedTraceData? prompt, ScopeContextMenu.DropDownArgs a)
+            static void Click(TraceView.CalculatedTypes type, TraceView.CalculatedTraceData? data, ScopeContextMenu.DropDownArgs a)
             {
                 bool create = true;
-                if (prompt != null)
+                if (data != null)
                 {
                     using AutoEditorForm form = new AutoEditorForm();
-                    create = form.ShowDialog("Information", "Calculated view", prompt);
+                    create = form.ShowDialog("Information", "Calculated view", data);
                 }
                 if (create)
                 {
                     string viewName = type.ToString() + "(" + string.Join(",", a.Views.Select(x => x.Samples.Name)) + ")";
                     TraceView view = a.Scope.EnsureView(viewName);
-                    view.CalculatedParameter = prompt ?? new TraceView.CalculatedTraceData();
+                    view.CalculatedParameter = data ?? new TraceView.CalculatedTraceData();
                     view.Samples.InputSamplesPerSecond = a.Views[0].Samples.InputSamplesPerSecond;
                     view.CalculatedSourceViews = a.Views.ToList();
                     view.CalculateType = type;
                 }
+            }
+        }
+
+        private static void TriggeredSliceTrace(ScopeContextMenu.DropDownArgs a)
+        {
+            using AutoEditorForm autoEditorForm = new AutoEditorForm();
+            if (!autoEditorForm.ShowDialog("Config", "Triggered slice", TriggeredSliceInfo)) return;
+
+            const string separator = " slice ";
+            foreach (var trace in a.Scope.AllViews)
+            {
+                if (trace.ViewName.StartsWith(a.Views[0].ViewName + separator))
+                {
+                    trace.Close();
+                }
+            }
+
+            double[] samples = a.Views[0].Samples.InputSamplesAsDouble;
+            List<double[]> result = new List<double[]>();
+
+            bool foundFirstTrigger = false;
+            int startSliceIndex = 0;
+
+            for (int loop = 1; loop < samples.Length; loop++)
+            {
+                bool trigger;
+                switch (TriggeredSliceInfo.Phase)
+                {
+                    default:
+                    case TriggeredSliceForm.TriggerPhase.Rising:
+                        trigger = (samples[loop - 1] < TriggeredSliceInfo.TriggerValue && samples[loop] >= TriggeredSliceInfo.TriggerValue);
+                        break;
+                    case TriggeredSliceForm.TriggerPhase.Falling:
+                        trigger = (samples[loop - 1] > TriggeredSliceInfo.TriggerValue && samples[loop] <= TriggeredSliceInfo.TriggerValue);
+                        break;
+                }
+                if (trigger)
+                {
+                    if (!foundFirstTrigger)
+                    {
+                        startSliceIndex = loop;
+                        foundFirstTrigger = true;
+                    }
+                    else
+                    {
+                        if ((loop - startSliceIndex) >= TriggeredSliceInfo.PostTriggerMinimumSamples)
+                        {
+                            Add(startSliceIndex, loop);
+                            startSliceIndex = loop;
+                        }
+                    }
+                }
+            }
+            if (startSliceIndex != 0)
+            {
+                Add(startSliceIndex, samples.Length);
+            }
+
+            int index = 1;
+            foreach (var piece in result)
+            {
+                string trace = a.Views[0].ViewName + separator + index.ToString();
+                a.Scope[trace].Update(piece, a.Views[0].SamplesPerSecond);
+            }
+
+            void Add(int start, int end)
+            {
+                int pretrigger = TriggeredSliceInfo.PreTriggerSamples;
+                result.Add(samples.Copy(start - pretrigger, end - start + pretrigger));
             }
         }
 

@@ -60,7 +60,7 @@ namespace SehensWerte.Controls.Sehens
 
         public List<TraceView> CombinedSelectedTraces(List<List<TraceView>> groups)
         {
-            var list = groups.SelectMany(x => x).Where(x => x.Selected).ToList();
+            var list = groups.SelectMany(x => x).Where(x => x.Selected).OrderBy(x => x.SelectTime).ToList();
             if (RightClickGroup != null)
             {
                 list.AddRange(RightClickGroup.Where(x => !list.Contains(x)).ToArray());

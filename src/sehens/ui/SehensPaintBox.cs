@@ -78,6 +78,20 @@ namespace SehensWerte.Controls.Sehens
             m_PaintThreadSemaphore = new EventWaitHandle(initialState: false, EventResetMode.AutoReset);
             m_PaintThread = new Thread(new ThreadStart(PaintRun));
             Paint += PaintBoxPaint;
+
+            AllowDrop = true;
+            DragEnter += (s, e) =>
+            {
+                e.Effect = (e.Data?.GetDataPresent(DataFormats.FileDrop) ?? false) ? DragDropEffects.Copy : DragDropEffects.None;
+            };
+
+            DragDrop += (s, e) =>
+            {
+                foreach (var file in (e.Data?.GetData(DataFormats.FileDrop) as string[]) ?? new string[0])
+                {
+                    Scope.Import(file);
+                }
+            };
         }
 
         public new void Invalidate()
@@ -927,7 +941,7 @@ namespace SehensWerte.Controls.Sehens
         public TraceGroupDisplay TraceToGroupDisplayInfo(TraceView trace, TraceGroupDisplay.PaintFlags flags = TraceGroupDisplay.PaintFlags.None)
         {
             var info = new TraceGroupDisplay(Scope.PaintBoxMouse, PaintBoxScreenRect, this, trace, flags);
-            info.ShowHorizontalUnits = info.View0.Samples.InputSamplesPerSecond != 0.0 
+            info.ShowHorizontalUnits = info.View0.Samples.InputSamplesPerSecond != 0.0
                 && Scope.PaintBoxMouse.MouseGuiSection != PaintBoxMouseInfo.GuiSection.BottomGutter;
             return info;
         }
