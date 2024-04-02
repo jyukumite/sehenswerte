@@ -1740,11 +1740,18 @@ namespace SehensWerte.Controls.Sehens
             }
 
             int index = 1;
+            int maxLen = result.Max(x => x.Length);
+            var viewNames = new List<string>();
             foreach (var piece in result)
             {
                 string trace = a.Views[0].ViewName + separator + index.ToString();
                 a.Scope[trace].Update(piece, a.Views[0].SamplesPerSecond);
+                a.Scope[trace].FirstView!.ViewLengthOverride = maxLen;
+                viewNames.Add(trace);
+                index++;
             }
+
+            a.Scope.GroupViews(viewNames);
 
             void Add(int start, int end)
             {
