@@ -9,12 +9,25 @@ using static System.Windows.Forms.VisualStyles.VisualStyleElement;
 
 namespace SehensWerte.Controls
 {
-    public class DataGridViewControl : UserControl
+    public class DataGridControlCellKeyDownEventArgs
+    {
+        public int ColumnIndex;
+        public int RowIndex;
+        public Keys KeyCode;
+        public bool SuppressKeyPress;
+    }
+    public delegate void DataGridControlCellKeyDownEventHandler(object sender, DataGridControlCellKeyDownEventArgs e);
+
+    public class DataGridControl : UserControl
     {
         public event DataGridViewCellEventHandler CellDoubleClick = (s, e) => { };
         public event DataGridViewCellEventHandler CellClick = (s, e) => { };
+        public event DataGridControlCellKeyDownEventHandler CellKeyDown = (s, e) => { };
+
         public event DataGridViewCellContextMenuStripNeededEventHandler CellContextMenuStripNeeded = (s, e) => { };
-        public DataGridView Grid;
+        public DataGridViewCell CurrentCell => Grid.CurrentCell;
+        private DataGridView Grid;
+
         private StatusStrip StatusStrip;
         private ToolStripStatusLabel StatusFilterText;
         private ToolStripDropDownButton ShowAllStatus;
@@ -31,6 +44,7 @@ namespace SehensWerte.Controls
         public BoundData? DataGridBind;
         private string RegexInput = ".*";
 
+
         protected override void Dispose(bool disposing)
         {
             if (disposing)
@@ -39,9 +53,9 @@ namespace SehensWerte.Controls
             base.Dispose(disposing);
         }
 
-        public static implicit operator DataGridView(DataGridViewControl d) => d.Grid;
+        public static implicit operator DataGridView(DataGridControl d) => d.Grid;
 
-        public DataGridViewControl()
+        public DataGridControl()
         {
             this.Grid = new SehensWerte.Controls.DataGridViewDoubleBuffered();
             this.StatusStrip = new System.Windows.Forms.StatusStrip();
@@ -75,6 +89,15 @@ namespace SehensWerte.Controls
             this.Grid.RowPostPaint += this.DataGrid_RowPostPaint;
             this.Grid.SelectionChanged += this.Grid_SelectionChanged;
             this.Grid.CellDoubleClick += (s, e) => CellDoubleClick.Invoke(s, e);
+            this.Grid.KeyDown += (s, e) =>
+            {
+                if (Grid.CurrentCell != null)
+                {
+                    var ee = new DataGridControlCellKeyDownEventArgs() { ColumnIndex = Grid.CurrentCell.ColumnIndex, RowIndex = Grid.CurrentCell.RowIndex, KeyCode = e.KeyCode };
+                    CellKeyDown.Invoke(this, ee);
+                    e.SuppressKeyPress = ee.SuppressKeyPress;
+                }
+            };
             this.Grid.CellClick += (s, e) => CellClick.Invoke(s, e);
             this.Grid.CellContextMenuStripNeeded += (s, e) => CellContextMenuStripNeeded.Invoke(s, e);
 
@@ -208,6 +231,18 @@ namespace SehensWerte.Controls
             this.StatusStrip.PerformLayout();
             this.ResumeLayout(false);
             this.PerformLayout();
+        }
+
+        public new void Focus()
+        {
+            if (Grid != null)
+            {
+                if (Grid.SelectedCells.Count > 0)
+                {
+                    Grid.CurrentCell = Grid.SelectedCells[0];
+                }
+                Grid.BeginInvoke(new Action(() => Grid.Focus()));
+            }
         }
 
         private void Grid_SelectionChanged(object? sender, EventArgs e)
@@ -872,4 +907,5 @@ namespace SehensWerte.Controls
             }
         }
     }
+
 }
