@@ -40,6 +40,7 @@ namespace SehensWerte.Controls
         private ToolStripDropDownButton ShowByRegexStatus;
         private ToolStripDropDownButton HideMatchCellStatus;
         private ToolStripDropDownButton HideUnmatchCellStatus;
+        private ToolStripDropDownButton UniqueCellStatus;
         private ToolStripDropDownButton SaveCsv;
         public BoundData? DataGridBind;
         private string RegexInput = ".*";
@@ -70,6 +71,7 @@ namespace SehensWerte.Controls
             this.ShowByRegexStatus = new System.Windows.Forms.ToolStripDropDownButton();
             this.HideMatchCellStatus = new System.Windows.Forms.ToolStripDropDownButton();
             this.HideUnmatchCellStatus = new System.Windows.Forms.ToolStripDropDownButton();
+            this.UniqueCellStatus = new System.Windows.Forms.ToolStripDropDownButton();
             this.SaveCsv = new System.Windows.Forms.ToolStripDropDownButton();
 
             ((System.ComponentModel.ISupportInitialize)(this.Grid)).BeginInit();
@@ -114,6 +116,7 @@ namespace SehensWerte.Controls
                     this.ShowByRegexStatus,
                     this.HideMatchCellStatus,
                     this.HideUnmatchCellStatus,
+                    this.UniqueCellStatus,
                     this.SaveCsv});
             this.StatusStrip.LayoutStyle = System.Windows.Forms.ToolStripLayoutStyle.HorizontalStackWithOverflow;
             this.StatusStrip.Location = new System.Drawing.Point(0, 1037);
@@ -210,6 +213,14 @@ namespace SehensWerte.Controls
             this.HideUnmatchCellStatus.Size = new System.Drawing.Size(171, 38);
             this.HideUnmatchCellStatus.Text = "Hide Unmatch";
             this.HideUnmatchCellStatus.Click += new System.EventHandler(this.HideUnmatchCellStatus_Click);
+            // 
+            // UniqueCellStatus
+            // 
+            this.UniqueCellStatus.Name = "UniqueCellStatus";
+            this.UniqueCellStatus.ShowDropDownArrow = false;
+            this.UniqueCellStatus.Size = new System.Drawing.Size(171, 38);
+            this.UniqueCellStatus.Text = "Unique";
+            this.UniqueCellStatus.Click += new System.EventHandler(this.UniqueCellStatus_Click);
             // 
             // SaveCsv
             // 
@@ -360,6 +371,20 @@ namespace SehensWerte.Controls
                 DataGridBind?.HideRowsNotMatching(
                     Convert.ToString(header) ?? "",
                     GetSelectedRowsOfColumn(header));
+            });
+        }
+
+        private void UniqueCellStatus_Click(object? sender, EventArgs e)
+        {
+            this.ExceptionToMessagebox(() =>
+            {
+                if (Grid.SelectedCells.Count == 0)
+                {
+                    return;
+                }
+
+                string header = Grid.CurrentCell.OwningColumn.HeaderText;
+                DataGridBind?.HideNotFirstUnique(Convert.ToString(header) ?? "");
             });
         }
 
@@ -820,8 +845,23 @@ namespace SehensWerte.Controls
                 Refilter();
             }
 
+            public void HideNotFirstUnique(string column)
+            {
+                // keep the first, hide the rest
+                int colIndex = ColumnNames.IndexOf(column);
+                List<string> seen = new List<string>();
+                HideRowsIf(x =>
+                {
+                    var xx = x.SourceRow[colIndex];
+                    var result = seen.Contains(xx);
+                    seen.Add(xx);
+                    return result;
+                });
+            }
+
             public void HideRowsMatching(string column, IEnumerable<string> rows)
             {
+                // case insensitive
                 List<string> strings = rows.Select(x => x.ToLower()).ToList();
                 int colIndex = ColumnNames.IndexOf(column);
                 HideRowsIf(x => strings.Contains(x.SourceRow[colIndex].ToLower()));
@@ -829,6 +869,7 @@ namespace SehensWerte.Controls
 
             public void HideRowsNotMatching(string column, IEnumerable<string> rows)
             {
+                // case insensitive
                 List<string> strings = rows.Select(x => x.ToLower()).ToList();
                 int colIndex = ColumnNames.IndexOf(column);
                 HideRowsIf(x => !strings.Contains(x.SourceRow[colIndex].ToLower()));
