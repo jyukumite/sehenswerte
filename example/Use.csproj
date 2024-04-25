@@ -1,5 +1,4 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
-
+<Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
     <TargetFramework>net6.0-windows</TargetFramework>
@@ -9,12 +8,12 @@
     <PlatformTarget>x64</PlatformTarget>
     <!-- otherwise the whole .Net Framework will be included in your bin folder -->
     <SelfContained Condition="'$(SelfContained)' == ''">false</SelfContained>
+    <AssemblyVersion>1.0.7.0</AssemblyVersion>
+    <FileVersion>1.0.7.0</FileVersion>
+    <Version>1.0.7.0</Version>
   </PropertyGroup>
-
   <ItemGroup>
     <ProjectReference Include="..\src\core\Core.csproj" />
     <ProjectReference Include="..\src\sehens\Sehens.csproj" />
   </ItemGroup>
-
 </Project>
-

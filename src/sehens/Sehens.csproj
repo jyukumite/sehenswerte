@@ -1,5 +1,4 @@
 <Project Sdk="Microsoft.NET.Sdk">
-
   <PropertyGroup>
     <TargetFramework>net6.0-windows</TargetFramework>
     <Nullable>enable</Nullable>
@@ -8,12 +7,11 @@
     <PlatformTarget>x64</PlatformTarget>
     <!-- otherwise the whole .Net Framework will be included in your bin folder -->
     <SelfContained Condition="'$(SelfContained)' == ''">false</SelfContained>
-    <AssemblyVersion>1.0.7</AssemblyVersion>
-</PropertyGroup>
-
+    <AssemblyVersion>1.0.7.0</AssemblyVersion>
+    <FileVersion>1.0.7.0</FileVersion>
+    <Version>1.0.7.0</Version>
+  </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="..\core\Core.csproj" />
   </ItemGroup>
-
 </Project>
-
