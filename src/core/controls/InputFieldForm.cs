@@ -75,10 +75,12 @@ namespace SehensWerte.Controls
         {
             ClientSize = new System.Drawing.Size(400, 8 + 64 + 8 + (MultiLine ? 200 : 20) + 8 + 32 + 8);
 
+            LabelText.AutoSize = true;
+            LabelText.MaximumSize = new Size(ClientSize.Width - 16, 0);
             LabelText.Location = new System.Drawing.Point(8, 8);
-            LabelText.Size = new System.Drawing.Size(ClientSize.Width - 16, 64);
+            //LabelText.Size = new System.Drawing.Size(ClientSize.Width - 16, 64);
 
-            EditResult.Location = new System.Drawing.Point(8, LabelText.Bottom + 8);
+            EditResult.Location = new System.Drawing.Point(8, LabelText.Bottom + 16);
             EditResult.Multiline = MultiLine;
             EditResult.Size = new System.Drawing.Size(ClientSize.Width - 16, MultiLine ? 200 : 20);
             EditResult.TabIndex = 1;
@@ -94,6 +96,8 @@ namespace SehensWerte.Controls
             ButtonCancel.Size = new System.Drawing.Size((ClientSize.Width - 24) / 2, 32);
             ButtonCancel.TabIndex = 3;
             ButtonCancel.Text = "Cancel";
+
+            ClientSize = new Size(ClientSize.Width, ButtonCancel.Bounds.Bottom + 8);
         }
 
         public static string? Show(string prompt, string title, object? defaultResponse = null, bool password = false, bool multiLine = false, bool cache = false, bool save = false,
