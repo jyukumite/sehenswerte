@@ -804,6 +804,49 @@ namespace SehensWerte.Maths
         {
             return Math.Acos(lhs.DotProduct(rhs) / (lhs.Magnitude() * rhs.Magnitude()));
         }
+
+        public static double DegreesBetween(this double[] lhs, double[] rhs)
+        {
+            return Math.Acos(lhs.DotProduct(rhs) / (lhs.Magnitude() * rhs.Magnitude())) * 180.0 / Math.PI;
+        }
+
+        public static double[,] QuaternionToRotationMatrix(this double[] xyzw)
+        {
+            double qx = xyzw[0];
+            double qy = xyzw[1];
+            double qz = xyzw[2];
+            double qw = xyzw[3];
+            double[,] r = new double[3, 3];
+            r[0, 0] = 1 - 2 * qy * qy - 2 * qz * qz;
+            r[0, 1] = 2 * qx * qy - 2 * qz * qw;
+            r[0, 2] = 2 * qx * qz + 2 * qy * qw;
+            r[1, 0] = 2 * qx * qy + 2 * qz * qw;
+            r[1, 1] = 1 - 2 * qx * qx - 2 * qz * qz;
+            r[1, 2] = 2 * qy * qz - 2 * qx * qw;
+            r[2, 0] = 2 * qx * qz - 2 * qy * qw;
+            r[2, 1] = 2 * qy * qz + 2 * qx * qw;
+            r[2, 2] = 1 - 2 * qx * qx - 2 * qy * qy;
+
+            return r;
+        }
+
+        public static double[] QuaternionToSensorAcceleration(this double[] quaternion)
+        {
+            return QuaternionToRotationMatrix(quaternion).Transpose().Product(new double[] { 0, 0, 1 });
+        }
+
+        public static double[] QuaternionToSensorAccelerationQuick(this double[] q)
+        {
+            // drop the redundant operations of QuaternionToSensorAcceleration()
+            var qx = q[0];
+            var qy = q[1];
+            var qz = q[2];
+            var qw = q[3];
+            var x = 2 * ((qx * qz) - (qw * qy));
+            var y = 2 * ((qw * qx) + (qy * qz));
+            var z = (qw * qw) - (qx * qx) - (qy * qy) + (qz * qz);
+            return new double[] { x, y, z };
+        }
     }
 
     [TestClass]
@@ -988,6 +1031,20 @@ namespace SehensWerte.Maths
             test2(vec3, new double[] { 0, 0, 1 });
             double rb = new double[] { 1, 0, 0 }.RadiansBetween(new double[] { 0, 1, 0 });
             test(rb, Math.PI / 2);
+            double rc = new double[] { 1, 0, 0 }.DegreesBetween(new double[] { 0, 1, 0 });
+            test(rc, 90);
+
+            Action<double[], double[]> testq = (q, a) =>
+            {
+                var ctsa = q.QuaternionToSensorAcceleration();
+                var qtn = q.QuaternionToSensorAccelerationQuick();
+                test2(ctsa, a);
+                test2(ctsa, qtn);
+            };
+            testq(new double[] { 0, 0, 0, 1 }, new double[] { 0, 0, 1 });
+            testq(new double[] { 1, 0, 0, 0 }, new double[] { 0, 0, -1 });
+            testq(new double[] { 0.7071, 0, 0.7071, 0 }, new double[] { 1, 0, 0 });
+            testq(new double[] { -0.0041504429087456142, -0.026001304104788698, -0.099366486109380286, 0.99470247182098925 }, new double[] { 0.05255, -0.00309, 0.99861 });
         }
 
         [TestMethod]

@@ -279,7 +279,7 @@ namespace SehensWerte.Controls.Sehens
         [XmlSave]
         [AutoEditor.DisplayName("Hover label colour")]
         [AutoEditor.DisplayOrder(-6)]
-        public Color HoverLabelColour = Color.FromArgb(128, Color.Yellow.R, Color.Yellow.G, Color.Yellow.B);
+        public Color HoverLabelColour = Color.FromArgb(192, Color.Yellow.R, Color.Yellow.G, Color.Yellow.B);
 
         [XmlSave]
         [AutoEditor.DisplayName("Hover Text font")]

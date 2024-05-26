@@ -40,19 +40,31 @@ namespace SehensWerte.Controls.Sehens
 
         public override void PaintProjection(Graphics graphics, TraceGroupDisplay info)
         {
-            if (info.YTTrace)
+            //fixme: last drawn sample is horizontal instead of pointing at the real next location
+
+            var bounds = graphics.ClipBounds;
+            try
             {
-                PaintProjectionYT(info, graphics);
+                graphics.SetClip((RectangleF)info.ProjectionArea);
+
+                if (info.YTTrace)
+                {
+                    PaintProjectionYT(info, graphics);
+                }
+                else
+                {
+                    DrawnYT = null;
+                    PaintProjectionY(info, graphics);
+                }
+                if (SaveTraceVerticalExtents)
+                {
+                    info.View0.DrawnValueLowest = LastTraceLowestValue;
+                    info.View0.DrawnValueHighest = LastTraceHighestValue;
+                }
             }
-            else
+            finally
             {
-                DrawnYT = null;
-                PaintProjectionY(info, graphics);
-            }
-            if (SaveTraceVerticalExtents)
-            {
-                info.View0.DrawnValueLowest = LastTraceLowestValue;
-                info.View0.DrawnValueHighest = LastTraceHighestValue;
+                graphics.SetClip(bounds);
             }
         }
 
@@ -163,17 +175,7 @@ namespace SehensWerte.Controls.Sehens
                 num = (float)(PaintProjectionArea.Top + (PaintHighestValue - y) * PaintProjectionArea.Height / (PaintHighestValue - PaintLowestValue));
             }
 
-
-            num = ((num < PaintProjectionArea.Top)
-                ? PaintProjectionArea.Top
-                : ((num > PaintProjectionArea.Bottom) ? PaintProjectionArea.Bottom : num));
-            return Math.Max(PaintProjectionArea.Top, Math.Min(PaintProjectionArea.Bottom, num));
-        }
-
-        protected void Project(PointF[] curve, int left, int x, double y)
-        {
-            curve[x].X = left + x;
-            curve[x].Y = Project(y);
+            return Math.Max(PaintProjectionArea.Top - 1, Math.Min(PaintProjectionArea.Bottom + 1, num));
         }
 
         private PointF[]? ProjectPolygon()
@@ -687,7 +689,7 @@ namespace SehensWerte.Controls.Sehens
             {
                 int index = (int)((long)loop * (long)length / width);
                 double y = PaintSamples[index];
-                Project(array, left, loop, y);
+                array[loop] = new PointF(left + loop, Project(y));
             }
             return array;
         }
@@ -712,7 +714,7 @@ namespace SehensWerte.Controls.Sehens
                     double sample = PaintSamples[index];
                     y = min ? (sample < y ? sample : y) : (sample > y ? sample : y);
                 }
-                Project(array, left, loop, y);
+                array[loop] = new PointF(left + loop, Project(y));
             }
             return array;
         }
@@ -741,7 +743,7 @@ namespace SehensWerte.Controls.Sehens
                 double leftSample = PaintSamples[indexLeft];
                 double rightSample = ((indexRight >= PaintSamples.Length) ? PaintSamples[indexLeft] : PaintSamples[indexRight]);
 
-                Project(array, left, loop, leftSample * (1.0 - ratio) + rightSample * ratio);
+                array[loop] = new PointF(left + loop, Project(leftSample * (1.0 - ratio) + rightSample * ratio));
             }
 
             return array;
@@ -778,7 +780,7 @@ namespace SehensWerte.Controls.Sehens
                     }
                     sum += y;
                 }
-                Project(array, left, loop, sum / (double)(endIndex - startIndex));
+                array[loop] = new PointF(left + loop, Project(sum / (double)(endIndex - startIndex)));
             }
 
             return array;
