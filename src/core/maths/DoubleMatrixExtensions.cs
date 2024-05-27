@@ -264,12 +264,14 @@ namespace SehensWerte.Maths
 
         public static double[] Product(this double[,] lhs, double[] rhs)
         {
+            // matrix vector multiplication
             var matrix = rhs.AsColumn();
             return Product(lhs, matrix).Column(0);
         }
 
         public static double[,] Product(this double[,] lhs, double[,] rhs)
-        {
+        { 
+            // matrix multiplication
             // 
             //            7   8
             //            9  10   rhs

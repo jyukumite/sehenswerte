@@ -85,7 +85,7 @@ namespace SehensWerte.Maths
 
         public override string ToString()
         {
-            return $"Min={Min.ToStringRound(5, 3)}, Max={Max.ToStringRound(5, 3)}, Avg={Average.ToStringRound(5, 3)}, " +
+            return $"Min={Min.ToStringRound(5, 3)}, Max={Max.ToStringRound(5, 3)}, Avg={Average.ToStringRound(5, 3)}, Range={Range.ToStringRound(5, 3)}, " +
                    $"Std={StdDev.ToStringRound(5, 3)}, RMS={Rms.ToStringRound(5, 3)}, " +
                    $"Sum={Sum.ToStringRound(5, 3)}, Count={Count}, LastInput={LastInput.ToStringRound(5, 3)}";
         }
