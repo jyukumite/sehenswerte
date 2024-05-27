@@ -1390,6 +1390,24 @@ namespace SehensWerte.Controls.Sehens
             contextMenu.Add(new ScopeContextMenu.MenuItem
             {
                 SubMenuText = subMenuText,
+                Text = "Match Horizontal (ViewLengthOverride)",
+                ShownWhenTrace = ScopeContextMenu.MenuItem.ShowWhen.TwoPlusSelected,
+                ShownWhenMouse = PaintBoxMouseInfo.GuiSection.TraceArea,
+                Call = ScopeContextMenu.MenuItem.CallWhen.Once,
+                ShownText = ScopeContextMenu.MenuItem.TextDisplay.NoChange,
+                Clicked = (a) =>
+                {
+                    int length = Math.Max(a.Views.Max(x => x.ViewLengthOverride), a.Views.Max(x => x.Samples.InputSampleCount));
+                    foreach (TraceView view in a.Views)
+                    {
+                        view.ViewLengthOverride = length;
+                    }
+                },
+            });
+
+            contextMenu.Add(new ScopeContextMenu.MenuItem
+            {
+                SubMenuText = subMenuText,
                 Text = "Copy trigger",
                 ShownWhenTrace = ScopeContextMenu.MenuItem.ShowWhen.TwoPlusSelected,
                 ShownWhenMouse = PaintBoxMouseInfo.GuiSection.TraceArea,
