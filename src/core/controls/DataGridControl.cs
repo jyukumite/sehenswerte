@@ -41,7 +41,8 @@ namespace SehensWerte.Controls
         private ToolStripDropDownButton HideMatchCellStatus;
         private ToolStripDropDownButton HideUnmatchCellStatus;
         private ToolStripDropDownButton UniqueCellStatus;
-        private ToolStripDropDownButton SaveCsv;
+        private ToolStripDropDownButton SaveCsvButton;
+        private ToolStripDropDownButton LoadCsvButton;
         public BoundData? DataGridBind;
         private string RegexInput = ".*";
 
@@ -72,7 +73,8 @@ namespace SehensWerte.Controls
             this.HideMatchCellStatus = new System.Windows.Forms.ToolStripDropDownButton();
             this.HideUnmatchCellStatus = new System.Windows.Forms.ToolStripDropDownButton();
             this.UniqueCellStatus = new System.Windows.Forms.ToolStripDropDownButton();
-            this.SaveCsv = new System.Windows.Forms.ToolStripDropDownButton();
+            this.SaveCsvButton = new System.Windows.Forms.ToolStripDropDownButton();
+            this.LoadCsvButton = new System.Windows.Forms.ToolStripDropDownButton();
 
             ((System.ComponentModel.ISupportInitialize)(this.Grid)).BeginInit();
             this.StatusStrip.SuspendLayout();
@@ -117,7 +119,8 @@ namespace SehensWerte.Controls
                     this.HideMatchCellStatus,
                     this.HideUnmatchCellStatus,
                     this.UniqueCellStatus,
-                    this.SaveCsv});
+                    this.SaveCsvButton,
+                    this.LoadCsvButton});
             this.StatusStrip.LayoutStyle = System.Windows.Forms.ToolStripLayoutStyle.HorizontalStackWithOverflow;
             this.StatusStrip.Location = new System.Drawing.Point(0, 1037);
             this.StatusStrip.Name = "StatusStrip";
@@ -224,11 +227,19 @@ namespace SehensWerte.Controls
             // 
             // SaveCsv
             // 
-            this.SaveCsv.Name = "SaveCsv";
-            this.SaveCsv.ShowDropDownArrow = false;
-            this.SaveCsv.Size = new System.Drawing.Size(171, 38);
-            this.SaveCsv.Text = "Save";
-            this.SaveCsv.Click += new System.EventHandler(this.SaveCsv_Click);
+            this.SaveCsvButton.Name = "SaveCsv";
+            this.SaveCsvButton.ShowDropDownArrow = false;
+            this.SaveCsvButton.Size = new System.Drawing.Size(171, 38);
+            this.SaveCsvButton.Text = "Save";
+            this.SaveCsvButton.Click += new System.EventHandler(this.SaveCsv_Click);
+            // 
+            // LoadCsv
+            // 
+            this.LoadCsvButton.Name = "LoadCsv";
+            this.LoadCsvButton.ShowDropDownArrow = false;
+            this.LoadCsvButton.Size = new System.Drawing.Size(171, 38);
+            this.LoadCsvButton.Text = "Load";
+            this.LoadCsvButton.Click += new System.EventHandler(this.LoadCsv_Click);
             // 
             // CloudDataQueryTab
             // 
@@ -402,6 +413,21 @@ namespace SehensWerte.Controls
                     {
                         DataGridBind?.SaveToCsv(m_SaveFileDialog.FileName, this);
                     }
+                }
+            });
+        }
+
+        private OpenFileDialog m_LoadFileDialog = new OpenFileDialog();
+        private void LoadCsv_Click(object? sender, EventArgs e)
+        {
+            this.ExceptionToMessagebox(() =>
+            {
+                m_LoadFileDialog.Title = "Load CSV";
+                m_LoadFileDialog.Filter = "CSV files (*.csv)|*.csv";
+                m_LoadFileDialog.RestoreDirectory = true;
+                if (m_LoadFileDialog.ShowDialog() == DialogResult.OK)
+                {
+                    LoadCsv(m_LoadFileDialog.FileName);
                 }
             });
         }
