@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Management;
 using System.Reflection;
 using System.Text;
 
@@ -133,6 +134,24 @@ namespace SehensWerte.Utils
                 {
                     m.Invoke(tc, null);
                 }
+            }
+        }
+
+        public static long GetTotalPhysicalMemoryBytes()
+        {
+            try
+            {
+                var searcher = new ManagementObjectSearcher("SELECT Capacity FROM Win32_PhysicalMemory");
+                long totalCapacity = 0;
+                foreach (var obj in searcher.Get())
+                {
+                    totalCapacity += Convert.ToInt64(obj["Capacity"]);
+                }
+                return totalCapacity;
+            }
+            catch (Exception ex)
+            {
+                return 0;
             }
         }
 
