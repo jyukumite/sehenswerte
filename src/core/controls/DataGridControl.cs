@@ -463,7 +463,7 @@ namespace SehensWerte.Controls
             StatusFilterText.Visible = true;
         }
 
-        public void LoadCsv(string fileName, bool numeric)
+        public void LoadCsv(string fileName, bool numeric = false)
         {
             DataGridBind = new BoundData(fileName, numeric: numeric);
             DataGridBind.ListChanged += GridData_ListChanged;
