@@ -1,5 +1,7 @@
 using Microsoft.VisualBasic;
+using Microsoft.VisualBasic.Logging;
 using SehensWerte.Files;
+using SehensWerte.Maths;
 using System.Collections;
 using System.ComponentModel;
 using System.Data;
@@ -28,6 +30,8 @@ namespace SehensWerte.Controls
         public event DataGridViewCellContextMenuStripNeededEventHandler CellContextMenuStripNeeded = (s, e) => { };
         public DataGridViewCell CurrentCell => Grid.CurrentCell;
         private DataGridView Grid;
+
+        Action<CsvLog.Entry> OnLog;
 
         private StatusStrip StatusStrip;
         private ToolStripStatusLabel StatusFilterText;
@@ -58,8 +62,13 @@ namespace SehensWerte.Controls
 
         public static implicit operator DataGridView(DataGridControl d) => d.Grid;
 
-        public DataGridControl()
+        public DataGridControl() : this((s) => { }) { }
+
+        public DataGridControl(Action<CsvLog.Entry> onLog)
         {
+            OnLog += onLog;
+            OnLog?.Invoke(new CsvLog.Entry("DataGridControl ctor", CsvLog.Priority.Info));
+
             this.Grid = new SehensWerte.Controls.DataGridViewDoubleBuffered();
             this.StatusStrip = new System.Windows.Forms.StatusStrip();
             this.StatusFilterText = new System.Windows.Forms.ToolStripStatusLabel();
@@ -465,7 +474,7 @@ namespace SehensWerte.Controls
 
         public void LoadCsv(string fileName, bool numeric)
         {
-            DataGridBind = new BoundData(fileName, numeric: numeric);
+            DataGridBind = new BoundData(fileName, numeric: numeric, CsvLog.ExtendPath(OnLog, "BoundData"));
             DataGridBind.ListChanged += GridData_ListChanged;
             DataGridBind.Setup(this);
             UpdateStatusStrip();
@@ -473,7 +482,7 @@ namespace SehensWerte.Controls
 
         public void LoadRows(IEnumerable<IEnumerable<string>> rows, IEnumerable<string> colnames)
         {
-            DataGridBind = new BoundData(rows, colnames);
+            DataGridBind = new BoundData(rows, colnames, CsvLog.ExtendPath(OnLog, "BoundData"));
             DataGridBind.ListChanged += GridData_ListChanged;
             DataGridBind.Setup(this);
             UpdateStatusStrip();
@@ -481,7 +490,7 @@ namespace SehensWerte.Controls
 
         public void LoadRows(IEnumerable<IEnumerable<double>> rows, IEnumerable<string> colnames)
         {
-            DataGridBind = new BoundData(rows, colnames);
+            DataGridBind = new BoundData(rows, colnames, CsvLog.ExtendPath(OnLog, "BoundData"));
             DataGridBind.ListChanged += GridData_ListChanged;
             DataGridBind.Setup(this);
             UpdateStatusStrip();
@@ -704,6 +713,9 @@ namespace SehensWerte.Controls
         {
             private DataGridView DataGrid;
 
+            private Action<CsvLog.Entry> OnLog;
+            private CodeProfile Profile = new CodeProfile();
+
             public string CsvFileName { get; private set; }
             public List<BoundDataRow> UnfilteredData;
             public List<BoundDataRow> FilteredData;
@@ -747,8 +759,9 @@ namespace SehensWerte.Controls
             void IBindingList.RemoveIndex(PropertyDescriptor property) { throw new NotImplementedException(); }
             public IEnumerator GetEnumerator() { throw new NotImplementedException(); }
 
-            public BoundData(string csvFileName, bool numeric)
+            public BoundData(string csvFileName, bool numeric, Action<CsvLog.Entry> onLog)
             {
+                OnLog = onLog;
                 CsvFileName = csvFileName;
                 UnfilteredData = new List<BoundDataRow>();
                 int index = 0;
@@ -784,13 +797,15 @@ namespace SehensWerte.Controls
                 ShowAll();
             }
 
-            public BoundData(IEnumerable<IEnumerable<string>> source, IEnumerable<string> columnNames)
+            public BoundData(IEnumerable<IEnumerable<string>> source, IEnumerable<string> columnNames, Action<CsvLog.Entry> onLog)
             {
+                OnLog = onLog;
                 InitializeData(source, columnNames, (index, row) => new BoundDataRowString(index, row.ToArray()));
             }
 
-            public BoundData(IEnumerable<IEnumerable<double>> source, IEnumerable<string> columnNames)
+            public BoundData(IEnumerable<IEnumerable<double>> source, IEnumerable<string> columnNames, Action<CsvLog.Entry> onLog)
             {
+                OnLog = onLog;
                 InitializeData(source, columnNames, (index, row) => new BoundDataRowDouble(index, row.ToArray()));
             }
 
@@ -808,6 +823,7 @@ namespace SehensWerte.Controls
                     UnfilteredData.Add(item);
                     index++;
                 }
+                OnLog?.Invoke(new CsvLog.Entry($"InitializeData {index} rows of {ColumnNames.Count} columns", CsvLog.Priority.Info));
 
                 FilteredData = UnfilteredData; // keep compiler happy, overridden by ShowAll
                 ShowAll();
@@ -852,20 +868,28 @@ namespace SehensWerte.Controls
 
             private void Refilter()
             {
+                Profile.Enter();
                 PushUndo();
-//                FilteredData = UnfilteredData.Where(x => x.Visible).OrderBy(x => x.ResortIndex).ToList();
-                FilteredData = UnfilteredData.Where(x => x.Visible).AsParallel().OrderBy(x => x.ResortIndex).ToList();
+
+                var temp = UnfilteredData.Where(x => x.Visible).ToList();
+                temp.ParallelSort((x, y) => x.ResortIndex.CompareTo(y.ResortIndex));
+                FilteredData = temp;
+
+                OnLog?.Invoke(new CsvLog.Entry(Profile.ToString(), CsvLog.Priority.Debug));
                 ReshowFiltered();
+                Profile.Exit();
             }
 
             private void ReshowFiltered()
             {
+                Profile.Enter();
                 int count = FilteredData.Count;
                 for (int loop = 0; loop < count; loop++)
                 {
                     FilteredData[loop].ResortIndex = loop;
                 }
                 ListChanged?.Invoke(this, new ListChangedEventArgs(ListChangedType.Reset, 0));
+                Profile.Exit();
             }
 
             private void PushUndo()
@@ -1047,45 +1071,47 @@ namespace SehensWerte.Controls
 
             void IBindingList.ApplySort(PropertyDescriptor property, ListSortDirection direction /*ignored*/)
             {
-                if (UnfilteredData.Count == 0) return;
-
-                var prevCursor = Cursor.Current;
-                try
+                Profile.Enter();
+                if (UnfilteredData.Count != 0)
                 {
-                    CurrentSortProperty = property;
-
-                    int colIndex = int.Parse(property.Name.Replace("col", ""));
-                    if (CurrentSortColIndex == colIndex)
+                    var prevCursor = Cursor.Current;
+                    try
                     {
-                        CurrentSortDirection = (CurrentSortDirection == ListSortDirection.Ascending) ? ListSortDirection.Descending : ListSortDirection.Ascending;
+                        CurrentSortProperty = property;
+
+                        int colIndex = int.Parse(property.Name.Replace("col", ""));
+                        if (CurrentSortColIndex == colIndex)
+                        {
+                            CurrentSortDirection = (CurrentSortDirection == ListSortDirection.Ascending) ? ListSortDirection.Descending : ListSortDirection.Ascending;
+                        }
+                        else
+                        {
+                            CurrentSortDirection = ListSortDirection.Ascending;
+                        }
+                        CurrentSortColIndex = colIndex;
+                        Cursor.Current = Cursors.WaitCursor;
+                        PushUndo();
+
+                        var temp = FilteredData?.ToList() ?? new List<BoundDataRow>();
+                        temp.ParallelSort(UnfilteredData[0].GetSortComparer(colIndex, CurrentSortDirection).Compare);
+                        FilteredData = temp;
+
+                        OnLog?.Invoke(new CsvLog.Entry(Profile.ToString(), CsvLog.Priority.Debug));
+
+                        ReshowFiltered();
+
+                        foreach (DataGridViewColumn column in DataGrid.Columns)
+                        {
+                            column.HeaderCell.SortGlyphDirection = SortOrder.None;
+                        }
+                        DataGrid.Columns[colIndex].HeaderCell.SortGlyphDirection = CurrentSortDirection == ListSortDirection.Ascending ? SortOrder.Ascending : SortOrder.Descending;
                     }
-                    else
+                    catch
                     {
-                        CurrentSortDirection = ListSortDirection.Ascending;
                     }
-                    CurrentSortColIndex = colIndex;
-                    Cursor.Current = Cursors.WaitCursor;
-                    PushUndo();
-
-                    FilteredData?.Sort(UnfilteredData[0].GetSortComparer(colIndex, CurrentSortDirection));
-//                    if (FilteredData != null)
-//                    {
-//                        IComparer<BoundDataRow> comparer = UnfilteredData[0].GetSortComparer(colIndex, CurrentSortDirection);
-//                        FilteredData = FilteredData.AsParallel().OrderBy(x => x, comparer).ToList();
-//                    }
-
-                    ReshowFiltered();
-
-                    foreach (DataGridViewColumn column in DataGrid.Columns)
-                    {
-                        column.HeaderCell.SortGlyphDirection = SortOrder.None;
-                    }
-                    DataGrid.Columns[colIndex].HeaderCell.SortGlyphDirection = CurrentSortDirection == ListSortDirection.Ascending ? SortOrder.Ascending : SortOrder.Descending;
+                    Cursor.Current = prevCursor;
                 }
-                catch
-                {
-                }
-                Cursor.Current = prevCursor;
+                Profile.Exit();
             }
 
             void IBindingList.RemoveSort()

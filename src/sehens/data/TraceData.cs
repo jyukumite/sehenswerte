@@ -335,9 +335,9 @@ namespace SehensWerte.Controls.Sehens
             }
             if (exceptions.Count > 1)
             {
-                throw new NestedException(exceptions);
+                throw new AggregateException(exceptions);
             }
-            if (exceptions.Count > 0)
+            if (exceptions.Count == 1)
             {
                 throw exceptions[0];
             }
@@ -374,7 +374,7 @@ namespace SehensWerte.Controls.Sehens
             }
             if (exceptions.Count > 1)
             {
-                throw new NestedException(exceptions);
+                throw new AggregateException(exceptions);
             }
             if (exceptions.Count > 0)
             {
