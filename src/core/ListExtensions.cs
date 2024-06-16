@@ -99,20 +99,20 @@ namespace SehensWerte
                 if (left < right)
                 {
                     int l = left;
-                    int p = (left + right) / 2;
+                    int p = (left + right) / 2; // fixme? for the large partitions, sort a random selection to get a good pivot
                     int r = right;
 
                     if (comparer(sorted[r], sorted[l]) < 0)
                     {
-                        swap(r, l);
+                        swapEntry(r, l);
                     }
                     if (comparer(sorted[p], sorted[l]) < 0)
                     {
-                        swap(p, l);
+                        swapEntry(p, l);
                     }
                     if (comparer(sorted[r], sorted[p]) < 0)
                     {
-                        swap(r, p);
+                        swapEntry(r, p);
                     }
                     var pivot = sorted[p];
                     while (l <= r)
@@ -121,13 +121,13 @@ namespace SehensWerte
                         {
                             l++;
                         }
-                        while (l >= 0 && comparer(sorted[r], pivot) > 0)
+                        while (r >= left && comparer(sorted[r], pivot) > 0)
                         {
                             r--;
                         }
                         if (l <= r)
                         {
-                            swap(l, r);
+                            swapEntry(l, r);
                             l++;
                             r--;
                         }
@@ -143,7 +143,7 @@ namespace SehensWerte
                 }
             }
 
-            void swap(int a, int b)
+            void swapEntry(int a, int b)
             {
                 T temp = sorted[a];
                 sorted[a] = sorted[b];
@@ -183,6 +183,7 @@ namespace SehensWerte
                 list.ParallelSort((x, y) => x.CompareTo(y), maxCores: 1);
                 CollectionAssert.AreEqual(list, expected);
             }
+            //for (int loop=0; loop<10000; loop++)
             {
                 var random = new Random();
                 int count = 5000; // above fallback point
