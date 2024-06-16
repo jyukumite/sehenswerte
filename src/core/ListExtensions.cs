@@ -99,7 +99,7 @@ namespace SehensWerte
                 if (left < right)
                 {
                     int l = left;
-                    int p = (left + right) / 2; // fixme? for the large partitions, sort a random selection to get a good pivot
+                    int p = (left + right) / 2; // fixme? for the first or large partitions, sort a random selection to get a good pivot
                     int r = right;
 
                     if (comparer(sorted[r], sorted[l]) < 0)
@@ -117,7 +117,7 @@ namespace SehensWerte
                     var pivot = sorted[p];
                     while (l <= r)
                     {
-                        while (l < right && comparer(sorted[l], pivot) < 0)
+                        while (l <= right && comparer(sorted[l], pivot) < 0)
                         {
                             l++;
                         }
