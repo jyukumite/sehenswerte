@@ -586,7 +586,7 @@ namespace SehensWerte.Controls.Sehens
             }
         }
 
-        internal (double value, int index) ViewedSampleAtUnixTime(double time)
+        internal (double value, int index, double time) ViewedSampleAtUnixTime(double time)
         {
             lock (DataLock)
             {
@@ -601,6 +601,7 @@ namespace SehensWerte.Controls.Sehens
                     m_ViewedData.CalculateSamplesPerSecond();
                     index = (int)Math.Round((time - m_ViewedData.LeftmostUnixTime) * m_ViewedData.SamplesPerSecond);
                     value = time >= m_ViewedData.LeftmostUnixTime && index < samples.Length ? samples[index] : 0.0;
+                    time = (index * m_ViewedData.SamplesPerSecond) + m_ViewedData.LeftmostUnixTime;
                 }
                 else
                 {
@@ -608,8 +609,9 @@ namespace SehensWerte.Controls.Sehens
                     if (index < 0) index = ~index;
                     if (index > 0) index--;
                     value = samples[index];
+                    time = unixTime[index];
                 }
-                return (value, index);
+                return (value, index, time);
             }
         }
 

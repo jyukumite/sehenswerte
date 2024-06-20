@@ -960,6 +960,7 @@ namespace SehensWerte.Controls.Sehens
         public class MouseInfo
         {
             public double SampleAtX;
+            public double UnixTimeAtX;
             public int IndexAfterTrim;
             public int IndexBeforeTrim;
             public int CountAfterTrim;
@@ -969,6 +970,7 @@ namespace SehensWerte.Controls.Sehens
             public double XRatio;
             public double YValue;
             public double XValue;
+
 
             public MouseInfo ShallowClone() { return (MouseInfo)MemberwiseClone(); }
         }
@@ -1407,8 +1409,8 @@ namespace SehensWerte.Controls.Sehens
                     }
                     else if (CanShowRealYT || CanShowFakeYT)
                     {
-                        (leftSampleNumberValue, leftSampleNumber) = m_Samples.ViewedSampleAtUnixTime(YTClickToUnixTime(0.0));
-                        (rightSampleNumberValue, rightSampleNumber) = m_Samples.ViewedSampleAtUnixTime(YTClickToUnixTime(1.0));
+                        (leftSampleNumberValue, leftSampleNumber, _) = m_Samples.ViewedSampleAtUnixTime(YTClickToUnixTime(0.0));
+                        (rightSampleNumberValue, rightSampleNumber, _) = m_Samples.ViewedSampleAtUnixTime(YTClickToUnixTime(1.0));
                     }
                 }
             }
@@ -1719,7 +1721,8 @@ namespace SehensWerte.Controls.Sehens
 
                 if (traceDivision.YTTrace)
                 {
-                    (result.SampleAtX, result.IndexBeforeTrim) = Samples.ViewedSampleAtUnixTime((double)YTClickToUnixTime(result.XRatio));
+                    var fineUnixTimeAtX = (double)YTClickToUnixTime(result.XRatio);
+                    (result.SampleAtX, result.IndexBeforeTrim, result.UnixTimeAtX) = Samples.ViewedSampleAtUnixTime(fineUnixTimeAtX);
                 }
                 else if (m_DrawnSamples != null && m_DrawnSamples.Length > 0 && result.XRatio >= 0.0 && result.XRatio <= 1.0)
                 {
@@ -1728,11 +1731,13 @@ namespace SehensWerte.Controls.Sehens
                     int index = (int)Math.Floor((double)length * result.XRatio);
                     index = index < 0 ? 0 : ((index >= length) ? (length - 1) : index);
                     result.SampleAtX = m_DrawnSamples[index];
+
                     int offset = (ViewOverrideEnabled ? ViewOffsetOverride : 0);
                     result.IndexAfterTrim = index + ((!rebased) ? m_DrawnStartPosition : 0);
                     result.IndexBeforeTrim = index + ((!rebased) ? (m_DrawnStartPosition + offset) : 0);
                     result.CountAfterTrim = (rebased ? m_DrawnSamples!.Length : m_CalculatedBeforeZoom!.Length);
                     result.CountBeforeTrim = (rebased ? m_DrawnSamples!.Length : m_Samples.ViewedSampleCount);
+                    result.UnixTimeAtX = m_Samples.InputSamplesPerSecond == 0 ? 0 : result.IndexBeforeTrim / m_Samples.InputSamplesPerSecond;
 
                     if (IsFftTrace && m_Fft != null)
                     {
@@ -1752,10 +1757,14 @@ namespace SehensWerte.Controls.Sehens
                     ? $"{value.ToStringRound(5, 3)} of N"
                     : value.ToStringRound(5, 3, "Hz");
             }
+            else if (Samples.ViewedIsYTTrace)
+            {
+                return click.UnixTimeAtX.ToStringRound(3, 3); // use ToHorizontalUnit?
+            }
             else
             {
                 return m_Samples.InputSamplesPerSecond != 0.0
-                    ? ((double)click.IndexBeforeTrim / m_Samples.InputSamplesPerSecond).ToStringRound(5, 3, "s")
+                    ? click.UnixTimeAtX.ToStringRound(5, 3, "s")
                     : m_Samples.InputSamplesPerSecond.ToString();
             }
         }

@@ -601,32 +601,32 @@ namespace SehensWerte.Controls.Sehens
             try
             {
                 TraceView view = views[0];
-                TraceGroupDisplay info0 = TraceToGroupDisplayInfo(view, flags);
+                TraceGroupDisplay viewInfo = TraceToGroupDisplayInfo(view, flags);
 
-                PaintSelection(graphics, info0, views);
-                view.Painter.PaintInitial(graphics, info0);
-                PaintGutters(info0, graphics);
-                PaintHorizontalAxis(graphics, info0);
-                PaintAxesTitles(graphics, info0);
-                PaintVerticalAxis(graphics, info0);
+                PaintSelection(graphics, viewInfo, views);
+                view.Painter.PaintInitial(graphics, viewInfo);
+                PaintGutters(viewInfo, graphics);
+                PaintHorizontalAxis(graphics, viewInfo);
+                PaintAxesTitles(graphics, viewInfo);
+                PaintVerticalAxis(graphics, viewInfo);
                 foreach (TraceView item in views)
                 {
-                    TraceGroupDisplay info = TraceToGroupDisplayInfo(item, flags);
+                    TraceGroupDisplay itemInfo = TraceToGroupDisplayInfo(item, flags);
                     if (Scope.ShowTraceFeatures)
                     {
-                        item.Painter.PaintFeatures(graphics, info,
-                            info.View0.Samples.ViewedFeatures.Where(x => x.Type == TraceFeature.Feature.Highlight));
+                        item.Painter.PaintFeatures(graphics, itemInfo,
+                            itemInfo.View0.Samples.ViewedFeatures.Where(x => x.Type == TraceFeature.Feature.Highlight));
                     }
-                    PaintTraceSamples(graphics, info);
-                    item.Painter.PaintStats(graphics, info);
-                    item.Painter.PaintLabel(graphics, info);
+                    PaintTraceSamples(graphics, itemInfo);
+                    item.Painter.PaintStats(graphics, itemInfo);
+                    item.Painter.PaintLabel(graphics, itemInfo);
                     if (Scope.ShowTraceFeatures)
                     {
-                        item.Painter.PaintFeatures(graphics, info,
-                            info.View0.Samples.ViewedFeatures.Where(x => x.Type != TraceFeature.Feature.Highlight));
+                        item.Painter.PaintFeatures(graphics, itemInfo,
+                            itemInfo.View0.Samples.ViewedFeatures.Where(x => x.Type != TraceFeature.Feature.Highlight));
                     }
-                    item.Painter.PaintEmbeddedControls(graphics, info, Scope.ContextMenu);
-                    if (info.MouseOnEmbed)
+                    item.Painter.PaintEmbeddedControls(graphics, itemInfo, Scope.ContextMenu);
+                    if (itemInfo.MouseOnEmbed)
                     {
                         PaintedTraces.MouseOnEmbed = true;
                     }
