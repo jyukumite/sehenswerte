@@ -3,11 +3,31 @@ using SehensWerte.Utils;
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.Runtime.ExceptionServices;
 
 namespace SehensWerte
 {
     public static class ListExtensions
     {
+        public static T[] GetColumn<T>(this T[,] array, int columnNumber)
+        {
+            // var test_data = new[,]
+            // {
+            //     {'row0 col0', 'row0 col1' },
+            //     {'row1 col0', 'row1 col1' }
+            // };
+            return Enumerable.Range(0, array.GetLength(0))
+                    .Select(x => array[x, columnNumber])
+                    .ToArray();
+        }
+
+        public static T[] GetRow<T>(this T[,] array, int rowNumber)
+        {
+            return Enumerable.Range(0, array.GetLength(1))
+                    .Select(x => array[rowNumber, x])
+                    .ToArray();
+        }
+
         public static void Add<T1, T2>(this IList<Tuple<T1, T2>> list, T1 item1, T2 item2)
         {
             list.Add(Tuple.Create(item1, item2));
@@ -33,7 +53,9 @@ namespace SehensWerte
 
         public static void ParallelSort<T>(this List<T> array, Comparison<T> comparer, int maxCores = 0)
         {
-            int fallbackCount = 200;
+            const int fallbackCount = 200;
+            const int medianSampleSize = 50;
+            const int medianSelectCount = 10000;
             int maxDegreeOfParallelism = maxCores > 0 ? maxCores : Environment.ProcessorCount;
             int taskCount = 0;
             var partitions = new ConcurrentStack<(int left, int right)>();
@@ -99,8 +121,12 @@ namespace SehensWerte
                 if (left < right)
                 {
                     int l = left;
-                    int p = (left + right) / 2; // fixme? for the first or large partitions, sort a random selection to get a good pivot
+                    int p = (left + right) / 2;
                     int r = right;
+                    if ((right - left + 1) >= medianSelectCount)
+                    {
+                        p = medianIndex(left, right);
+                    }
 
                     if (comparer(sorted[r], sorted[l]) < 0)
                     {
@@ -143,6 +169,19 @@ namespace SehensWerte
                 }
             }
 
+            int medianIndex(int left, int right)
+            {
+                int stride = (right - left + 1) / medianSampleSize;
+                (T value, int index)[] temp = new (T value, int index)[medianSampleSize];
+                for (int i = 0; i < medianSampleSize; i++)
+                {
+                    int idx = left + i * stride;
+                    temp[i] = (sorted[idx], idx);
+                }
+                Array.Sort(temp, (x, y) => comparer(x.value, y.value));
+                return temp[medianSampleSize / 2].index;
+            }
+
             void swapEntry(int a, int b)
             {
                 T temp = sorted[a];
@@ -183,7 +222,7 @@ namespace SehensWerte
                 list.ParallelSort((x, y) => x.CompareTo(y), maxCores: 1);
                 CollectionAssert.AreEqual(list, expected);
             }
-            //for (int loop=0; loop<10000; loop++)
+            //for (int loop = 0; loop < 10000; loop++)
             {
                 var random = new Random();
                 int count = 5000; // above fallback point
