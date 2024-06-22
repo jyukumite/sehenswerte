@@ -9,6 +9,16 @@ namespace SehensWerte
 {
     public static class ListExtensions
     {
+        public static T[] Dequeue<T>(this Queue<T> queue, int count)
+        {
+            T[] result = new T[count];
+            for (int i = 0; i < count; i++)
+            {
+                result[i] = queue.Dequeue();
+            }
+            return result;
+        }
+
         public static T[] GetColumn<T>(this T[,] array, int columnNumber)
         {
             // var test_data = new[,]
