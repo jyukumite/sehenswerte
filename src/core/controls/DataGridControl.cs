@@ -567,6 +567,14 @@ namespace SehensWerte.Controls
             DataGridBind?.HideRowsNotMatching(columnName, new string[] { value });
         }
 
+        public void ApplyColumnColour(string v, Color color)
+        {
+            if (Grid.Columns.Contains(v))
+            {
+                Grid.Columns[v].DefaultCellStyle.BackColor = color;
+            }
+        }
+
         public abstract class BoundDataRow
         {
             public bool Visible = true;
