@@ -263,6 +263,7 @@ namespace SehensWerte
 
             time(() => { var list = shuffled.ToArray(); return list.OrderBy(x => x.a).ToList(); }, expected, "list.Orderby");
             time(() => { return shuffled.AsParallel().OrderBy(x => x.a).ToList(); }, expected, "AsParallel.OrderBy"); // this deadlocks in some cases with 100% CPU (34M row dataset)
+
             time(() => { var copy = shuffled.ToList(); copy.ParallelSort((x, y) => x.a.CompareTo(y.a)); return copy; }, expected, "List.ParallelSort");
             time(() => { var copy = shuffled.ToArray(); Array.Sort(copy, (x, y) => x.a.CompareTo(y.a)); return copy.ToList(); }, expected, "Array.Sort");
 

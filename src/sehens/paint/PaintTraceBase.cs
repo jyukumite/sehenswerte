@@ -419,6 +419,10 @@ namespace SehensWerte.Controls.Sehens
                         using (Brush brush = new SolidBrush(feature.Colour ?? info.Skin.HoverLabelColour))
                         {
                             Rectangle rect = Rectangle.Intersect(info.ProjectionArea, new Rectangle((int)xLeft, info.ProjectionArea.Top, (int)(xRight - xLeft), info.ProjectionArea.Height));
+                            if (rect.Right <= rect.Left)
+                            {
+                                rect = new Rectangle(rect.X, rect.Y, 1, rect.Height);
+                            }
                             graphics.FillRectangle(brush, rect);
                             break;
                         }

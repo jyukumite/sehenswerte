@@ -8,7 +8,7 @@ namespace SehensWerte.Controls.Sehens
             Highlight, LeftHandle, RightHandle, TriggerHandle,
         }
 
-        public Feature Type;
+        public Feature Type = Feature.Text;
         public int SampleNumber;
         public int RightSampleNumber;
         public double UnixTime;

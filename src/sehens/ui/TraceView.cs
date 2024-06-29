@@ -49,7 +49,7 @@ namespace SehensWerte.Controls.Sehens
         [AutoEditor.Hidden]
         internal double[]? CalculatedBeforeZoom { get { lock (m_Samples.DataLock) { return m_CalculatedBeforeZoom; } } }
         [AutoEditor.Hidden]
-        public double[]? DrawnSamples { get { lock (m_Samples.DataLock) { return m_DrawnSamples; } } }
+        public double[]? DrawnSamples { get { lock (m_Samples.DataLock) { return m_DrawnSamples; } } } //fixme: calculate if not on screen (see DrawnSamplesYT?)
         [AutoEditor.Hidden]
         public SnapshotYT? DrawnSamplesYT
         {
