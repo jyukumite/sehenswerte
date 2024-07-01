@@ -24,16 +24,13 @@ namespace SehensWerte.Controls
 
         private HScrollBar HorizontalScrollZoomBar;
         private HScrollBar HorizontalScrollPanBar;
-        private SplitContainer PaintBoxScrollBarContainer;
+        private System.Windows.Forms.SplitContainer PaintBoxScrollBarContainer;
         private Panel PanelLeft;
         internal SehensPaintBox PaintBox;
         internal VScrollBar VerticalScrollBar;
-        private SplitContainer LeftRightSplit;
+        private SehensWerte.Controls.SplitContainer LeftRightSplit;
         private TraceListControl TraceListView;
         private ToolTip m_ToolTip;
-
-        private bool m_SplitterHold;
-        private bool m_SplitterWasVisible;
 
         internal bool m_HoldZoomPan;
         internal double m_ZoomBarValue;
@@ -233,26 +230,8 @@ namespace SehensWerte.Controls
         [XmlSave]
         public bool TraceListVisible
         {
-            get => !LeftRightSplit.Panel1Collapsed;
-            set
-            {
-                if (value)
-                {
-                    LeftRightSplit.Panel1Collapsed = false;
-                    LeftRightSplit.IsSplitterFixed = false;
-                    LeftRightSplit.Panel1.Show();
-                    LeftRightSplit.Panel1MinSize = 0;
-                    LeftRightSplit.SplitterDistance = 150;
-                }
-                else
-                {
-                    LeftRightSplit.Panel1Collapsed = true;
-                    LeftRightSplit.IsSplitterFixed = true;
-                    LeftRightSplit.Panel1.Hide();
-                    LeftRightSplit.Panel1MinSize = 0;
-                    LeftRightSplit.SplitterDistance = 150;
-                }
-            }
+            get => LeftRightSplit.Collapsed;
+            set => LeftRightSplit.Collapsed = value;
         }
 
         internal void SetVerticalZoom(int anchorDivision, double ratio)
@@ -299,27 +278,17 @@ namespace SehensWerte.Controls
             base.Size = new Size(800, 450);
             base.AutoScaleDimensions = new SizeF(6f, 13f);
             base.AutoScaleMode = AutoScaleMode.Font;
-            LeftRightSplit = new SplitContainer();
+            LeftRightSplit = new SehensWerte.Controls.SplitContainer();
             PanelLeft = new Panel();
 
             TraceListView = new TraceListControl(this, CsvLog.ExtendPath((a) => OnLog?.Invoke(a), "TraceListView"));
-            LeftRightSplit.Panel1MinSize = 0;
+            LeftRightSplit.CollapsingPanel = SplitContainer.ControlledPanel.Panel1;
             LeftRightSplit.FixedPanel = FixedPanel.Panel1;
-            LeftRightSplit.SplitterMoved += (o, e) =>
-            {
-                int distance = LeftRightSplit.SplitterDistance;
-                if (distance > 20 && distance < 150 && !m_SplitterHold)
-                {
-                    m_SplitterHold = true;
-                    TraceListVisible = distance >= 150 && !m_SplitterWasVisible;
-                    m_SplitterHold = false;
-                }
-                m_SplitterWasVisible = TraceListVisible;
-            };
-            LeftRightSplit.SplitterDistance = LeftRightSplit.Width;
+            LeftRightSplit.SplitterWidth = 10;
+            LeftRightSplit.Panel1MinSize = 100;
             base.Location = new Point(0, 0);
 
-            PaintBoxScrollBarContainer = new SplitContainer();
+            PaintBoxScrollBarContainer = new System.Windows.Forms.SplitContainer();
             HorizontalScrollPanBar = new HScrollBar();
             HorizontalScrollZoomBar = new HScrollBar();
             VerticalScrollBar = new VScrollBar();
@@ -411,7 +380,6 @@ namespace SehensWerte.Controls
             LeftRightSplit.Dock = DockStyle.Fill;
             PanelLeft.Dock = DockStyle.Fill;
             TraceListView.Dock = DockStyle.Fill;
-            LeftRightSplit.SplitterDistance = 100;
             Dock = DockStyle.None;
             ResumeLayout(performLayout: false);
             ReprocessMathAfterZoom();

@@ -80,7 +80,7 @@ namespace SehensWerte.Controls
 
         public DataGridControl() : this((s) => { }) { }
 
-        public DataGridControl(Action<CsvLog.Entry> onLog)
+        public DataGridControl(Action<CsvLog.Entry> onLog, bool prettyColours = false)
         {
             OnLog += onLog;
             OnLog?.Invoke(new CsvLog.Entry("DataGridControl ctor", CsvLog.Priority.Info));
@@ -162,119 +162,102 @@ namespace SehensWerte.Controls
             this.StatusStrip.SizingGrip = false;
             this.StatusStrip.TabIndex = 13;
             this.StatusStrip.Text = "WindowStatusStrip";
-            // 
-            // StatusFilterText
-            // 
+
             this.StatusFilterText.Name = "StatusFilterText";
             this.StatusFilterText.Size = new System.Drawing.Size(94, 32);
             this.StatusFilterText.Text = "Filtered";
-            // 
-            // ShowAllStatus
-            // 
+
             this.ShowAllStatus.Name = "ShowAllStatus";
             this.ShowAllStatus.ShowDropDownArrow = false;
             this.ShowAllStatus.Size = new System.Drawing.Size(110, 38);
             this.ShowAllStatus.Text = "&Show All";
             this.ShowAllStatus.Click += new System.EventHandler(this.ShowAllStatus_Click);
-            // 
-            // UndoFilterStatus
-            // 
+            this.ShowAllStatus.BackColor = prettyColours ? Color.FromArgb(216, 208, 242) : SystemColors.Control;
+
             this.UndoFilterStatus.Name = "UndoFilterStatus";
             this.UndoFilterStatus.ShowDropDownArrow = false;
             this.UndoFilterStatus.Size = new System.Drawing.Size(76, 38);
             this.UndoFilterStatus.Text = "Undo";
             this.UndoFilterStatus.Click += new System.EventHandler(this.UndoFilterStatus_Click);
-            // 
-            // HideSelectedStatus
-            // 
+            this.UndoFilterStatus.BackColor = prettyColours ? Color.FromArgb(216, 208, 242) : SystemColors.Control;
+
             this.HideSelectedStatus.Name = "HideSelectedStatus";
             this.HideSelectedStatus.ShowDropDownArrow = false;
             this.HideSelectedStatus.Size = new System.Drawing.Size(166, 38);
             this.HideSelectedStatus.Text = "&Hide Selected";
             this.HideSelectedStatus.Click += new System.EventHandler(this.HideSelectedStatus_Click);
-            // 
-            // HideUnselectedStatus
-            // 
+            this.HideSelectedStatus.BackColor = prettyColours ? Color.FromArgb(216, 242, 178) : SystemColors.Control;
+
             this.HideUnselectedStatus.Name = "HideUnselectedStatus";
             this.HideUnselectedStatus.ShowDropDownArrow = false;
             this.HideUnselectedStatus.Size = new System.Drawing.Size(193, 38);
             this.HideUnselectedStatus.Text = "Hide &Unselected";
             this.HideUnselectedStatus.Click += new System.EventHandler(this.HideUnselectedStatus_Click);
-            // 
-            // HideAboveStatus
-            // 
+            this.HideUnselectedStatus.BackColor = prettyColours ? Color.FromArgb(216, 242, 178) : SystemColors.Control;
+
             this.HideAboveStatus.Name = "HideAboveStatus";
             this.HideAboveStatus.ShowDropDownArrow = false;
             this.HideAboveStatus.Size = new System.Drawing.Size(143, 38);
             this.HideAboveStatus.Text = "Hide &Above";
             this.HideAboveStatus.Click += new System.EventHandler(this.HideAboveStatus_Click);
-            // 
-            // HideBelowStatus
-            // 
+            this.HideAboveStatus.BackColor = prettyColours ? Color.FromArgb(178, 242, 216) : SystemColors.Control;
+
             this.HideBelowStatus.Name = "HideBelowStatus";
             this.HideBelowStatus.ShowDropDownArrow = false;
             this.HideBelowStatus.Size = new System.Drawing.Size(139, 38);
             this.HideBelowStatus.Text = "Hide &Below";
             this.HideBelowStatus.Click += new System.EventHandler(this.HideBelowStatus_Click);
-            // 
-            // HideByRegexStatus
-            // 
+            this.HideBelowStatus.BackColor = prettyColours ? Color.FromArgb(178, 242, 216) : SystemColors.Control;
+
             this.HideByRegexStatus.Name = "HideByRegexStatus";
             this.HideByRegexStatus.ShowDropDownArrow = false;
             this.HideByRegexStatus.Size = new System.Drawing.Size(139, 38);
             this.HideByRegexStatus.Text = "Regex Hide";
             this.HideByRegexStatus.Click += new System.EventHandler(this.HideByRegexStatus_Click);
-            // 
-            // ShowByRegexStatus
-            // 
+            this.HideByRegexStatus.BackColor = prettyColours ? Color.FromArgb(242, 232, 178) : SystemColors.Control;
+
             this.ShowByRegexStatus.Name = "ShowByRegexStatus";
             this.ShowByRegexStatus.ShowDropDownArrow = false;
             this.ShowByRegexStatus.Size = new System.Drawing.Size(147, 38);
             this.ShowByRegexStatus.Text = "Regex Show";
             this.ShowByRegexStatus.Click += new System.EventHandler(this.ShowByRegexStatus_Click);
-            // 
-            // HideMatchCellStatus
-            // 
+            this.ShowByRegexStatus.BackColor = prettyColours ? Color.FromArgb(242, 232, 178) : SystemColors.Control;
+
             this.HideMatchCellStatus.Name = "HideMatchCellStatus";
             this.HideMatchCellStatus.ShowDropDownArrow = false;
             this.HideMatchCellStatus.Size = new System.Drawing.Size(142, 38);
             this.HideMatchCellStatus.Text = "Hide Match";
             this.HideMatchCellStatus.Click += new System.EventHandler(this.HideMatchCellStatus_Click);
-            // 
-            // HideUnmatchCellStatus
-            // 
+            this.HideMatchCellStatus.BackColor = prettyColours ? Color.FromArgb(242, 216, 178) : SystemColors.Control;
+
             this.HideUnmatchCellStatus.Name = "HideUnmatchCellStatus";
             this.HideUnmatchCellStatus.ShowDropDownArrow = false;
             this.HideUnmatchCellStatus.Size = new System.Drawing.Size(171, 38);
             this.HideUnmatchCellStatus.Text = "Hide Unmatch";
             this.HideUnmatchCellStatus.Click += new System.EventHandler(this.HideUnmatchCellStatus_Click);
-            // 
-            // UniqueCellStatus
-            // 
+            this.HideUnmatchCellStatus.BackColor = prettyColours ? Color.FromArgb(242, 216, 178) : SystemColors.Control;
+
             this.UniqueCellStatus.Name = "UniqueCellStatus";
             this.UniqueCellStatus.ShowDropDownArrow = false;
             this.UniqueCellStatus.Size = new System.Drawing.Size(171, 38);
             this.UniqueCellStatus.Text = "Unique";
             this.UniqueCellStatus.Click += new System.EventHandler(this.UniqueCellStatus_Click);
-            // 
-            // SaveCsv
-            // 
+            this.UniqueCellStatus.BackColor = prettyColours ? Color.FromArgb(242, 196, 208) : SystemColors.Control;
+
             this.SaveCsvButton.Name = "SaveCsv";
             this.SaveCsvButton.ShowDropDownArrow = false;
             this.SaveCsvButton.Size = new System.Drawing.Size(171, 38);
             this.SaveCsvButton.Text = "Save";
             this.SaveCsvButton.Click += new System.EventHandler(this.SaveCsv_Click);
-            // 
-            // LoadCsv
-            // 
+            this.SaveCsvButton.BackColor = prettyColours ? Color.FromArgb(218, 216, 232) : SystemColors.Control;
+
             this.LoadCsvButton.Name = "LoadCsv";
             this.LoadCsvButton.ShowDropDownArrow = false;
             this.LoadCsvButton.Size = new System.Drawing.Size(171, 38);
             this.LoadCsvButton.Text = "Load";
             this.LoadCsvButton.Click += new System.EventHandler(this.LoadCsv_Click);
-            // 
-            // CloudDataQueryTab
-            // 
+            this.LoadCsvButton.BackColor = prettyColours ? Color.FromArgb(218, 216, 232) : SystemColors.Control;
+
             this.AutoScaleDimensions = new System.Drawing.SizeF(13F, 32F);
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
             this.Controls.Add(this.Grid);
@@ -707,6 +690,7 @@ namespace SehensWerte.Controls
 
             public BoundDataRowString(int index, string[] sourceRow) : base(index)
             {
+                ResortIndex = index;
                 Index = index;
                 Data = sourceRow;
             }

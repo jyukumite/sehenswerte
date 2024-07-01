@@ -32,7 +32,7 @@ namespace SehensWerte
         private void InitializeComponent()
         {
             this.Log = new SehensWerte.Controls.LogControl();
-            this.Split = new System.Windows.Forms.SplitContainer();
+            this.Split = new SehensWerte.Controls.SplitContainer();
             this.Scope = new SehensWerte.Controls.SehensControl();
             this.label12 = new System.Windows.Forms.Label();
             this.ToneWaveform = new System.Windows.Forms.ComboBox();
@@ -83,6 +83,7 @@ namespace SehensWerte
             // Split
             // 
             this.Split.Dock = System.Windows.Forms.DockStyle.Fill;
+            this.Split.CollapsingPanel = SehensWerte.Controls.SplitContainer.ControlledPanel.Panel1;
             this.Split.Location = new System.Drawing.Point(0, 0);
             this.Split.Name = "Split";
             // 
@@ -360,7 +361,7 @@ namespace SehensWerte
         #endregion
 
         private LogControl Log;
-        private SplitContainer Split;
+        private SehensWerte.Controls.SplitContainer Split;
         private SehensControl Scope;
         private Label label6;
         private TextBox TonePan;
