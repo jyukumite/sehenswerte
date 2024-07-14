@@ -561,6 +561,11 @@ namespace SehensWerte.Controls
             return DataGridBind?.GetSelectedRowsOfColumn(header, this) ?? new string[] { };
         }
 
+        public Dictionary<string,string>? GetSelectedRow()
+        {
+            return DataGridBind?.GetSelectedRow(this);
+        }
+
         public string[] GetColumn(string header)
         {
             return DataGridBind?.GetColumn(header) ?? new string[] { };
@@ -989,11 +994,26 @@ namespace SehensWerte.Controls
                     : RowsWithSelection(dataGrid).Select(x => IndexToRow[x].Column(colIndex)).ToArray();
             }
 
-
             public string[]? GetColumn(string v)
             {
                 int colIndex = ColumnNames.IndexOf(v);
                 return colIndex == -1 ? null : FilteredData.Select(x => x.Column(colIndex)).ToArray();
+            }
+
+            public Dictionary<string, string>? GetSelectedRow(DataGridView dataGrid)
+            {
+                int row = RowsWithSelection(dataGrid).FirstOrDefault();
+                if (row != -1)
+                {
+                    string[] rowData = IndexToRow[row].Strings;
+                    return (Dictionary<string, string>?)ColumnNames
+                        .Select((columnName, index) => new { columnName, value = index < rowData.Length ? rowData[index] : string.Empty })
+                        .ToDictionary(item => item.columnName, item => item.value);
+                }
+                else
+                {
+                    return new Dictionary<string, string>();
+                }
             }
 
             public double[]? GetColumnDouble(string v)
