@@ -82,6 +82,7 @@ namespace SehensWerte.Controls
 
             EditResult.Location = new System.Drawing.Point(8, LabelText.Bottom + 16);
             EditResult.Multiline = MultiLine;
+            EditResult.MaxLength = 0;
             EditResult.Size = new System.Drawing.Size(ClientSize.Width - 16, MultiLine ? 200 : 20);
             EditResult.TabIndex = 1;
             EditResult.ScrollBars = MultiLine ? ScrollBars.Vertical : ScrollBars.None;
