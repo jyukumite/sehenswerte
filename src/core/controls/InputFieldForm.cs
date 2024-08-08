@@ -33,6 +33,7 @@ namespace SehensWerte.Controls
         {
             ButtonOK = new Button();
             EditResult = new TextBox();
+            EditResult.MaxLength = 0;
             LabelText = new Label();
             ButtonCancel = new Button();
             SuspendLayout();
