@@ -63,6 +63,17 @@ namespace SehensWerte.Controls
             PerformLayout();
         }
 
+        private class ValueList
+        {
+            // invoke the internal ValueList editor
+            public List<AutoEditor.ValueListEntry> Values = null; 
+        }
+
+        public static bool Show(string prompt, string title, List<AutoEditor.ValueListEntry> values)
+        {
+            return Show(prompt, title, new ValueList() { Values = values });
+        }
+
         public static bool Show(string prompt, string title, object sourceData)
         {
             return new AutoEditorForm().ShowDialog(prompt, title, sourceData);

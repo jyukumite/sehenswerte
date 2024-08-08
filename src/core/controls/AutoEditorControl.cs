@@ -7,7 +7,7 @@ namespace SehensWerte.Controls
         private object? SourceData;
         private AutoEditor? m_Editor;
         public Action<AutoEditor>? OnChange;
-        private Dictionary<string, object> m_StartValues = new Dictionary<string, object>();
+        private Dictionary<AutoEditor.EditRow, object> m_StartValues = new Dictionary<AutoEditor.EditRow, object>();
         internal TableLayoutPanel? LayoutPanel;
 
         public AutoEditorControl()
@@ -70,179 +70,196 @@ namespace SehensWerte.Controls
             LayoutPanel.SuspendLayout();
             LayoutPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 35f));
             LayoutPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 65f));
-            List<KeyValuePair<string, int>> order = new List<KeyValuePair<string, int>>();
+
             List<string> names = new List<string>();
             if (SourceData != null)
             {
+                var rows = new List<AutoEditor.EditRow>();
                 foreach (MemberInfo memberInfo in SourceData.GetType().GetMembers())
                 {
-                    order.Add(new KeyValuePair<string, int>(memberInfo.Name, AutoEditor.DisplayOrder(memberInfo)));
-                }
-                order.Sort(delegate (KeyValuePair<string, int> a, KeyValuePair<string, int> b)
-                {
-                    return a.Value < b.Value ? -1
-                            : (a.Value > b.Value ? 1
-                            : a.Key.CompareTo(b.Key));
-                });
-                foreach (KeyValuePair<string, int> item in order)
-                {
-                    MemberInfo memberInfo = SourceData!.GetType().GetMember(item.Key)[0];
-                    if (memberInfo is FieldInfo)
+                    if ((memberInfo as FieldInfo)?.FieldType == typeof(List<AutoEditor.ValueListEntry>))
                     {
-                        GenerateControl(LayoutPanel, memberInfo, ((FieldInfo)memberInfo).FieldType);
-                        names.Add(memberInfo.Name);
+                        var va = ((FieldInfo)memberInfo).GetValue(SourceData) as List<AutoEditor.ValueListEntry>;
+                        if (va != null)
+                        {
+                            for (int loop = 0; loop < va.Count; loop++)
+                            {
+                                rows.Add(new AutoEditor.EditRow()
+                                {
+                                    MemberInfo = memberInfo,
+                                    DisplayText = va[loop].Name,
+                                    Type = typeof(string),
+                                    ObjectIndex = loop,
+                                    DisplayOrder = va[loop].Order,
+                                });
+                            }
+                        }
                     }
-                    else if (memberInfo is PropertyInfo)
+                    else if (memberInfo is FieldInfo || memberInfo is PropertyInfo)
                     {
-                        GenerateControl(LayoutPanel, memberInfo, ((PropertyInfo)memberInfo).PropertyType);
-                        names.Add(memberInfo.Name);
+                        rows.Add(new AutoEditor.EditRow()
+                        {
+                            MemberInfo = memberInfo,
+                            DisplayText = AutoEditor.DisplayName(memberInfo),
+                            Type = memberInfo is FieldInfo ? ((FieldInfo)memberInfo).FieldType : ((PropertyInfo)memberInfo).PropertyType,
+                            ObjectIndex = null,
+                            DisplayOrder = AutoEditor.DisplayOrder(memberInfo),
+
+                        });
                     }
                 }
-            }
-            Panel panel = new Panel
-            {
-                AutoSize = true
-            };
-            LayoutPanel.Controls.Add(panel, 1, ++LayoutPanel.RowCount);
-            LayoutPanel.Controls.Add(panel, 0, LayoutPanel.RowCount);
-            LayoutPanel.ResumeLayout();
-            Controls.Add(LayoutPanel);
-            if (SourceData != null)
-            {
-                m_StartValues = AutoEditor.GetValueList(SourceData, names);
+
+                rows.OrderBy(x => x.DisplayOrder).ThenBy(x => x.DisplayText).ForEach(v => GenerateControl(LayoutPanel, v));
+
+                Panel panel = new Panel
+                {
+                    AutoSize = true
+                };
+                LayoutPanel.Controls.Add(panel, 1, ++LayoutPanel.RowCount);
+                LayoutPanel.Controls.Add(panel, 0, LayoutPanel.RowCount);
+                LayoutPanel.ResumeLayout();
+                Controls.Add(LayoutPanel);
+                if (SourceData != null)
+                {
+                    m_StartValues = AutoEditor.GetValueList(SourceData, rows);
+                }
             }
         }
 
-        private static void GenerateControl(TableLayoutPanel tableLayout, MemberInfo member, Type type)
+        private static void GenerateControl(TableLayoutPanel tableLayout, AutoEditor.EditRow row)
         {
-            if (AutoEditor.IsHidden(member) || type == typeof(Delegate) || (member is FieldInfo && (((FieldInfo)member).IsLiteral || ((FieldInfo)member).IsInitOnly)))
+            if (AutoEditor.IsHidden(row.MemberInfo)
+                || row.Type == typeof(Delegate)
+                || (row.MemberInfo is FieldInfo && (((FieldInfo)row.MemberInfo).IsLiteral
+                || ((FieldInfo)row.MemberInfo).IsInitOnly)))
             {
                 return;
             }
+
             Label control = new Label
             {
-                Text = AutoEditor.DisplayName(member),
+                Text = row.DisplayText,
                 Dock = DockStyle.Fill,
                 TextAlign = (ContentAlignment)16
             };
             try
             {
-                if (AutoEditor.IsSubEditor(member))
+                if (AutoEditor.IsSubEditor(row.MemberInfo))
                 {
                     Button control2 = new Button
                     {
                         Dock = DockStyle.Fill,
                         AutoSize = true,
-                        Name = member.Name,
-                        Text = (AutoEditor.PushButtonCaption(member) ?? "...")
+                        Tag = row,
+                        Text = (AutoEditor.PushButtonCaption(row.MemberInfo) ?? "...")
                     };
                     tableLayout.Controls.Add(control, 0, ++tableLayout.RowCount);
                     tableLayout.Controls.Add(control2, 1, tableLayout.RowCount);
                 }
-                else if (AutoEditor.Values(member) != null)
+                else if (AutoEditor.Values(row.MemberInfo) != null)
                 {
                     ComboBox comboBox = new ComboBox
                     {
                         AutoSize = true,
-                        Name = member.Name,
+                        Tag = row,
                         Dock = DockStyle.Fill,
                         DropDownStyle = ComboBoxStyle.DropDownList
                     };
                     tableLayout.Controls.Add(control, 0, ++tableLayout.RowCount);
                     tableLayout.Controls.Add(comboBox, 1, tableLayout.RowCount);
                     ComboBox.ObjectCollection items = comboBox.Items;
-                    object[]? items2 = AutoEditor.Values(member);
+                    object[]? items2 = AutoEditor.Values(row.MemberInfo);
                     items.AddRange(items2 ?? new object[0]);
-                    comboBox.Enabled = AutoEditor.IsEnabled(member);
+                    comboBox.Enabled = AutoEditor.IsEnabled(row.MemberInfo);
                 }
-                else if (type == typeof(byte) 
-                    || type == typeof(int) 
-                    || type == typeof(long) 
-                    || type == typeof(ulong) 
-                    || type == typeof(uint) 
-                    || type == typeof(short) 
-                    || type == typeof(ushort) 
-                    || type == typeof(string) 
-                    || type == typeof(float) 
-                    || type == typeof(double))
+                else if (row.Type == typeof(byte)
+                    || row.Type == typeof(int)
+                    || row.Type == typeof(long)
+                    || row.Type == typeof(ulong)
+                    || row.Type == typeof(uint)
+                    || row.Type == typeof(short)
+                    || row.Type == typeof(ushort)
+                    || row.Type == typeof(string)
+                    || row.Type == typeof(float)
+                    || row.Type == typeof(double))
                 {
                     TextBox textBox = new TextBox
                     {
                         Dock = DockStyle.Fill,
                         AutoSize = true,
-                        Name = member.Name
+                        Tag = row,
                     };
                     tableLayout.Controls.Add(control, 0, ++tableLayout.RowCount);
                     tableLayout.Controls.Add(textBox, 1, tableLayout.RowCount);
-                    textBox.Enabled = AutoEditor.IsEnabled(member);
+                    textBox.Enabled = AutoEditor.IsEnabled(row.MemberInfo);
                 }
-                else if (type.IsSubclassOf(typeof(Delegate)) && AutoEditor.IsPushButton(member))
+                else if (row.Type.IsSubclassOf(typeof(Delegate)) && AutoEditor.IsPushButton(row.MemberInfo))
                 {
                     Button button = new Button
                     {
                         AutoSize = true,
-                        Name = member.Name,
+                        Tag = row,
                         Dock = DockStyle.Fill,
-                        Text = AutoEditor.PushButtonCaption(member)
+                        Text = AutoEditor.PushButtonCaption(row.MemberInfo)
                     };
                     tableLayout.Controls.Add(control, 0, ++tableLayout.RowCount);
                     tableLayout.Controls.Add(button, 1, tableLayout.RowCount);
-                    button.Enabled = AutoEditor.IsEnabled(member);
+                    button.Enabled = AutoEditor.IsEnabled(row.MemberInfo);
                 }
-                else if (type == typeof(bool) && AutoEditor.IsPushButton(member))
+                else if ((Type?)row.Type == typeof(bool) && AutoEditor.IsPushButton(row.MemberInfo))
                 {
                     Button button = new Button
                     {
                         AutoSize = true,
-                        Name = member.Name,
+                        Tag = row,
                         Dock = DockStyle.Fill,
-                        Text = AutoEditor.PushButtonCaption(member)
+                        Text = AutoEditor.PushButtonCaption(row.MemberInfo)
                     };
                     tableLayout.Controls.Add(control, 0, ++tableLayout.RowCount);
                     tableLayout.Controls.Add(button, 1, tableLayout.RowCount);
-                    button.Enabled = AutoEditor.IsEnabled(member);
+                    button.Enabled = AutoEditor.IsEnabled(row.MemberInfo);
                 }
-                else if (type == typeof(bool))
+                else if ((Type?)row.Type == typeof(bool))
                 {
                     CheckBox checkBox = new CheckBox
                     {
                         AutoSize = true,
-                        Name = member.Name,
+                        Tag = row,
                         Dock = DockStyle.Left,
                         CheckAlign = (ContentAlignment)1
                     };
                     tableLayout.Controls.Add(control, 0, ++tableLayout.RowCount);
                     tableLayout.Controls.Add(checkBox, 1, tableLayout.RowCount);
-                    checkBox.Enabled = AutoEditor.IsEnabled(member);
+                    checkBox.Enabled = AutoEditor.IsEnabled(row.MemberInfo);
                 }
-                else if (type.BaseType == typeof(Enum))
+                else if (row.Type.BaseType == typeof(Enum))
                 {
                     ComboBox comboBox = new ComboBox
                     {
                         AutoSize = true,
-                        Name = member.Name,
+                        Tag = row,
                         Dock = DockStyle.Fill,
                         DropDownStyle = ComboBoxStyle.DropDownList
                     };
                     tableLayout.Controls.Add(control, 0, ++tableLayout.RowCount);
                     tableLayout.Controls.Add(comboBox, 1, tableLayout.RowCount);
-                    comboBox.Enabled = AutoEditor.IsEnabled(member);
+                    comboBox.Enabled = AutoEditor.IsEnabled(row.MemberInfo);
                 }
-                else if (!(member.DeclaringType?.Name == typeof(AutoEditorBase).Name))
+                else if (!(row.MemberInfo.DeclaringType?.Name == typeof(AutoEditorBase).Name))
                 {
-                    if (!(type == typeof(Color)))
+                    if (!(row.Type == typeof(Color)))
                     {
-                        throw new Exception("Unknown field/property type " + member.Name + " " + type.Name);
+                        throw new Exception($"Unknown field/property type {row.DisplayText} {row.MemberInfo.Name} {row.Type.Name}");
                     }
                     Panel panel = new Panel
                     {
                         AutoSize = true,
-                        Name = member.Name,
+                        Tag = row,
                         Dock = DockStyle.Fill
                     };
                     tableLayout.Controls.Add(control, 0, ++tableLayout.RowCount);
                     tableLayout.Controls.Add(panel, 1, tableLayout.RowCount);
-                    panel.Enabled = AutoEditor.IsEnabled(member);
+                    panel.Enabled = AutoEditor.IsEnabled(row.MemberInfo);
                 }
             }
             catch (Exception ex)
@@ -251,7 +268,7 @@ namespace SehensWerte.Controls
                 {
                     Dock = DockStyle.Fill,
                     AutoSize = true,
-                    Name = member.Name,
+                    Tag = row,
                     ReadOnly = true
                 };
                 ToolTip toolTip = new ToolTip();
