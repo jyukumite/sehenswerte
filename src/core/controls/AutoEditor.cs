@@ -317,7 +317,8 @@ namespace SehensWerte.Controls
             }
             else if (control is Button && value != null)
             {
-                object[]? array = SourceData.GetType().GetMember(control.Name)[0].GetCustomAttributes(typeof(AutoEditor.SubEditorAttribute), inherit: false);
+                object[]? array = ((EditRow)control.Tag)?.MemberInfo
+                    .GetCustomAttributes(typeof(AutoEditor.SubEditorAttribute), inherit: false);
                 if (array != null && array.Length != 0)
                 {
                     // sub editor
@@ -327,7 +328,7 @@ namespace SehensWerte.Controls
                     {
                         autoEditorForm.Visible = false;
                     }
-                    new AutoEditorForm().ShowDialog(control.Text, control.Name, value);
+                    new AutoEditorForm().ShowDialog(control.Text, ((EditRow)control.Tag).DisplayText, value);
                     if (closeOnClick)
                     {
                         autoEditorForm?.ButtonOK_Click(autoEditorForm, new EventArgs());
