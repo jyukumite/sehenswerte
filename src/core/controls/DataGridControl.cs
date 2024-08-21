@@ -10,6 +10,7 @@ using System.Data.Common;
 using System.Globalization;
 using System.Text.RegularExpressions;
 using System.Threading;
+using System.Windows.Forms;
 using static System.Windows.Forms.VisualStyles.VisualStyleElement;
 
 namespace SehensWerte.Controls
@@ -132,6 +133,7 @@ namespace SehensWerte.Controls
             this.Grid.CellContextMenuStripNeeded += (s, e) => CellContextMenuStripNeeded.Invoke(s, e);
             this.Grid.CellMouseEnter += Grid_CellMouseEnter;
             this.Grid.CellMouseLeave += Grid_CellMouseLeave;
+            this.Grid.CellToolTipTextNeeded += Grid_CellToolTipTextNeeded;
 
             this.HoverTimer = new System.Windows.Forms.Timer();
             this.HoverTimer.Interval = 500; // 0.5 second delay for preparation
@@ -268,6 +270,33 @@ namespace SehensWerte.Controls
             this.StatusStrip.PerformLayout();
             this.ResumeLayout(false);
             this.PerformLayout();
+        }
+
+        private void Grid_CellToolTipTextNeeded(object? sender, DataGridViewCellToolTipTextNeededEventArgs e)
+        {
+            try
+            {
+                if (e.RowIndex >= 0 && e.ColumnIndex >= 0)
+                {
+                    var cellValue = Grid.Rows[e.RowIndex].Cells[e.ColumnIndex].Value?.ToString();
+                    if (!string.IsNullOrEmpty(cellValue))
+                    {
+                        int maxLength = 1000;
+                        if (cellValue.Length > maxLength)
+                        {
+                            e.ToolTipText = cellValue.Substring(0, maxLength) + "...";
+                        }
+                        else
+                        {
+                            e.ToolTipText = cellValue;
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                e.ToolTipText = ex.Message;
+            }
         }
 
         public new void Focus()
@@ -561,7 +590,7 @@ namespace SehensWerte.Controls
             return DataGridBind?.GetSelectedRowsOfColumn(header, this) ?? new string[] { };
         }
 
-        public Dictionary<string,string>? GetSelectedRow()
+        public Dictionary<string, string>? GetSelectedRow()
         {
             return DataGridBind?.GetSelectedRow(this);
         }
