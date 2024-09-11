@@ -18,11 +18,8 @@ namespace SehensWerte.Comms
         }
 
         public virtual string ConfigString { get { return "<null>"; } set { } }
-
         public abstract void Close();
-
         public abstract void Open();
-
         public abstract void Send(byte[] data);
 
         public void Dispose()

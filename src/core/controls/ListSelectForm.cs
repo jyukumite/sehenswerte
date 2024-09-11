@@ -7,10 +7,12 @@ namespace SehensWerte.Controls
         private Label LabelPrompt = new Label();
         private ListBox ListBox = new ListBox();
         private DialogResult ResultButton;
+        private Dictionary<string, string> Unfiltered = new Dictionary<string, string>();
+        private string FilterText = "";
 
         public string Title { set { Text = value; } }
         public string Prompt { set { LabelPrompt.Text = value; } }
-        public Dictionary<string, string> Selection { set { Add(value); } }
+        public Dictionary<string, string> Selection { set { SetSelection(value); } }
         public DialogResult Result => ResultButton;
         public string ResultString => ListBox.SelectedItem == null ? "" : ((KeyValuePair<string, string>)ListBox.SelectedItem).Value;
 
@@ -21,13 +23,11 @@ namespace SehensWerte.Controls
                 if (ListBox.SelectedItems != null)
                 {
                     List<string> list = new List<string>();
+                    foreach (object selectedItem in ListBox.SelectedItems)
                     {
-                        foreach (object selectedItem in ListBox.SelectedItems)
-                        {
-                            list.Add(((KeyValuePair<string, string>)selectedItem).Value);
-                        }
-                        return list;
+                        list.Add(((KeyValuePair<string, string>)selectedItem).Value);
                     }
+                    return list;
                 }
                 return null;
             }
@@ -37,7 +37,7 @@ namespace SehensWerte.Controls
         {
             set
             {
-                foreach (KeyValuePair<string, string> item in ListBox.Items)
+                foreach (KeyValuePair<string, string> item in Unfiltered)
                 {
                     if (item.Key == value)
                     {
@@ -52,8 +52,10 @@ namespace SehensWerte.Controls
         {
             SuspendLayout();
             base.ClientSize = new Size(400, 8 + 64 + 8 + 240 + 8 + 32 + 8);
+
             LabelPrompt.Location = new Point(8, 8);
             LabelPrompt.Size = new Size(base.ClientSize.Width - 16, 64);
+
             ListBox.DisplayMember = "Key";
             ListBox.FormattingEnabled = true;
             ListBox.ItemHeight = 20;
@@ -61,19 +63,13 @@ namespace SehensWerte.Controls
             ListBox.Size = new Size(base.ClientSize.Width - 16, 240);
             ListBox.TabIndex = 0;
             ListBox.ValueMember = "Value";
-            ListBox.KeyPress += delegate (object? sender, KeyPressEventArgs e)
-            {
-                if (e.KeyChar == '\r')
-                {
-                    ResultButton = DialogResult.OK;
-                    Close();
-                }
-            };
+            ListBox.KeyPress += ListBox_KeyPress;
             ListBox.MouseDoubleClick += delegate
             {
                 ResultButton = DialogResult.OK;
                 Close();
             };
+
             ButtonOK.Location = new Point(8, ListBox.Bottom + 8);
             ButtonOK.Size = new Size((base.ClientSize.Width - 24) / 2, 32);
             ButtonOK.TabIndex = 0;
@@ -83,6 +79,7 @@ namespace SehensWerte.Controls
                 ResultButton = DialogResult.OK;
                 Close();
             };
+
             ButtonCancel.DialogResult = DialogResult.Cancel;
             ButtonCancel.Location = new Point(ButtonOK.Right + 8, ListBox.Bottom + 8);
             ButtonCancel.Size = new Size((base.ClientSize.Width - 24) / 2, 32);
@@ -93,6 +90,7 @@ namespace SehensWerte.Controls
                 ResultButton = DialogResult.Cancel;
                 Close();
             };
+
             base.CancelButton = ButtonCancel;
             base.Controls.Add(ListBox);
             base.Controls.Add(ButtonCancel);
@@ -108,11 +106,48 @@ namespace SehensWerte.Controls
             ResumeLayout(performLayout: false);
         }
 
-        private void Add(IEnumerable<KeyValuePair<string, string>> list)
+        private void SetSelection(IEnumerable<KeyValuePair<string, string>> list)
         {
-            foreach (var item in list)
+            Unfiltered = list.ToDictionary(item => item.Key, item => item.Value);
+            foreach (var item in Unfiltered)
             {
                 ListBox.Items.Add(item);
+            }
+        }
+
+        private void ListBox_KeyPress(object? sender, KeyPressEventArgs e)
+        {
+            if (e.KeyChar == '\b')
+            {
+                if (FilterText.Length > 0)
+                {
+                    FilterText = FilterText.Substring(0, FilterText.Length - 1);
+                }
+            }
+            else
+            {
+                FilterText += e.KeyChar;
+            }
+
+            FilterAndHighlight(FilterText);
+        }
+
+        private void FilterAndHighlight(string filterText)
+        {
+            ListBox.Items.Clear();
+
+            var filteredItems = Unfiltered
+                .Where(item => item.Key.StartsWith(filterText, StringComparison.OrdinalIgnoreCase))
+                .ToArray();
+
+            foreach (var item in filteredItems)
+            {
+                ListBox.Items.Add(item);
+            }
+
+            if (filteredItems.Length > 0)
+            {
+                ListBox.SelectedIndex = 0;
             }
         }
 
@@ -141,7 +176,7 @@ namespace SehensWerte.Controls
             ListSelectForm listSelectForm = new ListSelectForm();
             listSelectForm.Title = title;
             listSelectForm.Prompt = prompt;
-            listSelectForm.Add(selection);
+            listSelectForm.SetSelection(selection);
             listSelectForm.DefaultResponse = defaultResponse;
             listSelectForm.ShowDialog();
             return listSelectForm.ResultButton == DialogResult.OK ? listSelectForm.ResultString : null;
@@ -152,7 +187,7 @@ namespace SehensWerte.Controls
             ListSelectForm listSelectForm = new ListSelectForm();
             listSelectForm.Title = title;
             listSelectForm.Prompt = prompt;
-            listSelectForm.Add(selection);
+            listSelectForm.SetSelection(selection);
             listSelectForm.DefaultResponse = defaultResponse;
             listSelectForm.ListBox.SelectionMode = SelectionMode.MultiExtended;
             listSelectForm.ShowDialog();
