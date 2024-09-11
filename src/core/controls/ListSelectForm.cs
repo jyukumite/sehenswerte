@@ -63,6 +63,8 @@ namespace SehensWerte.Controls
             ListBox.Size = new Size(base.ClientSize.Width - 16, 240);
             ListBox.TabIndex = 0;
             ListBox.ValueMember = "Value";
+            ListBox.DrawMode = DrawMode.OwnerDrawFixed;
+            ListBox.DrawItem += ListBox_DrawItem;
             ListBox.KeyPress += ListBox_KeyPress;
             ListBox.MouseDoubleClick += delegate
             {
@@ -106,17 +108,29 @@ namespace SehensWerte.Controls
             ResumeLayout(performLayout: false);
         }
 
+        private void ListBox_DrawItem(object? sender, DrawItemEventArgs e)
+        {
+            e.DrawBackground();
+            if (e.Index < 0) return;
+
+            string text = ((KeyValuePair<string, string>)ListBox.Items[e.Index]).Key;
+            e.Graphics.DrawString(text, e.Font!, Brushes.Black, e.Bounds.Left, e.Bounds.Top);
+            string highlight = text.Substring(0, FilterText.Length);
+            e.Graphics.DrawString(highlight, e.Font!, Brushes.Blue, e.Bounds.Left, e.Bounds.Top);
+
+            e.DrawFocusRectangle();
+        }
+
         private void SetSelection(IEnumerable<KeyValuePair<string, string>> list)
         {
             Unfiltered = list.ToDictionary(item => item.Key, item => item.Value);
-            foreach (var item in Unfiltered)
-            {
-                ListBox.Items.Add(item);
-            }
+            FilterText = "";
+            Refilter();
         }
 
         private void ListBox_KeyPress(object? sender, KeyPressEventArgs e)
         {
+            var previousFilter = FilterText;
             if (e.KeyChar == '\b')
             {
                 if (FilterText.Length > 0)
@@ -124,30 +138,47 @@ namespace SehensWerte.Controls
                     FilterText = FilterText.Substring(0, FilterText.Length - 1);
                 }
             }
+            else if (e.KeyChar == 13)
+            {
+                ResultButton = DialogResult.OK;
+                Close();
+            }
             else
             {
-                FilterText += e.KeyChar;
+                var testText = FilterText + e.KeyChar;
+                if (Unfiltered.Any(x => x.Key.StartsWith(testText, StringComparison.OrdinalIgnoreCase)))
+                {
+                    FilterText = testText;
+                }
             }
 
-            FilterAndHighlight(FilterText);
+            if (FilterText != previousFilter)
+            {
+                Refilter();
+            }
         }
 
-        private void FilterAndHighlight(string filterText)
+        private void Refilter()
         {
-            ListBox.Items.Clear();
-
-            var filteredItems = Unfiltered
-                .Where(item => item.Key.StartsWith(filterText, StringComparison.OrdinalIgnoreCase))
-                .ToArray();
-
-            foreach (var item in filteredItems)
+            ListBox.BeginUpdate();
+            try
             {
-                ListBox.Items.Add(item);
+                ListBox.Items.Clear();
+                var filteredItems = Unfiltered
+                    .Where(item => item.Key.StartsWith(FilterText, StringComparison.OrdinalIgnoreCase))
+                    .ToArray();
+                foreach (var item in filteredItems)
+                {
+                    ListBox.Items.Add(item);
+                }
+                if (filteredItems.Length > 0)
+                {
+                    ListBox.SelectedIndex = 0;
+                }
             }
-
-            if (filteredItems.Length > 0)
+            finally
             {
-                ListBox.SelectedIndex = 0;
+                ListBox.EndUpdate();
             }
         }
 
