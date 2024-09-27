@@ -1,6 +1,7 @@
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using System.Globalization;
 using System.Text;
+using System.Text.RegularExpressions;
 using System.Xml;
 using System.Xml.Serialization;
 
@@ -130,6 +131,38 @@ namespace SehensWerte
         {
             public override Encoding Encoding => System.Text.Encoding.UTF8;
         }
+
+        static public Guid? ToGuid(this string uuid, bool uuid4 = true)
+        {
+            try
+            {
+                string trimmed = uuid.ToLower().Trim();
+                if (trimmed.StartsWith("uuid(") && trimmed.EndsWith(")"))
+                {
+                    trimmed = trimmed.Substring(5, trimmed.Length - 6);
+                }
+                if (trimmed.StartsWith("'") && trimmed.EndsWith("'"))
+                {
+                    trimmed = trimmed.Substring(1, trimmed.Length - 2);
+                }
+                if (trimmed == "")
+                {
+                    return null;
+                }
+                var pattern = uuid4
+                    ? @"^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+                    : @"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$";
+                if (!Regex.IsMatch(trimmed, pattern, RegexOptions.IgnoreCase))
+                {
+                    return null;
+                }
+                return Guid.Parse(trimmed);
+            }
+            catch (Exception)
+            {
+                return null;
+            }
+        }
     }
 
     [TestClass]
@@ -201,5 +234,44 @@ namespace SehensWerte
             // public static string RtfEncode(this string s)
         }
 
+        [TestMethod]
+        public void ToGuid_MultipleTests()
+        {
+            var testCases = new[]
+            {
+                new { Uuid4 = true,  Input =      "e02fa0e4-01ad-4a0a-8130-0d05a0008ba0",    Expected = (Guid?)Guid.Parse("e02fa0e4-01ad-4a0a-8130-0d05a0008ba0") },
+                new { Uuid4 = true,  Input = "UUID(e02fa0e4-01ad-4a0a-8130-0d05a0008ba0)",   Expected = (Guid?)Guid.Parse("e02fa0e4-01ad-4a0a-8130-0d05a0008ba0") },
+                new { Uuid4 = true,  Input =     "'e02fa0e4-01ad-4a0a-8130-0d05a0008ba0'",   Expected = (Guid?)Guid.Parse("e02fa0e4-01ad-4a0a-8130-0d05a0008ba0") },
+                new { Uuid4 = true,  Input =   "   e02fa0e4-01ad-4a0a-8130-0d05a0008ba0   ", Expected = (Guid?)Guid.Parse("e02fa0e4-01ad-4a0a-8130-0d05a0008ba0") },
+                new { Uuid4 = true,  Input =      "e02fa0e4-01ad-090A-8130-0d05a0008ba0",    Expected = (Guid?)null },
+                new { Uuid4 = true,  Input = "UUID(e02fa0e4-01ad-090A-8130-0d05a0008ba0)",   Expected = (Guid?)null },
+                new { Uuid4 = true,  Input =     "'e02fa0e4-01ad-090A-8130-0d05a0008ba0'",   Expected = (Guid?)null },
+                new { Uuid4 = true,  Input =      "e02fa0e4-01ad-490A-c130-0d05a0008ba0",    Expected = (Guid?)null },
+                new { Uuid4 = true,  Input = "UUID(e02fa0e4-01ad-490A-c130-0d05a0008ba0)",   Expected = (Guid?)null },
+                new { Uuid4 = true,  Input =     "'e02fa0e4-01ad-490A-c130-0d05a0008ba0'",   Expected = (Guid?)null },
+                new { Uuid4 = true,  Input = "invalid-guid", Expected = (Guid?)null },
+                new { Uuid4 = true,  Input = "", Expected = (Guid?)null },
+                new { Uuid4 = true,  Input = "UUID(e02fa0e4-01ad)", Expected = (Guid?)null },
+                new { Uuid4 = false, Input =      "e02fa0e4-01ad-4a0a-8130-0d05a0008ba0",    Expected = (Guid?)Guid.Parse("e02fa0e4-01ad-4a0a-8130-0d05a0008ba0") },
+                new { Uuid4 = false, Input = "UUID(e02fa0e4-01ad-4a0a-8130-0d05a0008ba0)",   Expected = (Guid?)Guid.Parse("e02fa0e4-01ad-4a0a-8130-0d05a0008ba0") },
+                new { Uuid4 = false, Input =     "'e02fa0e4-01ad-4a0a-8130-0d05a0008ba0'",   Expected = (Guid?)Guid.Parse("e02fa0e4-01ad-4a0a-8130-0d05a0008ba0") },
+                new { Uuid4 = false, Input =   "   e02fa0e4-01ad-4a0a-8130-0d05a0008ba0   ", Expected = (Guid?)Guid.Parse("e02fa0e4-01ad-4a0a-8130-0d05a0008ba0") },
+                new { Uuid4 = false, Input =      "e02fa0e4-01ad-090A-8130-0d05a0008ba0",    Expected = (Guid?)Guid.Parse("e02fa0e4-01ad-090A-8130-0d05a0008ba0") },
+                new { Uuid4 = false, Input = "UUID(e02fa0e4-01ad-090A-8130-0d05a0008ba0)",   Expected = (Guid?)Guid.Parse("e02fa0e4-01ad-090A-8130-0d05a0008ba0") },
+                new { Uuid4 = false, Input =     "'e02fa0e4-01ad-090A-8130-0d05a0008ba0'",   Expected = (Guid?)Guid.Parse("e02fa0e4-01ad-090A-8130-0d05a0008ba0") },
+                new { Uuid4 = false, Input =      "e02fa0e4-01ad-490A-c130-0d05a0008ba0",    Expected = (Guid?)Guid.Parse("e02fa0e4-01ad-490A-c130-0d05a0008ba0") },
+                new { Uuid4 = false, Input = "UUID(e02fa0e4-01ad-490A-c130-0d05a0008ba0)",   Expected = (Guid?)Guid.Parse("e02fa0e4-01ad-490A-c130-0d05a0008ba0") },
+                new { Uuid4 = false, Input =     "'e02fa0e4-01ad-490A-c130-0d05a0008ba0'",   Expected = (Guid?)Guid.Parse("e02fa0e4-01ad-490A-c130-0d05a0008ba0") },
+                new { Uuid4 = false, Input = "invalid-guid", Expected = (Guid?)null },
+                new { Uuid4 = false, Input = "", Expected = (Guid?)null },
+                new { Uuid4 = false, Input = "UUID(e02fa0e4-01ad)", Expected = (Guid?)null },
+            };
+
+            foreach (var testCase in testCases)
+            {
+                var result = testCase.Uuid4 ? testCase.Input.ToGuid() : testCase.Input.ToGuid(uuid4: false);
+                Assert.AreEqual(testCase.Expected, result, $"Failed for input: {testCase.Input}");
+            }
+        }
     }
 }
