@@ -25,6 +25,7 @@ namespace SehensWerte.Controls
         private PictureBox PaintBox;
         private VScrollBar VerticalBar;
         private CheckBox CheckScroll;
+        private CheckBox CheckToolTip;
         private System.Windows.Forms.Timer Timer;
         private ContextMenuStrip ContextMenu;
         private ToolStripMenuItem ClearMenuItem;
@@ -154,6 +155,7 @@ namespace SehensWerte.Controls
         {
             public LogEntry? Original;
             public string DisplayedLine = "";
+            public bool FilterMatchFlag = true;
 
             public bool MatchesFilter(CsvLog.Priority minimumType, Regex? regex)
             {
@@ -209,6 +211,7 @@ namespace SehensWerte.Controls
             PanelView = new Panel();
             HorizontalBar = new HScrollBar();
             CheckScroll = new CheckBox();
+            CheckToolTip = new CheckBox();
             Timer = new System.Windows.Forms.Timer();
             TextFilter = new TextBox();
             ToolTip = new ToolTip();
@@ -241,6 +244,17 @@ namespace SehensWerte.Controls
             CheckScroll.TabIndex = 14;
             CheckScroll.Text = "Scroll";
             CheckScroll.UseVisualStyleBackColor = true;
+
+            CheckToolTip.AutoSize = true;
+            CheckToolTip.Dock = DockStyle.Left;
+            CheckToolTip.Checked = true;
+            CheckToolTip.TextAlign = ContentAlignment.MiddleLeft;
+            CheckToolTip.CheckState = CheckState.Unchecked;
+            CheckToolTip.Margin = new Padding(4, 5, 4, 5);
+            CheckToolTip.Size = new Size(74, 32);
+            CheckToolTip.TabIndex = 14;
+            CheckToolTip.Text = "Mouse-over text";
+            CheckToolTip.UseVisualStyleBackColor = true;
 
             PaintBox.ContextMenuStrip = ContextMenu;
             PaintBox.Dock = DockStyle.Fill;
@@ -315,6 +329,7 @@ namespace SehensWerte.Controls
             panelUI.Controls.Add(TextFilter);
             panelUI.Controls.Add(ComboFilter);
             panelUI.Controls.Add(CheckScroll);
+            panelUI.Controls.Add(CheckToolTip);
             panelUI.Controls.Add(CheckPause);
             panelUI.Dock = DockStyle.Bottom;
             panelUI.Location = new Point(0, 371);
@@ -453,12 +468,12 @@ namespace SehensWerte.Controls
             {
                 entry = rows[row];
             }
-            if (string.IsNullOrEmpty(entry?.DisplayedLine))
+            if (string.IsNullOrEmpty(entry?.DisplayedLine) || !CheckToolTip.Checked)
             {
                 this.ToolTip.RemoveAll();
                 m_ToolTipString = "";
             }
-            else
+            else if (CheckToolTip.Checked)
             {
                 string toolTip = entry.ToToolTip();
                 if (m_ToolTipString != toolTip)
@@ -649,13 +664,15 @@ namespace SehensWerte.Controls
 
             if (Filtering)
             {
-                foreach (LogEntryRow entry in LogQueue)
+                foreach (var l in LogQueue)
                 {
-                    if (entry.MatchesFilter(m_FilterType, m_FilterRegex))
-                    {
-                        FilteredQueue.AddLast(entry);
-                    }
+                    l.FilterMatchFlag = false;
                 }
+                Parallel.ForEach(LogQueue, entry =>
+                {
+                    entry.FilterMatchFlag = entry.MatchesFilter(m_FilterType, m_FilterRegex);
+                });
+                FilteredQueue = new LinkedList<LogEntryRow>(LogQueue.Where(x => x.FilterMatchFlag));
             }
 
             UpdateScrollBars();
