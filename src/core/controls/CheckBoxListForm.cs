@@ -1,6 +1,6 @@
 namespace SehensWerte.Controls
 {
-    public class CheckBoxForm : Form
+    public class CheckBoxListForm : Form
     {
         private DialogResult ResultButton = System.Windows.Forms.DialogResult.None;
 
@@ -29,6 +29,10 @@ namespace SehensWerte.Controls
         {
             set
             {
+                foreach (string v in value.Where(x => ListBox.Items.Contains(x) == false))
+                {
+                    ListBox.Items.Add(v);
+                }
                 foreach (int v in ListBox.CheckedIndices)
                 {
                     ListBox.SetItemChecked(v, false);
@@ -64,7 +68,7 @@ namespace SehensWerte.Controls
             }
         }
 
-        public CheckBoxForm()
+        public CheckBoxListForm()
         {
             ButtonOK = new Button();
             LabelText = new Label();
@@ -72,20 +76,20 @@ namespace SehensWerte.Controls
             ListBox = new CheckedListBox();
             SuspendLayout();
 
-            ClientSize = new System.Drawing.Size(400, 8 + 64 + 8 + 100 + 8 + 32 + 8);
+            ClientSize = new System.Drawing.Size(400, 8 + 64 + 8 + 240 + 8 + 32 + 8);
 
             LabelText.Location = new System.Drawing.Point(8, 8);
             LabelText.Size = new System.Drawing.Size(ClientSize.Width - 16, 64);
             LabelText.TabIndex = 2;
 
             ListBox.Location = new System.Drawing.Point(8, LabelText.Bottom + 8);
-            ListBox.Size = new System.Drawing.Size(ClientSize.Width - 16, 100);
+            ListBox.Size = new System.Drawing.Size(ClientSize.Width - 16, 240);
             ListBox.DisplayMember = "Key";
             ListBox.ValueMember = "Value";
             ListBox.FormattingEnabled = true;
             ListBox.KeyPress += (sender, e) => { if (e.KeyChar == 13) { ResultButton = DialogResult.OK; Close(); } };
-            ListBox.MouseDoubleClick += (sender, e) => { ResultButton = DialogResult.OK; Close(); };
             ListBox.TabIndex = 4;
+            ListBox.CheckOnClick = true;
 
             ButtonOK.Location = new System.Drawing.Point(8, ListBox.Bottom + 8);
             ButtonOK.Size = new System.Drawing.Size((ClientSize.Width - 24) / 2, 32);
@@ -138,15 +142,15 @@ namespace SehensWerte.Controls
             return result;
         }
 
-        public static List<string> Show(string prompt, string title, List<string> selection, List<string> ckeckedSelection)
+        public static List<string> Show(string prompt, string title, IEnumerable<string> selection, IEnumerable<string> checkedSelection)
         {
-            CheckBoxForm input = new CheckBoxForm();
+            CheckBoxListForm input = new CheckBoxListForm();
             input.Title = title;
             input.Prompt = prompt;
-            input.Selection = selection;
-            input.CheckedSelection = ckeckedSelection;
+            input.Selection = new List<string>(selection);
+            input.CheckedSelection = new List<string>(checkedSelection);
             input.ShowDialog();
-            return (input.ResultButton == DialogResult.OK) ? input.CheckedSelection : ckeckedSelection;
+            return (input.ResultButton == DialogResult.OK) ? input.CheckedSelection : new List<string>(checkedSelection);
         }
     }
 }
