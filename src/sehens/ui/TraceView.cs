@@ -1732,7 +1732,7 @@ namespace SehensWerte.Controls.Sehens
                     index = index < 0 ? 0 : ((index >= length) ? (length - 1) : index);
                     result.SampleAtX = m_DrawnSamples[index];
 
-                    int offset = (ViewOverrideEnabled ? ViewOffsetOverride : 0);
+                    int offset = ((ViewOverrideEnabled && !IsFftTrace) ? ViewOffsetOverride : 0);
                     result.IndexAfterTrim = index + ((!rebased) ? m_DrawnStartPosition : 0);
                     result.IndexBeforeTrim = index + ((!rebased) ? (m_DrawnStartPosition + offset) : 0);
                     result.CountAfterTrim = (rebased ? m_DrawnSamples!.Length : m_CalculatedBeforeZoom!.Length);
