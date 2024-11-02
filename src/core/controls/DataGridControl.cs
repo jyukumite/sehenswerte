@@ -26,7 +26,7 @@ namespace SehensWerte.Controls
 
     public class DataGridControlCellEventArgs : EventArgs
     {
-        public string CellContent = "";
+        public string? CellContent = "";
         public string ColumnName = "";
         public Rectangle CellRectangle;
         public bool Shown;
@@ -45,6 +45,8 @@ namespace SehensWerte.Controls
 
         public event DataGridViewCellContextMenuStripNeededEventHandler CellContextMenuStripNeeded = (s, e) => { };
         public DataGridViewCell CurrentCell => Grid.CurrentCell;
+        public Color NullForeColor;
+
         private DataGridView Grid;
         private System.Windows.Forms.Timer HoverTimer;
         private DataGridControlCellEventArgs? HoverArgs;
@@ -120,6 +122,7 @@ namespace SehensWerte.Controls
             this.Grid.RowPostPaint += this.DataGrid_RowPostPaint;
             this.Grid.SelectionChanged += this.Grid_SelectionChanged;
             this.Grid.CellDoubleClick += (s, e) => CellDoubleClick.Invoke(s, e);
+            this.Grid.CellPainting += Grid_CellPainting;
             this.Grid.KeyDown += (s, e) =>
             {
                 if (Grid.CurrentCell != null)
@@ -134,6 +137,7 @@ namespace SehensWerte.Controls
             this.Grid.CellMouseEnter += Grid_CellMouseEnter;
             this.Grid.CellMouseLeave += Grid_CellMouseLeave;
             this.Grid.CellToolTipTextNeeded += Grid_CellToolTipTextNeeded;
+            NullForeColor = this.Grid.ForeColor;
 
             this.HoverTimer = new System.Windows.Forms.Timer();
             this.HoverTimer.Interval = 500; // 0.5 second delay for preparation
@@ -311,7 +315,7 @@ namespace SehensWerte.Controls
             }
         }
 
-        private void Grid_CellMouseEnter(object sender, DataGridViewCellEventArgs e)
+        private void Grid_CellMouseEnter(object? sender, DataGridViewCellEventArgs e)
         {
             if (e.RowIndex >= 0 && e.ColumnIndex >= 0)
             {
@@ -341,7 +345,7 @@ namespace SehensWerte.Controls
             }
         }
 
-        private void Grid_CellMouseLeave(object sender, DataGridViewCellEventArgs e)
+        private void Grid_CellMouseLeave(object? sender, DataGridViewCellEventArgs e)
         {
             if (HoverArgs != null && HoverArgs.Shown)
             {
@@ -527,6 +531,34 @@ namespace SehensWerte.Controls
             });
         }
 
+        private void Grid_CellPainting(object? sender, DataGridViewCellPaintingEventArgs e)
+        {
+            if (e.RowIndex < 0 || e.ColumnIndex < 0) return;
+            bool isNull = e.Value == null || e.Value == DBNull.Value;
+            e.PaintBackground(e.ClipBounds, e.State.HasFlag(DataGridViewElementStates.Selected));
+            e.Paint(e.ClipBounds, DataGridViewPaintParts.Border);
+            string displayText = (e.Value ?? "null").ToString();
+            Font cellFont = isNull ? new Font(e.CellStyle.Font, FontStyle.Italic) : e.CellStyle.Font;
+            Color textColor = isNull ? NullForeColor : e.CellStyle.ForeColor;
+            TextFormatFlags flags = TextFormatFlags.EndEllipsis;
+
+            switch (e.CellStyle.Alignment)
+            {
+                case DataGridViewContentAlignment.MiddleCenter: flags |= TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter; break;
+                case DataGridViewContentAlignment.MiddleLeft: flags |= TextFormatFlags.Left | TextFormatFlags.VerticalCenter; break;
+                case DataGridViewContentAlignment.MiddleRight: flags |= TextFormatFlags.Right | TextFormatFlags.VerticalCenter; break;
+                case DataGridViewContentAlignment.TopCenter: flags |= TextFormatFlags.HorizontalCenter | TextFormatFlags.Top; break;
+                case DataGridViewContentAlignment.TopLeft: flags |= TextFormatFlags.Left | TextFormatFlags.Top; break;
+                case DataGridViewContentAlignment.TopRight: flags |= TextFormatFlags.Right | TextFormatFlags.Top; break;
+                case DataGridViewContentAlignment.BottomCenter: flags |= TextFormatFlags.HorizontalCenter | TextFormatFlags.Bottom; break;
+                case DataGridViewContentAlignment.BottomLeft: flags |= TextFormatFlags.Left | TextFormatFlags.Bottom; break;
+                case DataGridViewContentAlignment.BottomRight: flags |= TextFormatFlags.Right | TextFormatFlags.Bottom; break;
+            }
+
+            TextRenderer.DrawText(e.Graphics, displayText, cellFont, e.CellBounds, textColor, flags);
+            e.Handled = true;
+        }
+
         private void DataGrid_RowPostPaint(object? sender, DataGridViewRowPostPaintEventArgs e)
         {
             var grid = sender as DataGridView;
@@ -564,7 +596,7 @@ namespace SehensWerte.Controls
             UpdateStatusStrip();
         }
 
-        public void LoadRows(IEnumerable<IEnumerable<string>> rows, IEnumerable<string> colnames)
+        public void LoadRows(IEnumerable<IEnumerable<string?>> rows, IEnumerable<string> colnames)
         {
             DataGridBind = new BoundData(rows, colnames, CsvLog.ExtendPath(OnLog, "BoundData"));
             DataGridBind.ListChanged += GridData_ListChanged;
@@ -585,19 +617,19 @@ namespace SehensWerte.Controls
             UpdateStatusStrip();
         }
 
-        public string[] GetSelectedRowsOfColumn(string header)
+        public string?[] GetSelectedRowsOfColumn(string header)
         {
-            return DataGridBind?.GetSelectedRowsOfColumn(header, this) ?? new string[] { };
+            return DataGridBind?.GetSelectedRowsOfColumn(header, this) ?? new string?[] { };
         }
 
-        public Dictionary<string, string>? GetSelectedRow()
+        public Dictionary<string, string?>? GetSelectedRow()
         {
             return DataGridBind?.GetSelectedRow(this);
         }
 
-        public string[] GetColumn(string header)
+        public string?[] GetColumn(string header)
         {
-            return DataGridBind?.GetColumn(header) ?? new string[] { };
+            return DataGridBind?.GetColumn(header) ?? new string?[] { };
         }
 
         public double[] GetColumnDouble(string header)
@@ -605,9 +637,9 @@ namespace SehensWerte.Controls
             return DataGridBind?.GetColumnDouble(header) ?? new double[] { };
         }
 
-        public string[] GetColumn(int index)
+        public string?[] GetColumn(int index)
         {
-            return DataGridBind?.GetColumn(index) ?? new string[] { };
+            return DataGridBind?.GetColumn(index) ?? new string?[] { };
         }
 
         public IEnumerable<string> ColumnNames => DataGridBind?.ColumnNames ?? new List<string>();
@@ -627,16 +659,16 @@ namespace SehensWerte.Controls
             return DataGridBind?.ColumnNames ?? new List<string>();
         }
 
-        public string GetCell(string column, int rowIndex)
+        public string? GetCell(string column, int rowIndex)
         {
             int colIndex = DataGridBind?.ColumnNames.IndexOf(column) ?? -1;
             if (colIndex == -1) return "";
-            return ((DataGridBind?.FilteredData[rowIndex])?.Column(colIndex)) ?? "";
+            return ((DataGridBind?.FilteredData[rowIndex])?.Column(colIndex));
         }
 
-        public string GetCell(int colIndex, int rowIndex)
+        public string? GetCell(int colIndex, int rowIndex)
         {
-            return ((DataGridBind?.FilteredData[rowIndex])?.Column(colIndex)) ?? "";
+            return ((DataGridBind?.FilteredData[rowIndex])?.Column(colIndex));
         }
 
         public void SetCell(int colIndex, int rowIndex, string to)
@@ -676,53 +708,53 @@ namespace SehensWerte.Controls
                 Index = index;
             }
 
-            public abstract string[] Strings { get; }
-            public abstract string Column(int index);
+            public abstract string?[] Strings { get; }
+            public abstract string? Column(int index);
             public abstract double ColumnDouble(int colIndex);
             public abstract int Count { get; }
-            public abstract void Set(int index, string to);
+            public abstract void Set(int index, string? to);
 
             public abstract IComparer<BoundDataRow> GetSortComparer(int colIndex, ListSortDirection sortDirection);
 
             //DataPropertyName = $"col{loop}",
-            public String col0 => Column(0); public String col1 => Column(1); public String col2 => Column(2); public String col3 => Column(3);
-            public String col4 => Column(4); public String col5 => Column(5); public String col6 => Column(6); public String col7 => Column(7);
-            public String col8 => Column(8); public String col9 => Column(9); public String col10 => Column(10); public String col11 => Column(11);
-            public String col12 => Column(12); public String col13 => Column(13); public String col14 => Column(14); public String col15 => Column(15);
-            public String col16 => Column(16); public String col17 => Column(17); public String col18 => Column(18); public String col19 => Column(19);
-            public String col20 => Column(20); public String col21 => Column(21); public String col22 => Column(22); public String col23 => Column(23);
-            public String col24 => Column(24); public String col25 => Column(25); public String col26 => Column(26); public String col27 => Column(27);
-            public String col28 => Column(28); public String col29 => Column(29); public String col30 => Column(30); public String col31 => Column(31);
-            public String col32 => Column(32); public String col33 => Column(33); public String col34 => Column(34); public String col35 => Column(35);
-            public String col36 => Column(36); public String col37 => Column(37); public String col38 => Column(38); public String col39 => Column(39);
-            public String col40 => Column(40); public String col41 => Column(41); public String col42 => Column(42); public String col43 => Column(43);
-            public String col44 => Column(44); public String col45 => Column(45); public String col46 => Column(46); public String col47 => Column(47);
-            public String col48 => Column(48); public String col49 => Column(49); public String col50 => Column(50); public String col51 => Column(51);
-            public String col52 => Column(52); public String col53 => Column(53); public String col54 => Column(54); public String col55 => Column(55);
-            public String col56 => Column(56); public String col57 => Column(57); public String col58 => Column(58); public String col59 => Column(59);
-            public String col60 => Column(60); public String col61 => Column(61); public String col62 => Column(62); public String col63 => Column(63);
-            public String col64 => Column(64); public String col65 => Column(65); public String col66 => Column(66); public String col67 => Column(67);
-            public String col68 => Column(68); public String col69 => Column(69); public String col70 => Column(70); public String col71 => Column(71);
-            public String col72 => Column(72); public String col73 => Column(73); public String col74 => Column(74); public String col75 => Column(75);
-            public String col76 => Column(76); public String col77 => Column(77); public String col78 => Column(78); public String col79 => Column(79);
-            public String col80 => Column(80); public String col81 => Column(81); public String col82 => Column(82); public String col83 => Column(83);
-            public String col84 => Column(84); public String col85 => Column(85); public String col86 => Column(86); public String col87 => Column(87);
-            public String col88 => Column(88); public String col89 => Column(89); public String col90 => Column(90); public String col91 => Column(91);
-            public String col92 => Column(92); public String col93 => Column(93); public String col94 => Column(94); public String col95 => Column(95);
-            public String col96 => Column(96); public String col97 => Column(97); public String col98 => Column(98); public String col99 => Column(99);
+            public String? col0 => Column(0); public String? col1 => Column(1); public String? col2 => Column(2); public String? col3 => Column(3);
+            public String? col4 => Column(4); public String? col5 => Column(5); public String? col6 => Column(6); public String? col7 => Column(7);
+            public String? col8 => Column(8); public String? col9 => Column(9); public String? col10 => Column(10); public String? col11 => Column(11);
+            public String? col12 => Column(12); public String? col13 => Column(13); public String? col14 => Column(14); public String? col15 => Column(15);
+            public String? col16 => Column(16); public String? col17 => Column(17); public String? col18 => Column(18); public String? col19 => Column(19);
+            public String? col20 => Column(20); public String? col21 => Column(21); public String? col22 => Column(22); public String? col23 => Column(23);
+            public String? col24 => Column(24); public String? col25 => Column(25); public String? col26 => Column(26); public String? col27 => Column(27);
+            public String? col28 => Column(28); public String? col29 => Column(29); public String? col30 => Column(30); public String? col31 => Column(31);
+            public String? col32 => Column(32); public String? col33 => Column(33); public String? col34 => Column(34); public String? col35 => Column(35);
+            public String? col36 => Column(36); public String? col37 => Column(37); public String? col38 => Column(38); public String? col39 => Column(39);
+            public String? col40 => Column(40); public String? col41 => Column(41); public String? col42 => Column(42); public String? col43 => Column(43);
+            public String? col44 => Column(44); public String? col45 => Column(45); public String? col46 => Column(46); public String? col47 => Column(47);
+            public String? col48 => Column(48); public String? col49 => Column(49); public String? col50 => Column(50); public String? col51 => Column(51);
+            public String? col52 => Column(52); public String? col53 => Column(53); public String? col54 => Column(54); public String? col55 => Column(55);
+            public String? col56 => Column(56); public String? col57 => Column(57); public String? col58 => Column(58); public String? col59 => Column(59);
+            public String? col60 => Column(60); public String? col61 => Column(61); public String? col62 => Column(62); public String? col63 => Column(63);
+            public String? col64 => Column(64); public String? col65 => Column(65); public String? col66 => Column(66); public String? col67 => Column(67);
+            public String? col68 => Column(68); public String? col69 => Column(69); public String? col70 => Column(70); public String? col71 => Column(71);
+            public String? col72 => Column(72); public String? col73 => Column(73); public String? col74 => Column(74); public String? col75 => Column(75);
+            public String? col76 => Column(76); public String? col77 => Column(77); public String? col78 => Column(78); public String? col79 => Column(79);
+            public String? col80 => Column(80); public String? col81 => Column(81); public String? col82 => Column(82); public String? col83 => Column(83);
+            public String? col84 => Column(84); public String? col85 => Column(85); public String? col86 => Column(86); public String? col87 => Column(87);
+            public String? col88 => Column(88); public String? col89 => Column(89); public String? col90 => Column(90); public String? col91 => Column(91);
+            public String? col92 => Column(92); public String? col93 => Column(93); public String? col94 => Column(94); public String? col95 => Column(95);
+            public String? col96 => Column(96); public String? col97 => Column(97); public String? col98 => Column(98); public String? col99 => Column(99);
         }
 
         public class BoundDataRowString : BoundDataRow
         {
-            public string[] Data;
+            public string?[] Data;
 
             public override int Count => Data.Length;
-            public override string[] Strings => Data;
-            public override string Column(int index) => index < Data.Length ? Data[index] : "";
-            public override double ColumnDouble(int index) => index < Data.Length ? Data[index].ToDouble(0) : 0;
-            public override void Set(int index, string to) { Data[index] = to; }
+            public override string?[] Strings => Data;
+            public override string? Column(int index) => index < Data.Length ? Data[index] : "";
+            public override double ColumnDouble(int index) => index < Data.Length ? (Data[index]?.ToDouble(0) ?? 0) : 0;
+            public override void Set(int index, string? to) { Data[index] = to; }
 
-            public BoundDataRowString(int index, string[] sourceRow) : base(index)
+            public BoundDataRowString(int index, string?[] sourceRow) : base(index)
             {
                 ResortIndex = index;
                 Index = index;
@@ -748,8 +780,8 @@ namespace SehensWerte.Controls
                 public int Compare(BoundDataRow? x, BoundDataRow? y)
                 {
                     if (x == null || y == null) return 0;
-                    string o1 = (x as BoundDataRowString)?.Data[ColIndex].ToLower() ?? "";
-                    string o2 = (y as BoundDataRowString)?.Data[ColIndex].ToLower() ?? "";
+                    string o1 = (x as BoundDataRowString)?.Data[ColIndex]?.ToLower() ?? "";
+                    string o2 = (y as BoundDataRowString)?.Data[ColIndex]?.ToLower() ?? "";
                     int result = o1.NaturalCompare(o2);
                     if (result == 0)
                     {
@@ -768,7 +800,7 @@ namespace SehensWerte.Controls
             public override string[] Strings => Data.Select(x => x.ToString(CultureInfo.InvariantCulture)).ToArray();
             public override string Column(int index) => index >= Data.Length ? "" : Data[index].ToString(CultureInfo.InvariantCulture);
             public override double ColumnDouble(int index) => index >= Data.Length ? 0 : Data[index];
-            public override void Set(int index, string to) { Data[index] = to.ToDouble(0); }
+            public override void Set(int index, string? to) { Data[index] = to?.ToDouble(0) ?? 0; }
 
             public BoundDataRowDouble(int index, double[] sourceRow) : base(index)
             {
@@ -895,7 +927,7 @@ namespace SehensWerte.Controls
                 ShowAll();
             }
 
-            public BoundData(IEnumerable<IEnumerable<string>> source, IEnumerable<string> columnNames, Action<CsvLog.Entry> onLog)
+            public BoundData(IEnumerable<IEnumerable<string?>> source, IEnumerable<string> columnNames, Action<CsvLog.Entry> onLog)
             {
                 OnLog = onLog;
                 InitializeData(source, columnNames, (index, row) => new BoundDataRowString(index, row.ToArray()));
@@ -1015,7 +1047,7 @@ namespace SehensWerte.Controls
                 return union.ToArray();
             }
 
-            public string[]? GetSelectedRowsOfColumn(string column, DataGridView dataGrid)
+            public string?[]? GetSelectedRowsOfColumn(string column, DataGridView dataGrid)
             {
                 int colIndex = ColumnNames.IndexOf(column);
                 return colIndex == -1
@@ -1023,25 +1055,25 @@ namespace SehensWerte.Controls
                     : RowsWithSelection(dataGrid).Select(x => IndexToRow[x].Column(colIndex)).ToArray();
             }
 
-            public string[]? GetColumn(string v)
+            public string?[]? GetColumn(string v)
             {
                 int colIndex = ColumnNames.IndexOf(v);
                 return colIndex == -1 ? null : FilteredData.Select(x => x.Column(colIndex)).ToArray();
             }
 
-            public Dictionary<string, string>? GetSelectedRow(DataGridView dataGrid)
+            public Dictionary<string, string?>? GetSelectedRow(DataGridView dataGrid)
             {
                 int row = RowsWithSelection(dataGrid).FirstOrDefault();
                 if (row != -1)
                 {
-                    string[] rowData = IndexToRow[row].Strings;
-                    return (Dictionary<string, string>?)ColumnNames
-                        .Select((columnName, index) => new { columnName, value = index < rowData.Length ? rowData[index] : string.Empty })
+                    string?[] rowData = IndexToRow[row].Strings;
+                    return (Dictionary<string, string?>?)ColumnNames
+                        .Select((columnName, index) => new { columnName, value = index < rowData.Length ? rowData[index] : null })
                         .ToDictionary(item => item.columnName, item => item.value);
                 }
                 else
                 {
-                    return new Dictionary<string, string>();
+                    return new Dictionary<string, string?>();
                 }
             }
 
@@ -1052,7 +1084,7 @@ namespace SehensWerte.Controls
             }
 
 
-            public string[]? GetColumn(int colIndex)
+            public string?[]? GetColumn(int colIndex)
             {
                 return FilteredData.Select(x => x.Column(colIndex)).ToArray();
             }
@@ -1135,7 +1167,7 @@ namespace SehensWerte.Controls
             {
                 // keep the first, hide the rest
                 int colIndex = ColumnNames.IndexOf(column);
-                List<string> seen = new List<string>();
+                var seen = new List<string?>();
                 HideRowsIf(x =>
                 {
                     var xx = x.Column(colIndex);
@@ -1145,34 +1177,34 @@ namespace SehensWerte.Controls
                 });
             }
 
-            public void HideRowsMatching(string column, IEnumerable<string> rows)
+            public void HideRowsMatching(string column, IEnumerable<string?> rows)
             {
                 // case insensitive
-                List<string> strings = rows.Select(x => x.ToLower()).ToList();
+                List<string?> strings = rows.Select(x => x?.ToLower()).ToList();
                 int colIndex = ColumnNames.IndexOf(column);
-                HideRowsIf(x => strings.Contains(x.Column(colIndex).ToLower()));
+                HideRowsIf(x => strings.Contains(x.Column(colIndex)?.ToLower()));
             }
 
-            public void HideRowsNotMatching(string column, IEnumerable<string> rows)
+            public void HideRowsNotMatching(string column, IEnumerable<string?> rows)
             {
                 // case insensitive
-                List<string> strings = rows.Select(x => x.ToLower()).ToList();
+                List<string?> strings = rows.Select(x => x?.ToLower()).ToList();
                 int colIndex = ColumnNames.IndexOf(column);
-                HideRowsIf(x => !strings.Contains(x.Column(colIndex).ToLower()));
+                HideRowsIf(x => !strings.Contains(x.Column(colIndex)?.ToLower()));
             }
 
             public void ShowRowsMatchingRegex(string regex, string column)
             {
                 Regex match = new Regex(regex, RegexOptions.Compiled | RegexOptions.IgnoreCase);
                 int colIndex = ColumnNames.IndexOf(column);
-                HideRowsIf(x => !match.IsMatch(x.Column(colIndex)));
+                HideRowsIf(x => !match.IsMatch(x.Column(colIndex) ?? "null"));
             }
 
             public void HideRowsMatchingRegex(string regex, string column)
             {
                 Regex match = new Regex(regex, RegexOptions.Compiled | RegexOptions.IgnoreCase);
                 int colIndex = ColumnNames.IndexOf(column);
-                HideRowsIf(x => match.IsMatch(x.Column(colIndex)));
+                HideRowsIf(x => match.IsMatch(x.Column(colIndex) ?? "null"));
             }
 
             object? IList.this[int index]

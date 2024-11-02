@@ -218,6 +218,26 @@ namespace SehensWerte
                 }
             }
         }
+
+        public static List<List<T>> NullToDefault<T>(this IEnumerable<IEnumerable<T?>> listlist, T defval) where T : struct
+        {
+            return listlist.Select(x => x.NullToDefault(defval)).ToList();
+        }
+
+        public static List<T> NullToDefault<T>(this IEnumerable<T?> list, T defval) where T : struct
+        {
+            return list.Select(x => x ?? defval).ToList();
+        }
+
+        public static List<List<T>> NullToDefault<T>(this IEnumerable<IEnumerable<T?>> listlist, T defval)
+        {
+            return listlist.Select(x => x.NullToDefault(defval)).ToList();
+        }
+
+        public static List<T> NullToDefault<T>(this IEnumerable<T?> list, T defval)
+        {
+            return list.Select(x => x ?? defval).ToList();
+        }
     }
 
     [TestClass]
@@ -268,6 +288,93 @@ namespace SehensWerte
             time(() => { var copy = shuffled.ToArray(); Array.Sort(copy, (x, y) => x.a.CompareTo(y.a)); return copy.ToList(); }, expected, "Array.Sort");
 
             MessageBox.Show(results);
+        }
+
+        [TestMethod]
+        public void NullToDefault()
+        {
+            int defaultInt = 42;
+            string defaultString = "default";
+
+            List<int?> l1 = new List<int?> { 1, null, 3, null, 5 };
+            List<int> r1 = l1.NullToDefault(defaultInt);
+            CollectionAssert.AreEqual(new List<int> { 1, defaultInt, 3, defaultInt, 5 }, r1);
+
+            List<List<int?>> l2 = new List<List<int?>>
+            {
+                new List<int?> { 1, null, 2 },
+                new List<int?> { null, 3, null },
+                new List<int?> { 4, null, 5 }
+            };
+            List<List<int>> r2 = l2.NullToDefault(defaultInt);
+            var e2 = new List<List<int>>
+            {
+                new List<int> { 1, defaultInt, 2 },
+                new List<int> { defaultInt, 3, defaultInt },
+                new List<int> { 4, defaultInt, 5 }
+            };
+            Assert.AreEqual(e2.Count, r2.Count);
+            for (int loop = 0; loop < e2.Count; loop++)
+            {
+                CollectionAssert.AreEqual(e2[loop], r2[loop]);
+            }
+
+            List<int?> l3 = new List<int?>();
+            List<int> r3 = l3.NullToDefault(defaultInt);
+            Assert.AreEqual(0, r3.Count);
+
+            List<List<int?>> l4 = new List<List<int?>>
+            {
+                new List<int?>(),
+                new List<int?>(),
+                new List<int?>()
+            };
+            List<List<int>> r4 = l4.NullToDefault(defaultInt);
+            Assert.AreEqual(3, r4.Count);
+            foreach (var list in r4)
+            {
+                Assert.AreEqual(0, list.Count);
+            }
+
+            List<string?> l5 = new List<string?> { "apple", null, "banana", null, "cherry" };
+            List<string> r5 = l5.NullToDefault(defaultString);
+            CollectionAssert.AreEqual(new List<string> { "apple", defaultString, "banana", defaultString, "cherry" }, r5);
+
+            List<List<string?>> l6 = new List<List<string?>>
+            {
+                new List<string?> { "apple", null, "banana" },
+                new List<string?> { null, "orange", null },
+                new List<string?> { "grape", null, "melon" }
+            };
+            List<List<string>> r6 = l6.NullToDefault(defaultString);
+            var e6 = new List<List<string>>
+            {
+                new List<string> { "apple", defaultString, "banana" },
+                new List<string> { defaultString, "orange", defaultString },
+                new List<string> { "grape", defaultString, "melon" }
+            };
+            Assert.AreEqual(e6.Count, r6.Count);
+            for (int loop = 0; loop < e6.Count; loop++)
+            {
+                CollectionAssert.AreEqual(e6[loop], r6[loop]);
+            }
+
+            List<string?> l7 = new List<string?>();
+            List<string> r7 = l7.NullToDefault(defaultString);
+            Assert.AreEqual(0, r7.Count);
+
+            List<List<string?>> l8 = new List<List<string?>>
+            {
+                new List<string?>(),
+                new List<string?>(),
+                new List<string?>()
+            };
+            List<List<string>> r8 = l8.NullToDefault(defaultString);
+            Assert.AreEqual(3, r8.Count);
+            foreach (var list in r8)
+            {
+                Assert.AreEqual(0, list.Count);
+            }
         }
     }
 }
