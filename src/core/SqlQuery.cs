@@ -112,13 +112,13 @@ namespace SehensWerte.Utils
         private static string peek(Queue<string> tokens)
         {
             string token;
-            return tokens.TryPeek(out token) ? token : "";
+            return tokens.TryPeek(out token!) ? token : "";
         }
 
         private static string next(Queue<string> tokens, StringBuilder? sum = null)
         {
             string token;
-            token = tokens.TryDequeue(out token) ? token : "";
+            token = tokens.TryDequeue(out token!) ? token : "";
             sum?.Append(token + " ");
             return token;
         }
@@ -131,16 +131,57 @@ namespace SehensWerte.Utils
             // mnemonics, including those with underscores and numbers
             // Numeric literals, including integers and decimals (e.g., 1, -2.3, .5)
             // Operators and punctuation (e.g., '=', ',', '(', ')', ';')
+            // parameterise strings like :foo :hello_world :Hello123
             // Any other non-whitespace character
 
-            var pattern = @"('([^']|'')*'|""([^""]|"""")*""|[A-Za-z_][A-Za-z0-9_.]*|[-+]?(?:\d+\.\d*|\.\d+|\d+)|\S)";
+            var pattern = @"(:[A-Za-z_][A-Za-z0-9_]*|'([^']|'')*'|""([^""]|"""")*""|[A-Za-z_][A-Za-z0-9_.]*|[-+]?(?:\d+\.\d*|\.\d+|\d+)|!=|<>|:=|->>|->|::|&&|\|\||\S)";
+
             return new Queue<string>(
                 Regex.Matches(sqlQuery, pattern)
                 .Select(x => x.Value));
         }
 
+        public static string Parameterise(string baseQuery, Dictionary<string, object?>? parameters)
+        {
+            // Insert parameters replacing named :variable callouts in the query
+
+            var tokens = Tokenise(baseQuery);
+            var result = new StringBuilder();
+            var test = new HashSet<string>();
+            string prevToken = "";
+            foreach (var token in tokens)
+            {
+                if (result.Length > 0 && token != ";" && token != ")" && token != "," && prevToken != "(")
+                {
+                    result.Append(" ");
+                }
+                if (token.StartsWith(":"))
+                {
+                    string paramName = token.Substring(1);
+                    if (!(parameters?.TryGetValue(paramName, out var paramValue) ?? false))
+                    {
+                        throw new ArgumentException($"Missing parameter {paramName}");
+                    }
+                    result.Append(EscapeParameter(paramValue));
+                    test.Add(paramName);
+                }
+                else
+                {
+                    result.Append(token);
+                }
+                prevToken = token;
+            }
+            if (test.Count != (parameters?.Count ?? 0))
+            {
+                throw new ArgumentException($"Parameter count mismatch {test} unique parameters in query, {parameters.Count} parameters");
+            }
+            return result.ToString();
+        }
+
         public static string Parameterise(string baseQuery, object?[]? parameters)
         {
+            // Insert parameters in order to replace positional %s callouts in the query
+
             if (parameters == null)
             {
                 // if NULL parameters are given, return the baseQuery as it has already been %% trimmed
@@ -274,7 +315,7 @@ namespace SehensWerte.Utils
         }
 
         [TestMethod]
-        public void Parameterise()
+        public void ParameteriseList()
         {
             var testCases = new[]
             {
@@ -356,25 +397,143 @@ namespace SehensWerte.Utils
         }
 
         [TestMethod]
+        public void ParameteriseDict()
+        {
+            var testCases = new[]
+            {
+                new
+                {
+                    Query = "SELECT * FROM users WHERE username = :username AND age = :age;",
+                    Parameters = new Dictionary<string, object?>
+                    {
+                        { "username", "bob" },
+                        { "age", 25 }
+                    },
+                    Expected = "SELECT * FROM users WHERE username = 'bob' AND age = 25;"
+                },
+                new
+                {
+                    Query = "SELECT * FROM users WHERE username = ':hello';",
+                    Parameters = new Dictionary<string, object?>
+                    {
+                        { "hello", "foo" }
+                    },
+                    Expected = "exception"
+                },
+                new
+                {
+                    Query = "INSERT INTO logs (message) VALUES (:message);",
+                    Parameters = new Dictionary<string, object?>
+                    {
+                        { "message", "Error occurred at % in module %s" }
+                    },
+                    Expected = "INSERT INTO logs (message) VALUES ('Error occurred at % in module %s');"
+                },
+                new
+                {
+                    Query = "INSERT INTO table (name, age, birthdate, active, ageagain) VALUES (:name, :age, :birthdate, :active, :age);",
+                    Parameters = new Dictionary<string, object?>
+                    {
+                        { "name", "Alice" },
+                        { "age", 30 },
+                        { "birthdate", new DateTime(1990, 1, 1) },
+                        { "active", true }
+                    },
+                    Expected = "INSERT INTO table (name, age, birthdate, active, ageagain) VALUES ('Alice', 30, '1990-01-01 00:00:00', True, 30);"
+                },
+                new
+                {
+                    Query = "INSERT INTO table (name, description) VALUES (:name, :description);",
+                    Parameters = new Dictionary<string, object?>
+                    {
+                        { "name", "Item" },
+                        { "description", null }
+                    },
+                    Expected = "INSERT INTO table (name, description) VALUES ('Item', NULL);"
+                },
+                new
+                {
+                    Query = "SELECT * FROM users WHERE username = :username;",
+                    Parameters = new Dictionary<string, object?> 
+                    { 
+                        { "username", "Robert'); DROP TABLE Students" } 
+                    },
+                    Expected = "SELECT * FROM users WHERE username = 'Robert''); DROP TABLE Students';"
+                },
+                new
+                {
+                    Query = "SELECT * FROM users WHERE username = :username;",
+                    Parameters = new Dictionary<string, object?>()
+                    {
+                        { "username", null }
+                    },
+                    Expected = "SELECT * FROM users WHERE username = NULL;"
+                },
+                new
+                {
+                    Query = "SELECT * FROM users WHERE username = :username AND age = :age;",
+                    Parameters = new Dictionary<string, object?>
+                    {
+                        { "username", "bob" }
+                    },
+                    Expected = "exception"
+                },
+                new
+                {
+                    Query = "SELECT * FROM users WHERE username = :username;",
+                    Parameters = new Dictionary<string, object?>
+                    {
+                        { "username", "bob" },
+                        { "age", 25 }
+                    },
+                    Expected = "exception"
+                },
+            };
+
+            foreach (var testCase in testCases)
+            {
+                string result = "";
+                try
+                {
+                    result = SqlQuery.Parameterise(testCase.Query, testCase.Parameters);
+                    Assert.AreEqual(testCase.Expected, result, $"Query: {testCase.Query}, Parameters: [{string.Join(", ", testCase.Parameters?.Select(x => x.Key + ":" + x.Value))}]");
+                }
+                catch (ArgumentException)
+                {
+                    Assert.AreEqual(testCase.Expected, "exception");
+                }
+            }
+        }
+
+
+        [TestMethod]
         public void TestTokeniser()
         {
             string test = @"
-            select 
-                name_with_underscores_and_1_numbers_2_,
-                'hel (lo' as name,
-                table.name,
-                table_name.name,
-                table_1.col2,
-                to_json(jsondate),
-                count(simple.thing),
-                (select count(thing) from thing where thing=true and thing>1.234 and (other thing)) as user_sessions,
-                -123.456,
-                5,
-                0.5,
-                .5
-            from ""table_name""
-            where something='he l)lo  ';
-            ";
+select 
+    name_with_underscores_and_1_numbers_2_,
+    'hel (lo' as name,
+    table.name,
+    table_name.name,
+    table_1.col2,
+    to_json(jsondate),
+    count(simple.thing),
+    (select count(thing) from thing where thing=true and thing>1.234 and (other thing)) as user_sessions,
+    -123.456,
+    5,
+    0.5,
+    .5,
+    column1 != column2,
+    column3 <> column4,
+    value1 := value2,
+    json_data ->> 'key',
+    json_data -> 'key',
+    cast_column::text,
+    col1 && col2,
+    col3 || col4
+from ""table_name""
+where something='he l)lo  ';
+";
 
             var tokens = SqlQuery.Tokenise(test);
 
@@ -392,7 +551,15 @@ namespace SehensWerte.Utils
                 "-123.456", ",",
                 "5", ",",
                 "0.5", ",",
-                ".5",
+                ".5", ",",
+                "column1", "!=", "column2", ",",
+                "column3", "<>", "column4", ",",
+                "value1", ":=", "value2", ",",
+                "json_data", "->>", "'key'", ",",
+                "json_data", "->", "'key'", ",",
+                "cast_column", "::", "text", ",",
+                "col1", "&&", "col2", ",",
+                "col3", "||", "col4",
                 "from", @"""table_name""",
                 "where", "something", "=", "'he l)lo  '", ";"
             };
