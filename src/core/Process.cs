@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Management;
 using System.Reflection;
+using System.Runtime.InteropServices;
 using System.Text;
 
 namespace SehensWerte.Utils
@@ -24,7 +25,7 @@ namespace SehensWerte.Utils
             {
                 bool isMono = Type.GetType("Mono.Runtime") != null;
                 bool isWine = RunningOnWine();
-                string cpu = Environment.Is64BitOperatingSystem ? "x64" : "x86";
+                string cpu = RuntimeInformation.OSArchitecture.ToString();
                 return (isMono ? "Mono/" : isWine ? "Wine/" : "Windows/") + $"{Environment.OSVersion.VersionString}/{cpu}";
             }
         }
