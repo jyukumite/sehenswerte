@@ -125,16 +125,13 @@ namespace SehensWerte.Utils
 
         public static Queue<string> Tokenise(string sqlQuery)
         {
-            // split into:
-            // Single-quoted strings (with escaped single quotes)
-            // Double-quoted strings (with escaped double quotes)
-            // mnemonics, including those with underscores and numbers
-            // Numeric literals, including integers and decimals (e.g., 1, -2.3, .5)
-            // Operators and punctuation (e.g., '=', ',', '(', ')', ';')
-            // parameterise strings like :foo :hello_world :Hello123
-            // Any other non-whitespace character
-
-            var pattern = @"(:[A-Za-z_][A-Za-z0-9_]*|'([^']|'')*'|""([^""]|"""")*""|[A-Za-z_][A-Za-z0-9_.]*|[-+]?(?:\d+\.\d*|\.\d+|\d+)|!=|<>|:=|->>|->|::|&&|\|\||\S)";
+            var pattern = @"(:[A-Za-z_][A-Za-z0-9_]*)"    // parameters, e.g. :param_name
+                        + @"|'([^']|'')*'"                // single-quoted strings, including escaped single quotes
+                        + @"|""([^""]|"""")*"""           // double-quoted strings, including escaped double quotes
+                        + @"|[A-Za-z_][A-Za-z0-9_.]*"     // identifiers and object/column names, like table.column
+                        + @"|[-+]?(?:\d+\.\d*|\.\d+|\d+)" // numbers, including integers and decimals
+                        + @"|[!=<>:@\-+*/%&|^#~]{2,3}"    // operators (tradeoff between false positives and complexity but arguably better than \W)
+                        + @"|\S";                         // any single non-whitespace character as a fallback
 
             return new Queue<string>(
                 Regex.Matches(sqlQuery, pattern)
@@ -148,10 +145,14 @@ namespace SehensWerte.Utils
             var tokens = Tokenise(baseQuery);
             var result = new StringBuilder();
             var test = new HashSet<string>();
-            string prevToken = "";
+            string prevToken = " ";
             foreach (var token in tokens)
             {
-                if (result.Length > 0 && token != ";" && token != ")" && token != "," && prevToken != "(")
+                if (result.Length == 0 || token == ";" || token == ")" || token == "," || prevToken == "(" )
+                {
+                    // concatenate without space, for readability
+                }
+                else
                 {
                     result.Append(" ");
                 }
@@ -403,13 +404,13 @@ namespace SehensWerte.Utils
             {
                 new
                 {
-                    Query = "SELECT * FROM users WHERE username = :username AND age = :age;",
+                    Query = "SELECT COUNT(*) FROM users WHERE username = :username AND age = :age;",
                     Parameters = new Dictionary<string, object?>
                     {
                         { "username", "bob" },
                         { "age", 25 }
                     },
-                    Expected = "SELECT * FROM users WHERE username = 'bob' AND age = 25;"
+                    Expected = "SELECT COUNT (*) FROM users WHERE username = 'bob' AND age = 25;"
                 },
                 new
                 {
@@ -518,7 +519,7 @@ select
     table_1.col2,
     to_json(jsondate),
     count(simple.thing),
-    (select count(thing) from thing where thing=true and thing>1.234 and (other thing)) as user_sessions,
+    (select count(thing) from thing where thing=true and thing>1.234 and (other thing)) as foo,
     -123.456,
     5,
     0.5,
@@ -533,6 +534,10 @@ select
     col3 || col4
 from ""table_name""
 where something='he l)lo  ';
+# #> #>> & && &< &> -> ->> -|- << <<= <@ <^ >> >>= >^ @> @@ | ~ ~=
++= -= *= /= %= &= ^-= |*=
+: :: :=
+
 ";
 
             var tokens = SqlQuery.Tokenise(test);
@@ -547,7 +552,7 @@ where something='he l)lo  ';
                 "table_1.col2", ",",
                 "to_json", "(", "jsondate", ")", ",",
                 "count", "(", "simple.thing", ")", ",",
-                "(", "select", "count", "(", "thing", ")", "from", "thing", "where", "thing", "=", "true", "and", "thing", ">", "1.234", "and", "(", "other", "thing", ")", ")", "as", "user_sessions", ",",
+                "(", "select", "count", "(", "thing", ")", "from", "thing", "where", "thing", "=", "true", "and", "thing", ">", "1.234", "and", "(", "other", "thing", ")", ")", "as", "foo", ",",
                 "-123.456", ",",
                 "5", ",",
                 "0.5", ",",
@@ -561,15 +566,18 @@ where something='he l)lo  ';
                 "col1", "&&", "col2", ",",
                 "col3", "||", "col4",
                 "from", @"""table_name""",
-                "where", "something", "=", "'he l)lo  '", ";"
+                "where", "something", "=", "'he l)lo  '", ";",
+                "#", "#>", "#>>", "&", "&&", "&<", "&>", "->", "->>", "-|-", "<<", "<<=", "<@", "<^", ">>", ">>=", ">^", "@>", "@@", "|", "~", "~=",
+                "+=", "-=", "*=", "/=", "%=", "&=", "^-=", "|*=",
+                ":", "::", ":=",
             };
 
             var tokenList = tokens.ToList();
-            Assert.AreEqual(expectedTokens.Count, tokenList.Count);
-            for (int loop = 0; loop < expectedTokens.Count; loop++)
+            for (int loop = 0; loop < Math.Min(tokenList.Count, expectedTokens.Count); loop++)
             {
                 Assert.AreEqual(expectedTokens[loop], tokenList[loop], $"Expected '{expectedTokens[loop]}', got '{tokenList[loop]}'.");
             }
+            Assert.AreEqual(expectedTokens.Count, tokenList.Count);
         }
 
         [TestClass]

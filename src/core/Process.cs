@@ -18,6 +18,30 @@ namespace SehensWerte.Utils
             }
         }
 
+        public static string Platform
+        {
+            get
+            {
+                bool isMono = Type.GetType("Mono.Runtime") != null;
+                bool isWine = RunningOnWine();
+                string cpu = Environment.Is64BitOperatingSystem ? "x64" : "x86";
+                return (isMono ? "Mono/" : isWine ? "Wine/" : "Windows/") + $"{Environment.OSVersion.VersionString}/{cpu}";
+            }
+        }
+
+        private static bool RunningOnWine()
+        {
+            // Uses the wine registry entry. This may be unreliable?
+            Microsoft.Win32.RegistryKey? wineKey = null;
+            try
+            {
+                using (wineKey = Microsoft.Win32.Registry.CurrentUser.OpenSubKey("Software\\Wine")) { }
+            }
+            catch { }
+            return wineKey != null;
+        }
+
+
         public static int Run(string exeName, string parameters, string stdin, MemoryStream stdout)
         {
             return Run(exeName, parameters, "", Encoding.Default.GetBytes(stdin), stdout, new MemoryStream());
@@ -197,6 +221,5 @@ namespace SehensWerte.Utils
                 }
             }
         }
-
     }
 }
