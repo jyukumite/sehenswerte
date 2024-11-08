@@ -540,7 +540,7 @@ namespace SehensWerte.Controls
             string displayText = (e.Value ?? "null").ToString();
             Font cellFont = isNull ? new Font(e.CellStyle.Font, FontStyle.Italic) : e.CellStyle.Font;
             Color textColor = isNull ? NullForeColor : e.CellStyle.ForeColor;
-            TextFormatFlags flags = TextFormatFlags.EndEllipsis;
+            TextFormatFlags flags = TextFormatFlags.EndEllipsis | TextFormatFlags.NoPrefix;
 
             switch (e.CellStyle.Alignment)
             {

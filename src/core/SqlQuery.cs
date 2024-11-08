@@ -125,13 +125,13 @@ namespace SehensWerte.Utils
 
         public static Queue<string> Tokenise(string sqlQuery)
         {
-            var pattern = @"(:[A-Za-z_][A-Za-z0-9_]*)"    // parameters, e.g. :param_name
-                        + @"|'([^']|'')*'"                // single-quoted strings, including escaped single quotes
-                        + @"|""([^""]|"""")*"""           // double-quoted strings, including escaped double quotes
-                        + @"|[A-Za-z_][A-Za-z0-9_.]*"     // identifiers and object/column names, like table.column
-                        + @"|[-+]?(?:\d+\.\d*|\.\d+|\d+)" // numbers, including integers and decimals
-                        + @"|[!=<>:@\-+*/%&|^#~]{2,3}"    // operators (tradeoff between false positives and complexity but arguably better than \W)
-                        + @"|\S";                         // any single non-whitespace character as a fallback
+            var pattern = @"(:[A-Za-z_][A-Za-z0-9_]*)"   // parameters, e.g. :param_name
+                       + @"|[eE]?'([^']|'')*'"                // single-quoted strings, including escaped single quotes
+                       + @"|""([^""]|"""")*"""           // double-quoted strings, including escaped double quotes
+                       + @"|[A-Za-z_][A-Za-z0-9_.]*"     // identifiers and object/column names, like table.column
+                       + @"|[-+]?(?:\d+\.\d*|\.\d+|\d+)" // numbers, including integers and decimals
+                       + @"|(!=|<>|<=|>=|\-\|\-|\-=|\->>|\->|#>>|#>|%=|&&|&<|&=|&>|\*=|/=|::|:=|@@|@>|\^\-=|\|\*=|\|\||~=|\+=|<@|<\^|<<=|<<|>\^|>>=|>>)"    // operators
+                       + @"|\S";                         // any single non-whitespace character as a fallback
 
             return new Queue<string>(
                 Regex.Matches(sqlQuery, pattern)
@@ -148,7 +148,7 @@ namespace SehensWerte.Utils
             string prevToken = " ";
             foreach (var token in tokens)
             {
-                if (result.Length == 0 || token == ";" || token == ")" || token == "," || prevToken == "(" )
+                if (result.Length == 0 || token == ";" || token == ")" || token == "," || prevToken == "(")
                 {
                     // concatenate without space, for readability
                 }
@@ -156,7 +156,7 @@ namespace SehensWerte.Utils
                 {
                     result.Append(" ");
                 }
-                if (token.StartsWith(":"))
+                if (token.Length >= 2 && token[0] == ':' && (char.IsLetter(token[1]) || token[1] == '_'))
                 {
                     string paramName = token.Substring(1);
                     if (!(parameters?.TryGetValue(paramName, out var paramValue) ?? false))
@@ -455,9 +455,9 @@ namespace SehensWerte.Utils
                 new
                 {
                     Query = "SELECT * FROM users WHERE username = :username;",
-                    Parameters = new Dictionary<string, object?> 
-                    { 
-                        { "username", "Robert'); DROP TABLE Students" } 
+                    Parameters = new Dictionary<string, object?>
+                    {
+                        { "username", "Robert'); DROP TABLE Students" }
                     },
                     Expected = "SELECT * FROM users WHERE username = 'Robert''); DROP TABLE Students';"
                 },
@@ -524,6 +524,8 @@ select
     5,
     0.5,
     .5,
+    E'string with 
+newline and "" and ''.',
     column1 != column2,
     column3 <> column4,
     value1 := value2,
@@ -533,10 +535,12 @@ select
     col1 && col2,
     col3 || col4
 from ""table_name""
-where something='he l)lo  ';
+where something='he l)lo  '
+id=:id
+;
 # #> #>> & && &< &> -> ->> -|- << <<= <@ <^ >> >>= >^ @> @@ | ~ ~=
 += -= *= /= %= &= ^-= |*=
-: :: :=
+: :: := >= <= <> , ;
 
 ";
 
@@ -557,6 +561,8 @@ where something='he l)lo  ';
                 "5", ",",
                 "0.5", ",",
                 ".5", ",",
+                @"E'string with 
+newline and "" and ''.'", ",",
                 "column1", "!=", "column2", ",",
                 "column3", "<>", "column4", ",",
                 "value1", ":=", "value2", ",",
@@ -566,11 +572,13 @@ where something='he l)lo  ';
                 "col1", "&&", "col2", ",",
                 "col3", "||", "col4",
                 "from", @"""table_name""",
-                "where", "something", "=", "'he l)lo  '", ";",
+                "where", "something", "=", "'he l)lo  '",
+                "id", "=", ":id",
+                ";",
                 "#", "#>", "#>>", "&", "&&", "&<", "&>", "->", "->>", "-|-", "<<", "<<=", "<@", "<^", ">>", ">>=", ">^", "@>", "@@", "|", "~", "~=",
                 "+=", "-=", "*=", "/=", "%=", "&=", "^-=", "|*=",
-                ":", "::", ":=",
-            };
+                ":", "::", ":=", ">=", "<=", "<>", ",", ";",
+        };
 
             var tokenList = tokens.ToList();
             for (int loop = 0; loop < Math.Min(tokenList.Count, expectedTokens.Count); loop++)
