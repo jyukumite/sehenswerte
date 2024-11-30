@@ -122,6 +122,7 @@ namespace SehensWerte.Controls
             this.Grid.RowPostPaint += this.DataGrid_RowPostPaint;
             this.Grid.SelectionChanged += this.Grid_SelectionChanged;
             this.Grid.CellDoubleClick += (s, e) => CellDoubleClick.Invoke(s, e);
+            this.Grid.ColumnDividerDoubleClick += Grid_ColumnDividerDoubleClick;
             this.Grid.CellPainting += Grid_CellPainting;
             this.Grid.KeyDown += (s, e) =>
             {
@@ -274,6 +275,44 @@ namespace SehensWerte.Controls
             this.StatusStrip.PerformLayout();
             this.ResumeLayout(false);
             this.PerformLayout();
+        }
+
+        private void Grid_ColumnDividerDoubleClick(object? sender, DataGridViewColumnDividerDoubleClickEventArgs e)
+        {
+            if (sender == null) return;
+            DataGridView grid = (DataGridView)sender;
+            DataGridViewColumn column = grid.Columns[e.ColumnIndex];
+            var strings = GetColumn(e.ColumnIndex);
+            int padding = grid.ColumnHeadersDefaultCellStyle.Padding.Left
+                              + grid.ColumnHeadersDefaultCellStyle.Padding.Right;
+
+            Font font = grid.ColumnHeadersDefaultCellStyle.Font;
+            SizeF headerTextSize = TextRenderer.MeasureText(column.HeaderText, font);
+            int headerWidth = (int)Math.Ceiling(headerTextSize.Width) + padding;
+
+            ThreadLocal<(Graphics g, int m)> widths = new ThreadLocal<(Graphics g, int m)>(() =>
+                (Graphics.FromImage(new Bitmap(1, 1)), headerWidth), trackAllValues: true
+            );
+            Parallel.ForEach(strings, str =>
+            {
+                if (str != null)
+                {
+                    Graphics g = widths.Value.g;
+                    SizeF textSize = g.MeasureString(str, font);
+                    int width = (int)Math.Ceiling(textSize.Width) + padding;
+                    widths.Value = (g, Math.Max(widths.Value.m, width));
+                }
+            });
+            foreach (var v in widths.Values)
+            {
+                v.g.Dispose();
+            }
+
+            int maxWidth = widths.Values.Max(value => value.m);
+            column.Width = Math.Max(10, Math.Min(grid.Parent.Width - 20, maxWidth + 10));
+            widths.Dispose();
+
+            e.Handled = true;
         }
 
         private void Grid_CellToolTipTextNeeded(object? sender, DataGridViewCellToolTipTextNeededEventArgs e)
@@ -534,28 +573,50 @@ namespace SehensWerte.Controls
         private void Grid_CellPainting(object? sender, DataGridViewCellPaintingEventArgs e)
         {
             if (e.RowIndex < 0 || e.ColumnIndex < 0) return;
+
             bool isNull = e.Value == null || e.Value == DBNull.Value;
             e.PaintBackground(e.ClipBounds, e.State.HasFlag(DataGridViewElementStates.Selected));
             e.Paint(e.ClipBounds, DataGridViewPaintParts.Border);
+
             string displayText = (e.Value ?? "null").ToString();
             Font cellFont = isNull ? new Font(e.CellStyle.Font, FontStyle.Italic) : e.CellStyle.Font;
             Color textColor = isNull ? NullForeColor : e.CellStyle.ForeColor;
-            TextFormatFlags flags = TextFormatFlags.EndEllipsis | TextFormatFlags.NoPrefix;
-
-            switch (e.CellStyle.Alignment)
+            StringFormat stringFormat = new StringFormat
             {
-                case DataGridViewContentAlignment.MiddleCenter: flags |= TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter; break;
-                case DataGridViewContentAlignment.MiddleLeft: flags |= TextFormatFlags.Left | TextFormatFlags.VerticalCenter; break;
-                case DataGridViewContentAlignment.MiddleRight: flags |= TextFormatFlags.Right | TextFormatFlags.VerticalCenter; break;
-                case DataGridViewContentAlignment.TopCenter: flags |= TextFormatFlags.HorizontalCenter | TextFormatFlags.Top; break;
-                case DataGridViewContentAlignment.TopLeft: flags |= TextFormatFlags.Left | TextFormatFlags.Top; break;
-                case DataGridViewContentAlignment.TopRight: flags |= TextFormatFlags.Right | TextFormatFlags.Top; break;
-                case DataGridViewContentAlignment.BottomCenter: flags |= TextFormatFlags.HorizontalCenter | TextFormatFlags.Bottom; break;
-                case DataGridViewContentAlignment.BottomLeft: flags |= TextFormatFlags.Left | TextFormatFlags.Bottom; break;
-                case DataGridViewContentAlignment.BottomRight: flags |= TextFormatFlags.Right | TextFormatFlags.Bottom; break;
-            }
+                Trimming = StringTrimming.EllipsisCharacter,
+                FormatFlags = 0
+            };
 
-            TextRenderer.DrawText(e.Graphics, displayText, cellFont, e.CellBounds, textColor, flags);
+            stringFormat.Alignment = e.CellStyle.Alignment switch
+            {
+                DataGridViewContentAlignment.MiddleCenter or DataGridViewContentAlignment.TopCenter or DataGridViewContentAlignment.BottomCenter => StringAlignment.Center,
+                DataGridViewContentAlignment.MiddleLeft or DataGridViewContentAlignment.TopLeft or DataGridViewContentAlignment.BottomLeft => StringAlignment.Near,
+                DataGridViewContentAlignment.MiddleRight or DataGridViewContentAlignment.TopRight or DataGridViewContentAlignment.BottomRight => StringAlignment.Far,
+                _ => StringAlignment.Near
+            };
+
+            stringFormat.LineAlignment = e.CellStyle.Alignment switch
+            {
+                DataGridViewContentAlignment.MiddleCenter or DataGridViewContentAlignment.MiddleLeft or DataGridViewContentAlignment.MiddleRight => StringAlignment.Center,
+                DataGridViewContentAlignment.TopCenter or DataGridViewContentAlignment.TopLeft or DataGridViewContentAlignment.TopRight => StringAlignment.Near,
+                DataGridViewContentAlignment.BottomCenter or DataGridViewContentAlignment.BottomLeft or DataGridViewContentAlignment.BottomRight => StringAlignment.Far,
+                _ => StringAlignment.Near
+            };
+
+            RectangleF textBounds = new RectangleF(
+                e.CellBounds.X + e.CellStyle.Padding.Left,
+                e.CellBounds.Y + e.CellStyle.Padding.Top,
+                e.CellBounds.Width - e.CellStyle.Padding.Left - e.CellStyle.Padding.Right,
+                e.CellBounds.Height - e.CellStyle.Padding.Top - e.CellStyle.Padding.Bottom
+            );
+
+            Region originalClip = e.Graphics.Clip.Clone();
+            e.Graphics.SetClip(e.CellBounds);
+            using (SolidBrush textBrush = new SolidBrush(textColor))
+            {
+                e.Graphics.DrawString(displayText, cellFont, textBrush, textBounds, stringFormat);
+            }
+            e.Graphics.Clip = originalClip;
             e.Handled = true;
         }
 
