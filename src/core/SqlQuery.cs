@@ -53,12 +53,15 @@ namespace SehensWerte.Utils
 
             while (tokens.Count() != 0 && peek(tokens).ToUpper() == "WITH") // temporary tables
             {
-                // WITH temp_table AS (select 1,2,3) SELECT ...
-                next(tokens); // WITH
-                next(tokens); // name of temp table
-                if (next(tokens).ToUpper() != "AS") return "";
-                if (next(tokens).ToUpper() != "(") return "";
-                skipToClosingBracket(tokens);
+                do
+                {
+                    // WITH temp_table AS (select 1,2,3) SELECT ...
+                    next(tokens); // WITH
+                    next(tokens); // name of temp table
+                    if (next(tokens).ToUpper() != "AS") return "";
+                    if (next(tokens).ToUpper() != "(") return "";
+                    skipToClosingBracket(tokens);
+                } while (tokens.Count() != 0 && peek(tokens).ToUpper() == ",");
             }
             return next(tokens);
         }
