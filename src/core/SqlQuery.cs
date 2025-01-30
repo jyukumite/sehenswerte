@@ -166,7 +166,7 @@ namespace SehensWerte.Utils
                     {
                         throw new ArgumentException($"Missing parameter {paramName}");
                     }
-                    result.Append(EscapeParameter(paramValue));
+                    result.Append(PostgresEscapeParameter(paramValue));
                     test.Add(paramName);
                 }
                 else
@@ -211,7 +211,7 @@ namespace SehensWerte.Utils
                             throw new ArgumentException("Parameter count mismatch (too few parameters)");
                         }
                         var param = parameters[paramIndex++]; // allow exception
-                        result.Append(EscapeParameter(param));
+                        result.Append(PostgresEscapeParameter(param));
                     }
                     else
                     {
@@ -237,25 +237,25 @@ namespace SehensWerte.Utils
             return result.ToString();
         }
 
-        public static string EscapeParameter(object? param)
+        public static string PostgresEscapeParameter(object? param)
         {
             return param switch
             {
                 null => "NULL",
-                string str => EscapeString(str),
+                string str => PostgresEscapeString(str),
                 int or double or float or decimal => Convert.ToString(param, CultureInfo.InvariantCulture) ?? "NULL",
                 DateTime dateTime => $"'{dateTime:yyyy-MM-dd HH:mm:ss}'",
                 Guid guid => $"UUID('{guid.ToString()}')",
                 bool => (bool)param ? "True" : "False",
-                _ => EscapeString(param?.ToString() ?? "NULL")
+                _ => PostgresEscapeString(param?.ToString() ?? "NULL")
             };
 
-            static string EscapeString(string param)
+            static string PostgresEscapeString(string param)
             {
                 bool cr = param.Contains((char)10) || param.Contains((char)13);
                 string v = param
                     .Replace("'", "''")
-                    .Replace("\\", "\\\\")
+                    .Replace("\\", cr ? "\\\\" : "\\") // single if not E string, double if E string
                     .Replace("\n\r", "\n")
                     .Replace("\r\n", "\n")
                     .Replace("\r", "\\n")
@@ -264,9 +264,10 @@ namespace SehensWerte.Utils
             }
         }
 
-        public static string UnescapeString(string value)
+        public static string UnescapeString(string value, bool unescapeBackslash = false)
         {
-            return value.Replace("\\n", "\n").Replace("\n", "\r\n").Replace("\\\\", "\\");
+            string a = value.Replace("\\n", "\n").Replace("\n", "\r\n");
+            return unescapeBackslash ? a.Replace("\\\\", "\\") : a;
         }
     }
 
@@ -628,7 +629,7 @@ newline and "" and ''.'", ",",
 
                 foreach (var testCase in testCases)
                 {
-                    var result = SqlQuery.EscapeParameter(testCase.Input);
+                    var result = SqlQuery.PostgresEscapeParameter(testCase.Input);
                     Assert.AreEqual(testCase.Expected, result, $"Failed for input: {testCase.Input}");
                 }
             }
