@@ -7,6 +7,7 @@ using System.Collections;
 using System.ComponentModel;
 using System.Data;
 using System.Data.Common;
+using System.Drawing;
 using System.Globalization;
 using System.Text.RegularExpressions;
 using System.Threading;
@@ -66,6 +67,7 @@ namespace SehensWerte.Controls
         private ToolStripDropDownButton HideMatchCellStatus;
         private ToolStripDropDownButton HideUnmatchCellStatus;
         private ToolStripDropDownButton UniqueCellStatus;
+        private ToolStripDropDownButton TransposeGrid;
         private ToolStripDropDownButton SaveCsvButton;
         private ToolStripDropDownButton LoadCsvButton;
         public BoundData? DataGridBind;
@@ -102,6 +104,7 @@ namespace SehensWerte.Controls
             this.HideMatchCellStatus = new System.Windows.Forms.ToolStripDropDownButton();
             this.HideUnmatchCellStatus = new System.Windows.Forms.ToolStripDropDownButton();
             this.UniqueCellStatus = new System.Windows.Forms.ToolStripDropDownButton();
+            this.TransposeGrid = new System.Windows.Forms.ToolStripDropDownButton();
             this.SaveCsvButton = new System.Windows.Forms.ToolStripDropDownButton();
             this.LoadCsvButton = new System.Windows.Forms.ToolStripDropDownButton();
 
@@ -158,6 +161,7 @@ namespace SehensWerte.Controls
                     this.HideMatchCellStatus,
                     this.HideUnmatchCellStatus,
                     this.UniqueCellStatus,
+                    //this.TransposeGrid,
                     this.SaveCsvButton,
                     this.LoadCsvButton});
             this.StatusStrip.LayoutStyle = System.Windows.Forms.ToolStripLayoutStyle.HorizontalStackWithOverflow;
@@ -251,6 +255,13 @@ namespace SehensWerte.Controls
             this.UniqueCellStatus.Click += new System.EventHandler(this.UniqueCellStatus_Click);
             this.UniqueCellStatus.BackColor = prettyColours ? Color.FromArgb(242, 196, 208) : SystemColors.Control;
 
+            this.TransposeGrid.Name = "TransposeGrid";
+            this.TransposeGrid.ShowDropDownArrow = false;
+            this.TransposeGrid.Size = new System.Drawing.Size(171, 38);
+            this.TransposeGrid.Text = "Transpose";
+            this.TransposeGrid.Click += new System.EventHandler(this.TransposeGrid_Click);
+            this.TransposeGrid.BackColor = prettyColours ? Color.FromArgb(242, 196, 208) : SystemColors.Control;
+
             this.SaveCsvButton.Name = "SaveCsv";
             this.SaveCsvButton.ShowDropDownArrow = false;
             this.SaveCsvButton.Size = new System.Drawing.Size(171, 38);
@@ -279,40 +290,46 @@ namespace SehensWerte.Controls
 
         private void Grid_ColumnDividerDoubleClick(object? sender, DataGridViewColumnDividerDoubleClickEventArgs e)
         {
-            if (sender == null) return;
-            DataGridView grid = (DataGridView)sender;
-            DataGridViewColumn column = grid.Columns[e.ColumnIndex];
-            var strings = GetColumn(e.ColumnIndex);
-            int padding = grid.ColumnHeadersDefaultCellStyle.Padding.Left
-                              + grid.ColumnHeadersDefaultCellStyle.Padding.Right;
-
-            Font font = grid.ColumnHeadersDefaultCellStyle.Font;
-            SizeF headerTextSize = TextRenderer.MeasureText(column.HeaderText, font);
-            int headerWidth = (int)Math.Ceiling(headerTextSize.Width) + padding;
-
-            ThreadLocal<(Graphics g, int m)> widths = new ThreadLocal<(Graphics g, int m)>(() =>
-                (Graphics.FromImage(new Bitmap(1, 1)), headerWidth), trackAllValues: true
-            );
-            Parallel.ForEach(strings, str =>
+            try
             {
-                if (str != null)
+                if (sender == null) return;
+                DataGridView grid = (DataGridView)sender;
+                DataGridViewColumn column = grid.Columns[e.ColumnIndex];
+                var strings = GetColumn(e.ColumnIndex);
+                int padding = grid.ColumnHeadersDefaultCellStyle.Padding.Left
+                                  + grid.ColumnHeadersDefaultCellStyle.Padding.Right;
+
+                Font font = grid.ColumnHeadersDefaultCellStyle.Font;
+                SizeF headerTextSize = TextRenderer.MeasureText(column.HeaderText, font);
+                int headerWidth = (int)Math.Ceiling(headerTextSize.Width) + padding;
+
+                ThreadLocal<(Graphics g, int m)> widths = new ThreadLocal<(Graphics g, int m)>(() =>
+                    (Graphics.FromImage(new Bitmap(1, 1)), headerWidth), trackAllValues: true
+                );
+                Parallel.ForEach(strings, str =>
                 {
-                    Graphics g = widths.Value.g;
-                    SizeF textSize = g.MeasureString(str, font);
-                    int width = (int)Math.Ceiling(textSize.Width) + padding;
-                    widths.Value = (g, Math.Max(widths.Value.m, width));
+                    if (str != null)
+                    {
+                        Graphics g = widths.Value.g;
+                        SizeF textSize = g.MeasureString(str, font);
+                        int width = (int)Math.Ceiling(textSize.Width) + padding;
+                        widths.Value = (g, Math.Max(widths.Value.m, width));
+                    }
+                });
+                foreach (var v in widths.Values)
+                {
+                    v.g.Dispose();
                 }
-            });
-            foreach (var v in widths.Values)
-            {
-                v.g.Dispose();
+
+                int maxWidth = widths.Values.Max(value => value.m);
+                column.Width = Math.Max(10, Math.Min(grid.Parent.Width - 20, maxWidth + 10));
+                widths.Dispose();
+
+                e.Handled = true;
             }
-
-            int maxWidth = widths.Values.Max(value => value.m);
-            column.Width = Math.Max(10, Math.Min(grid.Parent.Width - 20, maxWidth + 10));
-            widths.Dispose();
-
-            e.Handled = true;
+            catch
+            {
+            }
         }
 
         private void Grid_CellToolTipTextNeeded(object? sender, DataGridViewCellToolTipTextNeededEventArgs e)
@@ -536,6 +553,13 @@ namespace SehensWerte.Controls
             });
         }
 
+        private void TransposeGrid_Click(object? sender, EventArgs e)
+        {
+            this.ExceptionToMessagebox(() =>
+            {
+            });
+        }
+
         private SaveFileDialog m_SaveFileDialog = new SaveFileDialog();
         private void SaveCsv_Click(object? sender, EventArgs e)
         {
@@ -720,6 +744,14 @@ namespace SehensWerte.Controls
             return DataGridBind?.ColumnNames ?? new List<string>();
         }
 
+        public void CollapseColumn(string column)
+        {
+            if (Grid.Columns.Contains(column)) 
+            {
+                Grid.Columns[column].Width = Grid.Columns[column].MinimumWidth;
+            }
+        }
+
         public string? GetCell(string column, int rowIndex)
         {
             int colIndex = DataGridBind?.ColumnNames.IndexOf(column) ?? -1;
@@ -900,6 +932,13 @@ namespace SehensWerte.Controls
             }
         }
 
+        public class UndoEntry
+        {
+            // shouldn't mutate caller's data, or callbacks may lose caller's context
+            // consider: save context for caller, or adjust for viewer?
+            public List<BoundDataRow>? VisibleRows;
+        }
+
         public class BoundData : IBindingList
         {
             private DataGridView DataGrid;
@@ -910,7 +949,7 @@ namespace SehensWerte.Controls
             public string CsvFileName { get; private set; }
             public List<BoundDataRow> UnfilteredData;
             public List<BoundDataRow> FilteredData;
-            private Stack<List<BoundDataRow>> UndoList = new Stack<List<BoundDataRow>>();
+            private Stack<UndoEntry> UndoList = new Stack<UndoEntry>();
             private List<BoundDataRow> IndexToRow = new List<BoundDataRow>();
             public List<String> ColumnNames;
             public event ListChangedEventHandler? ListChanged;
@@ -1026,7 +1065,7 @@ namespace SehensWerte.Controls
 
                 dataGrid.AutoGenerateColumns = false;
                 dataGrid.Columns.Clear();
-                UndoList = new Stack<List<BoundDataRow>>();
+                UndoList = new Stack<UndoEntry>();
                 for (int loop = 0; loop < ColumnNames.Count; loop++)
                 {
                     dataGrid.Columns.Add(new DataGridViewTextBoxColumn
@@ -1044,23 +1083,27 @@ namespace SehensWerte.Controls
             {
                 if (UndoList.Count() > 0)
                 {
-                    FilteredData = UndoList.Pop();
-                    foreach (var v in UnfilteredData)
+                    var undo = UndoList.Pop();
+                    if (undo.VisibleRows != null)
                     {
-                        v.Visible = false;
+                        FilteredData = undo.VisibleRows;
+                        foreach (var v in UnfilteredData)
+                        {
+                            v.Visible = false;
+                        }
+                        foreach (var v in FilteredData)
+                        {
+                            v.Visible = true;
+                        }
+                        ReshowFiltered();
                     }
-                    foreach (var v in FilteredData)
-                    {
-                        v.Visible = true;
-                    }
-                    ReshowFiltered();
                 }
             }
 
             private void Refilter()
             {
                 Profile.Enter();
-                PushUndo();
+                PushUndoVisibleRows();
 
                 var temp = UnfilteredData.Where(x => x.Visible).ToList();
                 temp.ParallelSort((x, y) => x.ResortIndex.CompareTo(y.ResortIndex));
@@ -1083,11 +1126,11 @@ namespace SehensWerte.Controls
                 Profile.Exit();
             }
 
-            private void PushUndo()
+            private void PushUndoVisibleRows()
             {
                 if (FilteredData.Count() > 0)
                 {
-                    UndoList.Push(FilteredData.ToList());
+                    UndoList.Push(new UndoEntry() { VisibleRows = FilteredData.ToList() });
                 }
             }
 
@@ -1296,7 +1339,7 @@ namespace SehensWerte.Controls
                         }
                         CurrentSortColIndex = colIndex;
                         Cursor.Current = Cursors.WaitCursor;
-                        PushUndo();
+                        PushUndoVisibleRows();
 
                         var temp = FilteredData?.ToList() ?? new List<BoundDataRow>();
                         temp.ParallelSort(UnfilteredData[0].GetSortComparer(colIndex, CurrentSortDirection).Compare);
