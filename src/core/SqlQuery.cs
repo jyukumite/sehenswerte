@@ -13,6 +13,18 @@ namespace SehensWerte.Utils
             return MainQuery(tokens);
         }
 
+        static public String? MainTable(string sqlQuery)
+        {
+            Queue<string> tokens = Tokenise(sqlQuery);
+            return MainTable(tokens);
+        }
+
+        static public int? LastLimit(string sqlQuery)
+        {
+            Queue<string> tokens = Tokenise(sqlQuery);
+            return LastLimit(tokens);
+        }
+
         static public List<string> ExtractColumnNamesFromQuery(string sqlQuery)
         {
             Queue<string> tokens = Tokenise(sqlQuery);
@@ -36,6 +48,43 @@ namespace SehensWerte.Utils
             }
 
             return columnNames;
+        }
+
+        private static string? MainTable(Queue<string> tokens)
+        {
+            //fixme: improve, unit test
+            while (tokens.Count() >= 2)
+            {
+                if (peek(tokens) == "(")
+                {
+                    next(tokens);
+                    skipToClosingBracket(tokens);
+                }
+                else if (next(tokens).ToUpper() == "FROM")
+                {
+                    return next(tokens);
+                }
+            }
+            return null;
+        }
+
+        private static int? LastLimit(Queue<string> tokens)
+        {
+            int? limit = null;
+            //fixme: improve, unit test
+            while (tokens.Count() >= 2)
+            {
+                if (peek(tokens) == "(")
+                {
+                    next(tokens);
+                    skipToClosingBracket(tokens);
+                }
+                else if (next(tokens).ToUpper() == "LIMIT")
+                {
+                    limit = next(tokens).ToInt(0);
+                }
+            }
+            return limit;
         }
 
         private static string MainQuery(Queue<string> tokens)
