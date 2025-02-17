@@ -24,8 +24,8 @@ namespace SehensWerte.Controls
         public string DefaultResponse { set { EditResult.Text = value; EditResult.SelectAll(); } }
         public bool Password
         {
-            get { return EditResult.PasswordChar == '*'; }
-            set { EditResult.PasswordChar = value ? '*' : (char)0; }
+            get { return EditResult.UseSystemPasswordChar; }
+            set { EditResult.UseSystemPasswordChar = value; }
         }
         private static ConcurrentDictionary<string, string> Cache = new ConcurrentDictionary<string, string>();
 
