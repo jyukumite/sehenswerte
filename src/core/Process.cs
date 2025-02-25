@@ -162,6 +162,25 @@ namespace SehensWerte.Utils
             }
         }
 
+        public static int GetPhysicalCoreCount()
+        {
+            // not number of logical cores
+            try
+            {
+                int coreCount = 0;
+                var searcher = new ManagementObjectSearcher("SELECT NumberOfCores FROM Win32_Processor");
+                foreach (var obj in searcher.Get())
+                {
+                    coreCount += Convert.ToInt32(obj["NumberOfCores"]);
+                }
+                return coreCount == 0 ? 1 : coreCount;
+            }
+            catch (Exception)
+            {
+                return 1;
+            }
+        }
+
         public static long GetTotalPhysicalMemoryBytes()
         {
             try

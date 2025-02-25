@@ -1,24 +1,29 @@
+using Microsoft.VisualStudio.TestTools.UnitTesting;
 using SehensWerte.Utils;
+using System;
+using System.Collections.Concurrent;
+using System.Collections.Generic;
+using System.Linq;
+using System.Runtime.CompilerServices;
+using System.Security.Policy;
 
 namespace SehensWerte.Maths
 {
     public class CodeProfile
     {
         private static CodeProfile m_Static = new CodeProfile();
-
-        private object m_LockObject = new object();
-        protected Dictionary<string, Row> m_Rows = new Dictionary<string, Row>();
+        protected ConcurrentDictionary<string, Row> m_Rows = new ConcurrentDictionary<string, Row>();
 
         protected class Row
         {
-            private bool m_In;
-            private double m_InTime;
-            public Statistics Stats;
+            private ConcurrentDictionary<int, double> m_InTimes = new ConcurrentDictionary<int, double>();
+            public Statistics Stats = new();
 
             public string SourceFilePath = "";
             public string MemberName = "";
-            public int SourceLineNumber;
+            public int SourceLineNumber; // not part of the key, as exit is called on a different line number
             public string Key = "";
+            public int MaxThreads;
 
             internal void In(string sourceFilePath, string memberName, int sourceLineNumber, string key)
             {
@@ -27,23 +32,45 @@ namespace SehensWerte.Maths
                 SourceLineNumber = sourceLineNumber;
                 Key = key;
 
-                if (!m_In)
-                {
-                    m_In = true;
-                    m_InTime = HighResTimer.StaticSeconds;
-                }
+                int threadId = System.Threading.Thread.CurrentThread.ManagedThreadId;
+                m_InTimes.TryAdd(threadId, HighResTimer.StaticSeconds);
+
+                SetMaxThreads(m_InTimes.Count);
             }
+
+            private void SetMaxThreads(int newMax)
+            {
+                int prevMax;
+                do
+                {
+                    prevMax = MaxThreads;
+                } while (newMax > prevMax && Interlocked.CompareExchange(ref MaxThreads, newMax, prevMax) != prevMax);
+            }
+
             public void Out()
             {
-                if (m_In)
+                int threadId = System.Threading.Thread.CurrentThread.ManagedThreadId;
+                if (m_InTimes.TryRemove(threadId, out double startTime))
                 {
-                    m_In = false;
-                    Stats.Insert(HighResTimer.StaticSeconds - m_InTime);
+                    lock (Stats)
+                    {
+                        Stats.Insert(HighResTimer.StaticSeconds - startTime);
+                    }
                 }
             }
-            public Row()
+
+            public new string ToString()
             {
-                Stats = new Statistics();
+                Statistics stats = Stats;
+                string path = System.IO.Path.GetFileName(SourceFilePath);
+                string line = SourceLineNumber == 0 ? "" : $"[{SourceLineNumber.ToString()}]";
+                return $"{path}{line} {MemberName} {Key} " +
+                    $"({stats.Count} calls, {MaxThreads} simultaneous threads) " +
+                    $"min={(stats.Min * 1000.0).ToStringRound(3, 1)} ms, " +
+                    $"max={(stats.Max * 1000.0).ToStringRound(3, 1)} ms, " +
+                    $"avg={(stats.Average * 1000.0).ToStringRound(3, 1)} ms, " +
+                    $"total={((double)stats.Count * stats.Average * 1000.0).ToStringRound(3, 1)} ms, " +
+                    $"last={(stats.LastInput * 1000.0).ToStringRound(3, 1)} ms";
             }
         }
 
@@ -60,11 +87,8 @@ namespace SehensWerte.Maths
                         [System.Runtime.CompilerServices.CallerMemberName] string memberName = "",
                         [System.Runtime.CompilerServices.CallerLineNumber] int sourceLineNumber = 0)
         {
-            lock (m_LockObject)
-            {
-                string key_ = key == "" ? "" : "_";
-                Ensure($"{sourceFilePath}_{memberName}{key_}{key}").In(sourceFilePath, memberName, sourceLineNumber, key);
-            }
+            string key_ = key == "" ? "" : "_";
+            Ensure($"{sourceFilePath}_{memberName}{key_}{key}").In(sourceFilePath, memberName, sourceLineNumber, key);
         }
 
         public static void GlobalExit(string key = "",
@@ -78,21 +102,35 @@ namespace SehensWerte.Maths
                         [System.Runtime.CompilerServices.CallerFilePath] string sourceFilePath = "",
                         [System.Runtime.CompilerServices.CallerMemberName] string memberName = "")
         {
-            lock (m_LockObject)
-            {
-                string key_ = key == "" ? "" : "_";
-                Ensure($"{sourceFilePath}_{memberName}{key_}{key}").Out();
-            }
+            string key_ = key == "" ? "" : "_";
+            Ensure($"{sourceFilePath}_{memberName}{key_}{key}").Out();
+        }
+
+        public static void GlobalRun(Action run, string key = "",
+                [System.Runtime.CompilerServices.CallerFilePath] string sourceFilePath = "",
+                [System.Runtime.CompilerServices.CallerMemberName] string memberName = "",
+                [System.Runtime.CompilerServices.CallerLineNumber] int sourceLineNumber = 0)
+        {
+            string sourceFilePathWithLine = sourceFilePath + $"[{sourceLineNumber}]";
+            GlobalEnter(key, sourceFilePathWithLine, memberName, 0);
+            run();
+            GlobalExit(key, sourceFilePathWithLine, memberName);
+        }
+
+        public void Run(Action run, string key = "",
+                        [System.Runtime.CompilerServices.CallerFilePath] string sourceFilePath = "",
+                        [System.Runtime.CompilerServices.CallerMemberName] string memberName = "",
+                        [System.Runtime.CompilerServices.CallerLineNumber] int sourceLineNumber = 0)
+        {
+            string sourceFilePathWithLine = sourceFilePath + $"[{sourceLineNumber}]";
+            Enter(key, sourceFilePathWithLine, memberName, 0);
+            run();
+            Exit(key, sourceFilePathWithLine, memberName);
         }
 
         private Row Ensure(string key)
         {
-            if (!m_Rows.TryGetValue(key, out var value))
-            {
-                value = new Row();
-                m_Rows.Add(key, value);
-            }
-            return value;
+            return m_Rows.GetOrAdd(key, _ => new Row());
         }
 
         public IEnumerable<string> StaticStringList()
@@ -102,25 +140,10 @@ namespace SehensWerte.Maths
 
         public IEnumerable<string> ToStringList()
         {
-            lock (m_LockObject)
-            {
-                return m_Rows.Select(v =>
-                        {
-                            Statistics stats = v.Value.Stats;
-                            string path = System.IO.Path.GetFileName(v.Value.SourceFilePath);
-                            return new Tuple<double, string>(stats.Sum,
-                                $"{path}[{v.Value.SourceLineNumber}] {v.Value.MemberName} {v.Value.Key} " +
-                                $"({stats.Count} calls) " +
-                                $"min={(stats.Min * 1000.0).ToStringRound(3, 1)} ms, " +
-                                $"max={(stats.Max * 1000.0).ToStringRound(3, 1)} ms, " +
-                                $"avg={(stats.Average * 1000.0).ToStringRound(3, 1)} ms, " +
-                                $"total={((double)stats.Count * stats.Average * 1000.0).ToStringRound(3, 1)} ms, " +
-                                $"last={(stats.LastInput * 1000.0).ToStringRound(3, 1)} ms");
-                        })
-                    .OrderBy(x => -x.Item1)
-                    .Select(x => x.Item2)
-                    .ToArray();
-            }
+            return m_Rows.Select(v => (v.Value.Stats.Sum, v.Value.ToString()))
+                .OrderBy(x => -x.Item1)
+                .Select(x => x.Item2)
+                .ToArray();
         }
 
         public static string StaticToString()
@@ -131,6 +154,40 @@ namespace SehensWerte.Maths
         public new string ToString()
         {
             return string.Join("\n", ToStringList());
+        }
+    }
+
+    [TestClass]
+    public class CodeProfileTests
+    {
+        [TestMethod]
+        public void CodeProfileTest()
+        {
+            CodeProfile profile = new();
+            for (int loop = 0; loop < 5; loop++)
+            {
+                profile.Run(() => { Thread.Sleep(5); });
+            }
+            profile.Run(() => { Thread.Sleep(5); });
+            profile.Run(() => { Thread.Sleep(5); }, "function2");
+
+            Parallel.ForEach(Enumerable.Range(1, 1000), x =>
+            {
+                profile.Run(() => { Thread.Sleep(5); }, "parfor");
+            });
+
+            string test = profile.ToString();
+
+            double a = HighResTimer.StaticSeconds;
+            int count = 0;
+            for (int loop=0; loop<1000000; loop++)
+            {
+                profile.Run(() => { count++;  }, "function3");
+            }
+            double b = HighResTimer.StaticSeconds - a;
+
+            //MessageBox.Show($"{count} took {b}"); // last result: 1000000 took 0.595 (595ns each)
+            //fixme: Assert.IsFalse(lhs.IsEqualTo(rhs));
         }
     }
 }
