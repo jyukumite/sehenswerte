@@ -19,7 +19,7 @@ namespace SehensWerte.Filters
             Delay = integer ? new StatsFilterFixedPoint(length) : new StatsFilterFloatingPoint(length);
         }
 
-        public StatsFilter(int length, IChainFilter source) : this(length)
+        public StatsFilter(int length, IFilterSource source) : this(length)
         {
             base.SourceFilter = source;
         }

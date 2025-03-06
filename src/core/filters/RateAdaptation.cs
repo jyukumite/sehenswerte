@@ -2,16 +2,16 @@
 
 namespace SehensWerte.Filters
 {
-    public class SampleRateChangeFilter : IChainFilter
+    public class SampleRateChangeFilter : IFilterSource
     {
         private Ring<double>? m_OutputBuffer;
         private double m_Step;
         private double m_Accumulator = 0;
-        private IChainFilter? m_SourceFilter;
+        private IFilterSource? m_SourceFilter;
         private int m_SourceFilterTail;
 
         public int BufferSize { get => m_OutputBuffer?.Length ?? 0; set { Filter.EnsureBufferSize(ref m_OutputBuffer, value); } }
-        public SampleRateChangeFilter(IChainFilter source, double from, double to)
+        public SampleRateChangeFilter(IFilterSource source, double from, double to)
         {
             m_Step = from / to;
             Filter.EnsureBufferSize(ref m_OutputBuffer, (int)((source.BufferSize * to / from) + 1));
@@ -71,7 +71,7 @@ namespace SehensWerte.Filters
 
         static public double[]? Resample(double[] vector, double newLength, Filter? filter = null)
         {
-            ChainFilterInput ri = new ChainFilterInput();
+            FilterInput ri = new FilterInput();
             ri.BufferSize = vector.Length + 1;
             ri.Insert(vector);
             if (vector.Length > 0)
@@ -85,10 +85,10 @@ namespace SehensWerte.Filters
                 filter.SourceFilter = ri;
             }
             SampleRateChangeFilter ra = new SampleRateChangeFilter(
-                    (filter == null) ? ri : (IChainFilter)filter,
+                    (filter == null) ? ri : (IFilterSource)filter,
                     from,
                     newLength);
-            ChainFilterOutput ro = new ChainFilterOutput(ra);
+            FilterOutput ro = new FilterOutput(ra);
             return ro.Get((int)newLength, Ring<double>.Underflow.Zero);
         }
     }

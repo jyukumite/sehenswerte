@@ -3,7 +3,7 @@ using SehensWerte.Maths;
 
 namespace SehensWerte.Generators
 {
-    public abstract class GeneratorBase : IChainFilter, IGenerator
+    public abstract class GeneratorBase : IFilterSource, IGenerator
     {
         public abstract double[] Generate(int count);
         protected Ring<double>? m_OutputBuffer;

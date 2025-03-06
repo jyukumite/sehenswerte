@@ -155,6 +155,7 @@ namespace SehensWerte.Controls
         {
             if (Controls == null || SourceData == null) return;
 
+            SetupControls();
             UpdateControls();
             SetEvents();
 
@@ -166,20 +167,12 @@ namespace SehensWerte.Controls
             }
         }
 
-        private void SetEvents()
+        private void SetupControls()
         {
             if (Controls == null) return;
             foreach (Control item in Controls)
             {
-                if (item is Button)
-                {
-                    ((Button)item).Click += MouseClicked;
-                }
-                else if (item is CheckBox)
-                {
-                    ((CheckBox)item).CheckedChanged += TextChanged;
-                }
-                else if (item is ComboBox)
+                if (item is ComboBox)
                 {
                     ((ComboBox)item).SelectedIndexChanged += TextChanged;
                     ((ComboBox)item).TextChanged += TextChanged;
@@ -203,6 +196,36 @@ namespace SehensWerte.Controls
                         ((ListBox)item).Items.AddRange(array);
                     }
                 }
+
+                if (item.Controls.Count > 0) // sub controls
+                {
+                    new AutoEditor(this, item.Controls);
+                }
+            }
+        }
+        private void SetEvents()
+        {
+            if (Controls == null) return;
+            foreach (Control item in Controls)
+            {
+                if (item is Button)
+                {
+                    ((Button)item).Click += MouseClicked;
+                }
+                else if (item is CheckBox)
+                {
+                    ((CheckBox)item).CheckedChanged += TextChanged;
+                }
+                else if (item is ComboBox)
+                {
+                    ((ComboBox)item).SelectedIndexChanged += TextChanged;
+                    ((ComboBox)item).TextChanged += TextChanged;
+                }
+                else if (item is ListBox)
+                {
+                    ((ListBox)item).SelectedIndexChanged += TextChanged;
+                    ((ListBox)item).TextChanged += TextChanged;
+                }
                 else if (item is Panel)
                 {
                     ((Panel)item).MouseClick += MouseClicked;
@@ -215,12 +238,9 @@ namespace SehensWerte.Controls
                 {
                     item.TextChanged += TextChanged;
                 }
-                if (item.Controls.Count > 0)
-                {
-                    new AutoEditor(this, item.Controls);
-                }
             }
         }
+
 
         internal void RemoveDelegates()
         {
@@ -257,6 +277,7 @@ namespace SehensWerte.Controls
             m_UpdateRecursion++;
             foreach (Control control in controls)
             {
+
                 if (control is CheckBox)
                 {
                     CheckBox checkBox = (CheckBox)control;
@@ -264,6 +285,15 @@ namespace SehensWerte.Controls
                     if (value != null && checkBox.Checked != (bool)value)
                     {
                         checkBox.Checked = (bool)value;
+                    }
+                }
+                else if (control is ComboBox)
+                {
+                    ComboBox comboBox = (ComboBox)control;
+                    object? value = GetValue(sourceData, comboBox.Tag as EditRow);
+                    if (value != null && (string)comboBox.SelectedText != value.ToString())
+                    {
+                        comboBox.SelectedIndex =comboBox.Items.IndexOf(value.ToString());
                     }
                 }
                 else if (control is RadioButton)

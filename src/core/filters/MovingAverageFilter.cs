@@ -8,7 +8,7 @@ namespace SehensWerte.Filters
         {
         }
 
-        public MovingAverageFilter(int length, IChainFilter source, bool integer = false) : base(length, integer)
+        public MovingAverageFilter(int length, IFilterSource source, bool integer = false) : base(length, integer)
         {
             base.SourceFilter = source;
         }

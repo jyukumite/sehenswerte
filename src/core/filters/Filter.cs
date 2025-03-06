@@ -2,9 +2,9 @@ using SehensWerte.Maths;
 
 namespace SehensWerte.Filters
 {
-    public abstract class Filter : ISampleFilter, IChainFilter
+    public abstract class Filter : IFilter, IFilterSource
     {
-        // ISampleFilter - simple filter
+        // IFilter - simple filter
         public abstract double Insert(double value);
 
         public virtual double[] Insert(double[] values)
@@ -18,7 +18,7 @@ namespace SehensWerte.Filters
             return result;
         }
 
-        // ISampleFilter - delay filter
+        // IFilter - delay filter
         protected double m_LastOutput = 0.0;
         protected double m_LastInput = 0.0;
         public virtual double LastOutput => m_LastOutput;
@@ -28,7 +28,7 @@ namespace SehensWerte.Filters
         private double[] m_Coefficients = new double[0];
         public virtual double[] Coefficients { get => m_Coefficients; set { m_Coefficients = value; } }
 
-        // ISampleFilter - adaptive filter
+        // IFilter - adaptive filter
         public virtual double Insert(double value, double desired)
         {
             return Insert(value);
@@ -52,12 +52,12 @@ namespace SehensWerte.Filters
         protected double m_AdaptiveOutputLimit = double.MaxValue;
         public double AdaptiveOutputLimit { get => m_AdaptiveOutputLimit; set => m_AdaptiveOutputLimit = value; }
 
-        // IChainFilter - chain filter
+        // IFilterSource - chain filter
 
         protected int m_SourceFilterTail;
 
-        protected IChainFilter? m_SourceFilter;
-        public IChainFilter? SourceFilter
+        protected IFilterSource? m_SourceFilter;
+        public IFilterSource? SourceFilter
         {
             get { return m_SourceFilter; }
             set { m_SourceFilter = value; EnsureBufferSize(value?.BufferSize ?? 0); }

@@ -2,7 +2,7 @@
 
 namespace SehensWerte.Filters
 {
-    public interface ISampleFilter // 1-for-1 input to output filter
+    public interface IFilter // 1-for-1 input to output filter
     {
         //simple filter
         double Insert(double value);
@@ -21,7 +21,7 @@ namespace SehensWerte.Filters
         double AdaptiveOutputLimit { get; set; }
     }
 
-    public interface IChainFilter
+    public interface IFilterSource
     {
         double[]? Copy(ref int tail, int count, int stride, Ring<double>.Underflow underflowMode);
         int BufferSize { get; set; }

@@ -8,7 +8,7 @@ namespace SehensWerte.Filters
         {
         }
 
-        public MovingRmsFilter(int length, IChainFilter source, bool integer = false) : base(length, integer)
+        public MovingRmsFilter(int length, IFilterSource source, bool integer = false) : base(length, integer)
         {
             base.SourceFilter = source;
         }

@@ -2,11 +2,11 @@ using SehensWerte.Maths;
 
 namespace SehensWerte.Filters
 {
-    public class EchoCancellationFilter : IChainFilter
+    public class EchoCancellationFilter : IFilterSource
     {
-        private IChainFilter? m_SourceReal;
+        private IFilterSource? m_SourceReal;
         private int m_SourceRealTail;
-        private IChainFilter? m_SourceDelayed;
+        private IFilterSource? m_SourceDelayed;
         private int m_SourceDelayedTail;
 
         private MultiplyAccumulateFilter RealPower;
@@ -15,8 +15,8 @@ namespace SehensWerte.Filters
         private Ring<double>? m_OutputBuffer;
         public int BufferSize { get => m_OutputBuffer?.Length ?? 0; set => Filter.EnsureBufferSize(ref m_OutputBuffer, value); }
 
-        private ISampleFilter m_Nlms;
-        public ISampleFilter Nlms => m_Nlms;
+        private IFilter m_Nlms;
+        public IFilter Nlms => m_Nlms;
 
         public double DelayedLowSignalRmsThreshold = 0.01;
         public double DelayedHighSignalRmsThreshold = 1;
@@ -28,7 +28,7 @@ namespace SehensWerte.Filters
         private bool m_Enable;
         public bool Enable { get => m_Enable; set => m_Enable = value; }
 
-        public IChainFilter? SourceFilterReal
+        public IFilterSource? SourceFilterReal
         {
             get => m_SourceReal;
             set
@@ -41,7 +41,7 @@ namespace SehensWerte.Filters
             }
         }
 
-        public IChainFilter? SourceFilterDelayed
+        public IFilterSource? SourceFilterDelayed
         {
             get => m_SourceDelayed;
             set
@@ -54,7 +54,7 @@ namespace SehensWerte.Filters
             }
         }
 
-        public EchoCancellationFilter(ISampleFilter nlms)
+        public EchoCancellationFilter(IFilter nlms)
         {
             m_Nlms = nlms;
             RealPower = new MultiplyAccumulateFilter(nlms.History.Length);

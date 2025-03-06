@@ -6,8 +6,8 @@ namespace SehensWerte.Filters
     {
         protected int m_SourceDesiredBufferTail;
 
-        private IChainFilter? m_SourceFilterDesired;
-        protected IChainFilter? SourceFilterDesired { get => m_SourceFilterDesired; set => m_SourceFilterDesired = value; }
+        private IFilterSource? m_SourceFilterDesired;
+        protected IFilterSource? SourceFilterDesired { get => m_SourceFilterDesired; set => m_SourceFilterDesired = value; }
 
         protected bool m_Hold;
         public bool Hold { get => m_Hold; set { m_Hold = value; } }

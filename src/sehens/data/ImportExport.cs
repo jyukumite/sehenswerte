@@ -1,12 +1,17 @@
+using Microsoft.VisualBasic.Devices;
 using SehensWerte.Files;
 using SehensWerte.Maths;
 using SehensWerte.Utils;
+using System.Collections.Immutable;
 using System.ComponentModel;
 using System.Drawing.Imaging;
 using System.Globalization;
 using System.IO.Compression;
+using System.Net;
+using System.Runtime.CompilerServices;
 using System.Text;
 using System.Text.RegularExpressions;
+using static SehensWerte.Generators.WaveformGenerator;
 
 namespace SehensWerte.Controls.Sehens
 {
@@ -86,10 +91,10 @@ namespace SehensWerte.Controls.Sehens
             [EditFormType(typeof(ImportDataVerticalCsvForm))]
             TsvVertical,
 
-            [Description("RIFF WAV file")]
-            [Extension(".wav")]
+            [Description("AVCodec Audio")]
+            [AVCodecExtension]
             [EditFormType(typeof(ImportDataWavForm))]
-            Wav,
+            AVCodec,
 
             [Description("8-bit binary, 8 traces")]
             [Extension(".bin")]
@@ -121,6 +126,12 @@ namespace SehensWerte.Controls.Sehens
             public string Extension;
             public ExtensionAttribute(string description) { Extension = description; }
         }
+
+        [AttributeUsage(AttributeTargets.All)]
+        private class AVCodecExtensionAttribute : Attribute
+        {
+        }
+
 
         [AttributeUsage(AttributeTargets.All)]
         private class EditFormTypeAttribute : Attribute
@@ -284,29 +295,52 @@ namespace SehensWerte.Controls.Sehens
             public string TargetTrace = "";
         }
 
-        public static string FilterText<T>()
-        {
-            return string.Join("|",
-                Enum.GetValues(typeof(T)).Cast<T>()
-                .Select((T a) => GetDescription(a) + "|*" + GetExtension(a))
-                );
-        }
-
         private static string GetDescription<T>(T value)
         {
-            object[] customAttributes = typeof(T).GetField(value?.ToString() ?? "")?.GetCustomAttributes(typeof(DescriptionAttribute), inherit: false) ?? new object[0];
-            return customAttributes.Length == 0 ? (value?.ToString() ?? "") : ((DescriptionAttribute)customAttributes[0]).Description;
+            object[] customAttributes = typeof(T)
+                .GetField(value?.ToString() ?? "")
+                ?.GetCustomAttributes(typeof(DescriptionAttribute), inherit: false) ?? new object[0];
+            var desc = customAttributes.Length == 0 ? (value?.ToString() ?? "") : ((DescriptionAttribute)customAttributes[0]).Description;
+            return desc;
+        }
+
+        private static T? ValueFromDescription<T>(string description)
+        {
+            return Enum.GetValues(typeof(T)).Cast<T>().Where(x => GetDescription(x) == description).FirstOrDefault();
+        }
+
+        private static string GetFileFilterText<T>()
+        {
+            return
+                Enum.GetValues(typeof(T)).Cast<T>()
+                .Select((T a) => $"{GetDescription(a)} files|{GetExtension(a)}")
+                .FirstOrDefault();
         }
 
         private static string GetExtension<T>(T value)
         {
-            object[] customAttributes = typeof(T).GetField(value?.ToString() ?? "")?.GetCustomAttributes(typeof(ExtensionAttribute), inherit: false) ?? new object[0];
-            return customAttributes.Length == 0 ? value?.ToString() ?? "" : ((ExtensionAttribute)customAttributes[0]).Extension;
+            if (IsAvCodec(value))
+            {
+                return ".*";
+
+            }
+            else
+            {
+                object[] customAttributes = typeof(T).GetField(value?.ToString() ?? "")?.GetCustomAttributes(typeof(ExtensionAttribute), inherit: false) ?? new object[0];
+                return customAttributes.Select(x => ((ExtensionAttribute)x).Extension).FirstOrDefault();
+            }
         }
 
         private static string[] GetDescriptions<T>()
         {
             return Enum.GetValues(typeof(T)).Cast<T>().Select(a => GetDescription(a)).ToArray();
+        }
+
+        private static bool IsAvCodec<T>(T value)
+        {
+            var avcodecAttr = typeof(T).GetField(value?.ToString() ?? "")
+                ?.GetCustomAttributes(typeof(AVCodecExtensionAttribute), inherit: false);
+            return avcodecAttr == null ? false : avcodecAttr.Count() > 0;
         }
 
         public static void AddContextMenus(List<ScopeContextMenu.MenuItem> contextMenu, List<ScopeContextMenu.EmbeddedMenu> embeddedContextMenu)
@@ -495,7 +529,6 @@ namespace SehensWerte.Controls.Sehens
                 {
                     error = error + ex.ToString() + @"
 ";
-
                 }
             }
 
@@ -509,11 +542,22 @@ namespace SehensWerte.Controls.Sehens
         private static void ImportDialog(SehensControl display, ImportType? deftype = null, string csvHeaderLinePrefix = "", string targetTrace = "")
         {
             IEnumerable<ImportType> source = Enum.GetValues(typeof(ImportType)).Cast<ImportType>();
-            m_OpenFileDialog.Filter = "Files|" + string.Join(";",
-                source
+
+            string FilterStr(ImportType a)
+            {
+                string ext = GetExtension(a);
+                var type = GetDescription(a);
+                return $"{type} file|*{ext}";
+            }
+
+            var types = source
                 .Where(a => a != ImportType.SehensXMLState)
-                .Select(a => "*" + GetExtension(a))
-                .Distinct()) + "|" + FilterText<ImportType>();
+                .ToArray();
+            m_OpenFileDialog.Filter = string.Join("|",
+                types
+                .Select(a => FilterStr(a))
+                .Distinct());
+
             m_OpenFileDialog.Title = "Select file";
             m_OpenFileDialog.FilterIndex = deftype == null ? (int)ImportType.CsvVertical : (int)deftype + 2;
             m_OpenFileDialog.Multiselect = true;
@@ -522,19 +566,9 @@ namespace SehensWerte.Controls.Sehens
             {
                 try
                 {
-                    if (m_OpenFileDialog.FilterIndex == 0)
+                    foreach (string file in m_OpenFileDialog.FileNames)
                     {
-                        MessageBox.Show("Unknown file type");
-                    }
-                    else if (m_OpenFileDialog.FilterIndex == 1)
-                    {
-                        string[] fileNames = m_OpenFileDialog.FileNames;
-                        LoadWaveformsUsingExtension(display, fileNames, csvHeaderLinePrefix, targetTrace);
-                    }
-                    else
-                    {
-                        ImportType type = (ImportType)(m_OpenFileDialog.FilterIndex - 2);
-                        Import(display, type, m_OpenFileDialog.FileNames, csvHeaderLinePrefix, targetTrace);
+                        LoadWaveformsUsingExtension(display, new string[] { file }, csvHeaderLinePrefix, targetTrace);
                     }
                 }
                 catch (Exception ex)
@@ -546,7 +580,7 @@ namespace SehensWerte.Controls.Sehens
 
         private static void ExportDialog(SehensControl scope, ScopeContextMenu.DropDownArgs a, ExportType deftype = ExportType.CsvVertical)
         {
-            m_SaveFileDialog.Filter = FilterText<ExportType>();
+            m_SaveFileDialog.Filter = GetFileFilterText<ExportType>();
             m_SaveFileDialog.Title = "Select file";
             m_SaveFileDialog.FileName = "sehens" + GetExtension(deftype);
             m_SaveFileDialog.FilterIndex = (int)(deftype + 1);
@@ -592,7 +626,7 @@ namespace SehensWerte.Controls.Sehens
                 {
                     edit.Filename = filename;
                     edit.Result = dest;
-                    canSave = autoEditorForm.ShowDialog("Export " + GetExtension(type) + "file", GetDescription(type), edit);
+                    canSave = autoEditorForm.ShowDialog("Export " + GetExtension(type) + " file", GetDescription(type), edit);
                 }
             }
             if (canSave && edit is ExportDataForm)
@@ -711,92 +745,94 @@ namespace SehensWerte.Controls.Sehens
             File.WriteAllText(filename, string.Join("\r\n", a.Views.Select((TraceView x) => x.DecoratedName)));
         }
 
-        private static T? ValueFromDescription<T>(string description)
-        {
-            return Enum.GetValues(typeof(T)).Cast<T>().Where(x => GetDescription(x) == description).FirstOrDefault();
-        }
-
 
         private static void Import(SehensControl display, ImportType type, string[] fileNames, string csvHeaderLinePrefix = "", string targetTrace = "", ImportDataForm.Source dataSource = ImportDataForm.Source.File)
         {
-            using AutoEditorForm autoEditorForm = new AutoEditorForm();
-            ImportDataForm? importData = (ImportDataForm?)ImportExportEdit(type, autoEditorForm);
-            bool flag = false;
-            if (importData != null)
+            try
             {
-                importData.Filenames = fileNames;
-                importData.FileType = type;
-                importData.DataSource = dataSource;
-                if (importData is ImportDataVerticalCsvForm)
+                using AutoEditorForm autoEditorForm = new AutoEditorForm();
+                ImportDataForm? importData = (ImportDataForm?)ImportExportEdit(type, autoEditorForm);
+                bool flag = false;
+                if (importData != null)
                 {
-                    ((ImportDataVerticalCsvForm)importData).HeaderLinePrefix = csvHeaderLinePrefix;
+                    importData.Filenames = fileNames;
+                    importData.FileType = type;
+                    importData.DataSource = dataSource;
+                    if (importData is ImportDataVerticalCsvForm)
+                    {
+                        ((ImportDataVerticalCsvForm)importData).HeaderLinePrefix = csvHeaderLinePrefix;
+                    }
+                    if (importData is ImportDataSaleaeAnalysisForm)
+                    {
+                        ((ImportDataSaleaeAnalysisForm)importData).TargetTrace = targetTrace;
+                    }
+                    if (importData is ImportDataFeaturesForm)
+                    {
+                        ((ImportDataFeaturesForm)importData).TargetTrace = targetTrace;
+                    }
+                    flag = !autoEditorForm.ShowDialog("Import " + GetExtension(type) + " file", GetDescription(type), importData);
                 }
-                if (importData is ImportDataSaleaeAnalysisForm)
+                if (flag)
                 {
-                    ((ImportDataSaleaeAnalysisForm)importData).TargetTrace = targetTrace;
+                    return;
                 }
-                if (importData is ImportDataFeaturesForm)
+                switch (type)
                 {
-                    ((ImportDataFeaturesForm)importData).TargetTrace = targetTrace;
-                }
-                flag = !autoEditorForm.ShowDialog("Import " + GetExtension(type) + "file", GetDescription(type), importData);
-            }
-            if (flag)
-            {
-                return;
-            }
-            switch (type)
-            {
-                case ImportType.CsvVertical:
-                case ImportType.CsvGzVertical:
-                case ImportType.TsvVertical:
-                    if (importData != null)
-                    {
-                        LoadWaveformsCSV(display, (ImportDataVerticalCsvForm)importData, type);
-                    }
-                    break;
-                case ImportType.Wav:
-                    if (importData != null)
-                    {
-                        LoadWaveformsWAV(display, (ImportDataWavForm)importData);
-                    }
-                    break;
-                case ImportType.Binary8bit:
-                    if (importData != null)
-                    {
-                        LoadWaveformsBinaryBits(display, (ImportDataBinaryForm)importData);
-                    }
-                    break;
-                case ImportType.SaleaeAnalysis:
-                    if (importData != null)
-                    {
-                        LoadWaveformSaleaeAnalysis(display, (ImportDataSaleaeAnalysisForm)importData);
-                    }
-                    break;
-                case ImportType.SehensBinaryState:
-                    {
-                        string[] array = fileNames;
-                        for (int i = 0; i < array.Length; i++)
+                    case ImportType.CsvVertical:
+                    case ImportType.CsvGzVertical:
+                    case ImportType.TsvVertical:
+                        if (importData != null)
                         {
-                            SehensSave.LoadStateBinary(array[i], display);
+                            LoadWaveformsCSV(display, (ImportDataVerticalCsvForm)importData, type);
                         }
                         break;
-                    }
-                case ImportType.SehensXMLState:
-                    {
-                        string[] array = fileNames;
-                        for (int i = 0; i < array.Length; i++)
+                    case ImportType.AVCodec:
+                        if (importData != null)
                         {
-                            SehensSave.LoadStateXml(array[i], display);
+                            LoadWaveformsWAV(display, (ImportDataWavForm)importData);
                         }
                         break;
-                    }
-                case ImportType.Features:
-                    if (importData != null)
-                    {
-                        ImportFeaturesToTimeTrace(display, (ImportDataFeaturesForm)importData);
-                    }
-                    break;
+                    case ImportType.Binary8bit:
+                        if (importData != null)
+                        {
+                            LoadWaveformsBinaryBits(display, (ImportDataBinaryForm)importData);
+                        }
+                        break;
+                    case ImportType.SaleaeAnalysis:
+                        if (importData != null)
+                        {
+                            LoadWaveformSaleaeAnalysis(display, (ImportDataSaleaeAnalysisForm)importData);
+                        }
+                        break;
+                    case ImportType.SehensBinaryState:
+                        {
+                            string[] array = fileNames;
+                            for (int i = 0; i < array.Length; i++)
+                            {
+                                SehensSave.LoadStateBinary(array[i], display);
+                            }
+                            break;
+                        }
+                    case ImportType.SehensXMLState:
+                        {
+                            string[] array = fileNames;
+                            for (int i = 0; i < array.Length; i++)
+                            {
+                                SehensSave.LoadStateXml(array[i], display);
+                            }
+                            break;
+                        }
+                    case ImportType.Features:
+                        if (importData != null)
+                        {
+                            ImportFeaturesToTimeTrace(display, (ImportDataFeaturesForm)importData);
+                        }
+                        break;
+                }
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Error {ex.Message} loading files");
             }
         }
 
@@ -942,13 +978,13 @@ namespace SehensWerte.Controls.Sehens
 
         private static void LoadWaveformsWAV(SehensControl scope, ImportDataWavForm edit)
         {
-            foreach (string text in edit.Filenames)
+            foreach (string path in edit.Filenames)
             {
-                RiffReader reader = new RiffReader(text);
+                var reader = new AudioReader(path);
                 for (int channel = 0; channel < reader.ChannelCount; channel++)
                 {
                     string key = edit.TraceNamePrefix
-                        + (edit.AppendFilenamePrefix ? (Path.GetFileNameWithoutExtension(text) + ".") : "")
+                        + (edit.AppendFilenamePrefix ? (Path.GetFileNameWithoutExtension(path) + ".") : "")
                         + (channel + 1)
                         + edit.TraceNameSuffix;
                     var trace = scope[key].UpdateByRef(reader.Channel(channel), reader.SamplesPerSecond);
@@ -1037,13 +1073,13 @@ namespace SehensWerte.Controls.Sehens
 
         private static void ImportFeaturesToTimeTrace(SehensControl display, ImportDataFeaturesForm edit)
         {
-            foreach (string filename in edit.Filenames)
+            foreach (string path in edit.Filenames)
             {
                 var traceView = display.ViewByName(edit.TargetTrace);
                 if (traceView != null)
                 {
                     var samples = traceView.Samples.InputSamplesAsDouble;
-                    if (filename.Length != 0 && File.Exists(filename))
+                    if (path.Length != 0 && File.Exists(path))
                     {
                         int index(double value)
                         {
@@ -1058,7 +1094,7 @@ namespace SehensWerte.Controls.Sehens
                             return -1;
                         }
 
-                        string[] lines = File.ReadAllLines(filename);
+                        string[] lines = File.ReadAllLines(path);
                         foreach (var line in lines)
                         {
                             string[] split = line.Split(new char[] { ' ' }, 2);
@@ -1118,21 +1154,15 @@ namespace SehensWerte.Controls.Sehens
 
         public static void LoadWaveformsUsingExtension(SehensControl display, string[] filenames, string csvHeaderLinePrefix = "", string targetTrace = "")
         {
-            IEnumerable<ImportType> types = Enum.GetValues(typeof(ImportType)).Cast<ImportType>();
-            var files = filenames.Select((filename) => new
+            foreach (var filename in filenames)
             {
-                fileType = types.Where((ImportType y) => filename.EndsWith(GetExtension(y))).FirstOrDefault(),
-                filename = filename
-            });
+                IEnumerable<ImportType> types = Enum.GetValues(typeof(ImportType)).Cast<ImportType>();
 
-            foreach (var file in files
-                .Select(a => a.fileType)
-                .Distinct()
-                .ToDictionary(
-                        key => key,
-                        value => files.Where(pair => pair.fileType == value).Select(pair => pair.filename)))
-            {
-                Import(display, file.Key, file.Value.ToArray(), csvHeaderLinePrefix, targetTrace);
+                var fileType = types
+                        .Where((ImportType x) => GetExtension(x).EndsWith(System.IO.Path.GetExtension(filename)))
+                        .FirstOrDefault(ImportType.AVCodec);
+
+                Import(display, fileType, new string[] { filename }, csvHeaderLinePrefix, targetTrace);
             }
         }
 
@@ -1153,17 +1183,17 @@ namespace SehensWerte.Controls.Sehens
 
         public static void LoadWaveformsWAVDialog(SehensControl scope)
         {
-            ImportDialog(scope, ImportType.Wav);
+            ImportDialog(scope, ImportType.AVCodec);
         }
 
         public static void LoadWaveformsWAV(string filename, SehensControl scope)
         {
-            LoadWaveformsWAV(scope, new ImportDataWavForm() { FileType = ImportType.Wav, Filenames = new string[] { Path.GetFileName(filename) } });
+            LoadWaveformsWAV(scope, new ImportDataWavForm() { FileType = ImportType.AVCodec, Filenames = new string[] { Path.GetFileName(filename) } });
         }
 
         public static void LoadWaveformsWAV(string filename, string tracePrefix, SehensControl scope)
         {
-            LoadWaveformsWAV(scope, new ImportDataWavForm() { FileType = ImportType.Wav, Filenames = new string[] { filename }, TraceNamePrefix = tracePrefix });
+            LoadWaveformsWAV(scope, new ImportDataWavForm() { FileType = ImportType.AVCodec, Filenames = new string[] { filename }, TraceNamePrefix = tracePrefix });
         }
 
         public static void LoadWaveformSaleaeAnalysis(string filename, SehensControl display, string trace, double samplesPerSecond)
