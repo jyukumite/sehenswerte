@@ -102,11 +102,14 @@ namespace SehensWerte.Controls
             ClientSize = new Size(ClientSize.Width, ButtonCancel.Bounds.Bottom + 8);
         }
 
-        public static string? Show(string prompt, string title, object? defaultResponse = null, bool password = false, bool multiLine = false, bool cache = false, bool save = false,
+        public static string? Show(string prompt, string title, 
+                                   object? defaultResponse = null, bool password = false, 
+                                   bool multiLine = false, bool cache = false, bool save = false,
+                                   string? saveKey = null,
                          [System.Runtime.CompilerServices.CallerFilePath] string cacheFilePath = "",
                          [System.Runtime.CompilerServices.CallerLineNumber] int cacheLineNumber = 0)
         {
-            string key = $"{prompt}:{title}:{cacheFilePath}[{cacheLineNumber}]";
+            string key = saveKey ?? $"{prompt}:{title}:{cacheFilePath}[{cacheLineNumber}]";
             if (cache)
             {
                 string? cached;
@@ -115,7 +118,7 @@ namespace SehensWerte.Controls
                     defaultResponse = cached;
                 }
             }
-            if (save)
+            if (save || saveKey != null)
             {
                 if (WindowsRegistry.Read(key, out string? savedValue) && savedValue != null)
                 {
