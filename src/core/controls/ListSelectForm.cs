@@ -108,18 +108,59 @@ namespace SehensWerte.Controls
             ResumeLayout(performLayout: false);
         }
 
+
         private void ListBox_DrawItem(object? sender, DrawItemEventArgs e)
         {
             e.DrawBackground();
             if (e.Index < 0) return;
 
             string text = ((KeyValuePair<string, string>)ListBox.Items[e.Index]).Key;
-            e.Graphics.DrawString(text, e.Font!, Brushes.Black, e.Bounds.Left, e.Bounds.Top);
-            string highlight = text.Substring(0, FilterText.Length);
-            e.Graphics.DrawString(highlight, e.Font!, Brushes.Blue, e.Bounds.Left, e.Bounds.Top);
+            int matchIndex = text.IndexOf(FilterText, StringComparison.OrdinalIgnoreCase);
+
+            float x = e.Bounds.Left;
+            float y = e.Bounds.Top;
+            Font font = e.Font!;
+            Brush normalBrush = Brushes.Black;
+            Brush highlightBrush = Brushes.Blue;
+            StringFormat format = StringFormat.GenericTypographic;
+            format.FormatFlags |= StringFormatFlags.MeasureTrailingSpaces;
+
+            if (matchIndex < 0)
+            {
+                e.Graphics.DrawString(text, font, normalBrush, x, y, format);
+            }
+            else
+            {
+                string before = text.Substring(0, matchIndex);
+                if (before.Length > 0)
+                {
+                    e.Graphics.DrawString(before, font, normalBrush, x, y, format);
+                    x += measure(before);
+                }
+                string match = text.Substring(matchIndex, FilterText.Length);
+                if (match.Length > 0)
+                {
+                    e.Graphics.DrawString(match, font, highlightBrush, x, y, format);
+                    x += measure(match);
+                }
+                string after = text.Substring(matchIndex + FilterText.Length);
+                if (after.Length > 0)
+                {
+                    e.Graphics.DrawString(after, font, normalBrush, x, y, format);
+                }
+            }
 
             e.DrawFocusRectangle();
+
+            float measure(string text)
+            {
+                CharacterRange[] ranges = { new CharacterRange(0, text.Length) };
+                format.SetMeasurableCharacterRanges(ranges);
+                Region[] regions = e.Graphics.MeasureCharacterRanges(text, font, new RectangleF(0, 0, e.Bounds.Width, e.Bounds.Height), format);
+                return regions[0].GetBounds(e.Graphics).Width;
+            }
         }
+
 
         private void SetSelection(IEnumerable<KeyValuePair<string, string>> list)
         {
@@ -146,10 +187,11 @@ namespace SehensWerte.Controls
             else
             {
                 var testText = FilterText + e.KeyChar;
-                if (Unfiltered.Any(x => x.Key.StartsWith(testText, StringComparison.OrdinalIgnoreCase)))
+                if (Unfiltered.Any(x => x.Key.Contains(testText, StringComparison.OrdinalIgnoreCase)))
                 {
                     FilterText = testText;
                 }
+                e.Handled = true;
             }
 
             if (FilterText != previousFilter)
@@ -163,15 +205,22 @@ namespace SehensWerte.Controls
             ListBox.BeginUpdate();
             try
             {
+                bool reset = false;
                 ListBox.Items.Clear();
-                var filteredItems = Unfiltered
-                    .Where(item => item.Key.StartsWith(FilterText, StringComparison.OrdinalIgnoreCase))
-                    .ToArray();
-                foreach (var item in filteredItems)
+                foreach (var item in Unfiltered
+                    .Where(item => item.Key.StartsWith(FilterText, StringComparison.OrdinalIgnoreCase)))
                 {
                     ListBox.Items.Add(item);
+                    reset = true;
                 }
-                if (filteredItems.Length > 0)
+                foreach (var item in Unfiltered
+                    .Where(item => item.Key.Contains(FilterText, StringComparison.OrdinalIgnoreCase)
+                                && !item.Key.StartsWith(FilterText, StringComparison.OrdinalIgnoreCase)))
+                {
+                    ListBox.Items.Add(item);
+                    reset = true;
+                }
+                if (reset)
                 {
                     ListBox.SelectedIndex = 0;
                 }
