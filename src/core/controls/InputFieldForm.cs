@@ -110,6 +110,7 @@ namespace SehensWerte.Controls
                          [System.Runtime.CompilerServices.CallerLineNumber] int cacheLineNumber = 0)
         {
             string key = saveKey ?? $"{prompt}:{title}:{cacheFilePath}[{cacheLineNumber}]";
+            bool persistInRegistry = save || saveKey != null;
             if (cache)
             {
                 string? cached;
@@ -118,7 +119,8 @@ namespace SehensWerte.Controls
                     defaultResponse = cached;
                 }
             }
-            if (save || saveKey != null)
+
+            if (persistInRegistry)
             {
                 if (WindowsRegistry.Read(key, out string? savedValue) && savedValue != null)
                 {
@@ -141,7 +143,7 @@ namespace SehensWerte.Controls
                 {
                     Cache[key] = form.ResultString;
                 }
-                if (save && !password)
+                if (persistInRegistry && !password)
                 {
                     WindowsRegistry.Write(key, form.ResultString);
                 }
