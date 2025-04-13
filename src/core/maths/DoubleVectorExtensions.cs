@@ -393,6 +393,14 @@ namespace SehensWerte.Maths
             return result;
         }
 
+        public static double[] PolyFilter(this double[] lhs, int order) //fixme: unittest
+        {
+            // like Savitzky Golay but without the walking window
+            var indices = Enumerable.Range(0, lhs.Length).Select(x => (double)x).ToArray();
+            var polyfit = lhs.PolyFit(order);
+            return indices.Select(x => polyfit.PolyVal(x)).ToArray();
+        }
+
         public static double[,] Product(this double[] colData, double[] rowData)
         {
             int cols = colData.Length;
@@ -544,6 +552,19 @@ namespace SehensWerte.Maths
         public static double Rms(this double[] lhs)
         {
             return Math.Sqrt(lhs.SumSquares() / (double)lhs.Length);
+        }
+
+        public static double[] RollingMax(this double[] lhs, int count) //fixme: unit test
+        {
+            int length = lhs.Length;
+            double[] result = new double[length];
+            for (int loop = 0; loop < length; loop++)
+            {
+                int left = Math.Max(0, loop - count / 2);
+                int right = Math.Min(length - 1, loop + count / 2);
+                result[loop] = lhs.Copy(left, right - left + 1).Max();
+            }
+            return result;
         }
 
         public static double[] RollingMean(this double[] lhs, int count)

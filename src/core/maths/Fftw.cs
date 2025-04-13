@@ -301,8 +301,21 @@ namespace SehensWerte.Maths
         }
 
         public double HighestFrequency(double samplesPerSecond)
-        {
+        { // aka nyquist
             return samplesPerSecond / Width * (Bins - 1);
+        }
+
+        public double HzPerBin(double samplesPerSecond)
+        {
+            double bins = Bins;
+            if ((Bins & 1) == 0)
+            {
+                return samplesPerSecond / ((bins * 2) - 1);
+            }
+            else
+            {
+                return samplesPerSecond / ((bins - 1) * 2);
+            }
         }
 
         private void ClearCache()
@@ -589,8 +602,6 @@ namespace SehensWerte.Maths
                     fftw_plan_with_nthreads_64(n);
                 }
             }
-
-
         }
 
         public void Dispose()

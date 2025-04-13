@@ -16,6 +16,9 @@ namespace SehensWerte.Filters
             m_Factory.Add("None", (string s) => new NoFilter());
             m_Factory.Add("RunningRmsFilter_100tap", (string s) => new MovingRmsFilter(100));
             m_Factory.Add("RunningRmsFilter_1000tap", (string s) => new MovingRmsFilter(1000));
+            m_Factory.Add("SavitzkyGolay_order3_10tap", (string s) => new SavitzkyGolayFilter(10, 3));
+            m_Factory.Add("SavitzkyGolay_order5_20tap", (string s) => new SavitzkyGolayFilter(20, 5));
+            m_Factory.Add("SavitzkyGolay_order5_50tap", (string s) => new SavitzkyGolayFilter(50, 5));
 
             FilterCoefficients.List.Keys
                 .Where(key => m_Factory.ContainsKey(key) == false)

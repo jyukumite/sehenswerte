@@ -312,9 +312,9 @@ namespace SehensWerte.Controls.Sehens
         private static string GetFileFilterText<T>()
         {
             return
+                string.Join("|",
                 Enum.GetValues(typeof(T)).Cast<T>()
-                .Select((T a) => $"{GetDescription(a)} files|{GetExtension(a)}")
-                .FirstOrDefault();
+                .Select((T a) => $"{GetDescription(a)} files|{GetExtension(a)}"));
         }
 
         private static string GetExtension<T>(T value)

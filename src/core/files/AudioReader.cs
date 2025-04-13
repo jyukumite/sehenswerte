@@ -9,6 +9,7 @@ using System.Runtime.InteropServices;
 using Microsoft.VisualStudio.TestPlatform.PlatformAbstractions.Interfaces;
 using Microsoft.VisualStudio.TestPlatform.Utilities;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
+using SehensWerte.Maths;
 
 namespace SehensWerte.Files
 {
@@ -18,6 +19,44 @@ namespace SehensWerte.Files
         public double SamplesPerSecond { get; private set; }
         public int BitDepth { get; private set; } = 16;
         public double[][]? Buffer { get; private set; }
+        
+        public double[] ChannelSum
+        {
+            get
+            {
+                if (ChannelCount == 0 || Buffer == null) return new double[0];
+                double[] result = new double[Buffer[0].Length];
+                for (int loop=0; loop<ChannelCount; loop++)
+                {
+                    result = result.Add(Buffer[loop]);
+                }
+                return result;
+            }
+        }
+
+        public double[] Channel(int channel) => (Buffer == null || Buffer.Length <= channel) ? new double[0] : Buffer[channel];
+
+        public static double[] ToDouble(string fileName, out double samplesPerSecond)
+        {
+            AudioReader reader = new AudioReader(fileName);
+            samplesPerSecond = reader.SamplesPerSecond;
+            return reader.Channel(0);
+        }
+
+        public static short[] ToShort(string fileName)
+        {
+            AudioReader reader = new AudioReader(fileName);
+            double[] array = reader.ChannelSum;
+            short[] shortArray = new short[array.Length];
+            for (int i = 0; i < array.Length; i++)
+            {
+                int num = (int)(array[i] * 32767.0);
+                shortArray[i] = (short)Math.Clamp(num, -32768, 32767);
+            }
+            return shortArray;
+        }
+
+
 
         // 2025-01-01-git-d3aa99a4f4-_build-www.gyan.dev
         private const string AV_CODEC_LIB = "avcodec-61.dll";
@@ -794,30 +833,6 @@ namespace SehensWerte.Files
 
             return channelData;
         }
-
-
-
-        public double[] Channel(int channel) => (Buffer == null || Buffer.Length <= channel) ? new double[] { } : Buffer[channel];
-
-        public static double[] ToDouble(string fileName, out double samplesPerSecond)
-        {
-            AudioReader reader = new AudioReader(fileName);
-            samplesPerSecond = reader.SamplesPerSecond;
-            return reader.Channel(0);
-        }
-
-        public static short[] ToShort(string fileName)
-        {
-            AudioReader reader = new AudioReader(fileName);
-            double[] array = reader.Channel(0);
-            short[] shortArray = new short[array.Length];
-            for (int i = 0; i < array.Length; i++)
-            {
-                int num = (int)(array[i] * 32767.0);
-                shortArray[i] = (short)Math.Clamp(num, -32768, 32767);
-            }
-            return shortArray;
-        }
     }
 
     [TestClass]
@@ -826,8 +841,8 @@ namespace SehensWerte.Files
         [TestMethod]
         public void TestSimple()
         {
-            var a = new AudioReader(@"c:\temp\sweep.m4a");
-            var b = new AudioReader(@"c:\temp\sweep.wav");
+            //var a = new AudioReader(@"c:\temp\sweep.m4a");
+            //var b = new AudioReader(@"c:\temp\sweep.wav");
         }
     }
 

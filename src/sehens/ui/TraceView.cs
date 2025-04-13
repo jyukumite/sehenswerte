@@ -834,7 +834,8 @@ namespace SehensWerte.Controls.Sehens
             Abs,
             Sum,
             Subtract,
-            Mean
+            Mean,
+            PolyFilter
         }
 
         public class CalculatedTraceData // XML Serialised
@@ -875,6 +876,12 @@ namespace SehensWerte.Controls.Sehens
         {
             [AutoEditor.DisplayName("Count")]
             public int Count = 100;
+        }
+
+        public class CalculatedTraceDataOrder : CalculatedTraceData // XML Serialised
+        {
+            [AutoEditor.DisplayName("Order")]
+            public int Order = 5;
         }
 
         [XmlSave]
@@ -1986,6 +1993,12 @@ value=" + string.Format(VerticalUnitFormat, Clicks[0].SampleAtX.ToStringRound(5,
                     exact(1);
                     double simpleProduct = ((TraceView.CalculatedTraceDataOneDouble)CalculatedParameter).Param;
                     result = sourceTraces[0].Select(x => x * simpleProduct).ToArray();
+                    break;
+
+                case CalculatedTypes.PolyFilter:
+                    int order = ((TraceView.CalculatedTraceDataOrder)CalculatedParameter).Order;
+                    exact(1);
+                    result = sourceTraces[0].PolyFilter(order);
                     break;
 
                 case CalculatedTypes.FIR:

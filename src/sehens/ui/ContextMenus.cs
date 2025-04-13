@@ -1647,6 +1647,7 @@ namespace SehensWerte.Controls.Sehens
                     TraceView.CalculatedTypes.RollingRMS => Create("RollingRMS", math, ScopeContextMenu.MenuItem.ShowWhen.OnePlusSelected, ScopeContextMenu.MenuItem.CallWhen.PerTrace, new TraceView.CalculatedTraceDataWindow()),
                     TraceView.CalculatedTypes.RollingMean => Create("RollingMean", math, ScopeContextMenu.MenuItem.ShowWhen.OnePlusSelected, ScopeContextMenu.MenuItem.CallWhen.PerTrace, new TraceView.CalculatedTraceDataWindow()),
                     TraceView.CalculatedTypes.Resample => Create("Resample", math, ScopeContextMenu.MenuItem.ShowWhen.OnePlusSelected, ScopeContextMenu.MenuItem.CallWhen.PerTrace, new TraceView.CalculatedTraceDataCount()),
+                    TraceView.CalculatedTypes.PolyFilter => Create("PolyFilter", math, ScopeContextMenu.MenuItem.ShowWhen.OnePlusSelected, ScopeContextMenu.MenuItem.CallWhen.PerTrace, new TraceView.CalculatedTraceDataOrder()),
 
                     TraceView.CalculatedTypes.Atan2 => Create("Atan2", math, ScopeContextMenu.MenuItem.ShowWhen.TwoSelected, ScopeContextMenu.MenuItem.CallWhen.Once),
                     TraceView.CalculatedTypes.RescaledError => Create("RescaledError", math, ScopeContextMenu.MenuItem.ShowWhen.TwoSelected, ScopeContextMenu.MenuItem.CallWhen.Once),

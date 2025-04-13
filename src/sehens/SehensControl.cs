@@ -230,8 +230,8 @@ namespace SehensWerte.Controls
         [XmlSave]
         public bool TraceListVisible
         {
-            get => LeftRightSplit.Collapsed;
-            set => LeftRightSplit.Collapsed = value;
+            get => !LeftRightSplit.Collapsed;
+            set => LeftRightSplit.Collapsed = !value;
         }
 
         internal void SetVerticalZoom(int anchorDivision, double ratio)
