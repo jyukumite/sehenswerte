@@ -57,17 +57,17 @@ namespace SehensWerte
             Func<double, double, double> PanLeft = (amplitude, pan) => amplitude * ((pan <= 0.5) ? 1 : ((1 - pan) * 2));
             Func<double, double, double> PanRight = (amplitude, pan) => amplitude * ((pan >= 0.5) ? 1 : (pan * 2));
 
-            IChainFilter noiseLeft = new Generators.NoiseGenerator()
+            IFilterSource noiseLeft = new Generators.NoiseGenerator()
             {
                 Amplitude = PanLeft(m_Data.NoiseAmplitude, m_Data.NoisePan),
             };
 
-            IChainFilter noiseRight = new Generators.NoiseGenerator()
+            IFilterSource noiseRight = new Generators.NoiseGenerator()
             {
                 Amplitude = PanRight(m_Data.NoiseAmplitude, m_Data.NoisePan),
             };
 
-            IChainFilter toneLeft = new Generators.ToneGenerator()
+            IFilterSource toneLeft = new Generators.ToneGenerator()
             {
                 Amplitude = PanLeft(m_Data.ToneAmplitude, m_Data.TonePan),
                 FrequencyStart = m_Data.ToneFrequency,
@@ -79,7 +79,7 @@ namespace SehensWerte
                 WaveTable = WaveformGenerator.List[m_Data.ToneWaveform]
             };
 
-            IChainFilter toneRight = new Generators.ToneGenerator()
+            IFilterSource toneRight = new Generators.ToneGenerator()
             {
                 Amplitude = PanRight(m_Data.ToneAmplitude, m_Data.TonePan),
                 FrequencyStart = m_Data.ToneFrequency,
@@ -91,11 +91,11 @@ namespace SehensWerte
                 WaveTable = WaveformGenerator.List[m_Data.ToneWaveform]
             };
 
-            ChainFilterMix mixLeft = new ChainFilterMix(new IChainFilter[] { toneLeft, noiseLeft });
-            ChainFilterMix mixRight = new ChainFilterMix(new IChainFilter[] { toneRight, noiseLeft });
+            FilterMix mixLeft = new FilterMix(new IFilterSource[] { toneLeft, noiseLeft });
+            FilterMix mixRight = new FilterMix(new IFilterSource[] { toneRight, noiseLeft });
 
-            ChainFilterOutput outputLeft = new ChainFilterOutput(mixLeft);
-            ChainFilterOutput outputRight = new ChainFilterOutput(mixRight);
+            FilterOutput outputLeft = new FilterOutput(mixLeft);
+            FilterOutput outputRight = new FilterOutput(mixRight);
 
             Scope["Left"].Update(outputLeft.Get(m_Data.Samples) ?? new double[0], samplesPerSecond: m_Data.SamplesPerSecond);
             Scope["Right"].Update(outputRight.Get(m_Data.Samples) ?? new double[0], samplesPerSecond: m_Data.SamplesPerSecond);
