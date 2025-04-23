@@ -1,5 +1,3 @@
-using Microsoft.VisualBasic;
-using Microsoft.VisualBasic.Logging;
 using SehensWerte.Files;
 using SehensWerte.Maths;
 using SehensWerte.Utils;
@@ -12,7 +10,6 @@ using System.Globalization;
 using System.Text.RegularExpressions;
 using System.Threading;
 using System.Windows.Forms;
-using static System.Windows.Forms.VisualStyles.VisualStyleElement;
 
 namespace SehensWerte.Controls
 {
@@ -25,11 +22,13 @@ namespace SehensWerte.Controls
     }
     public delegate void DataGridControlCellKeyDownEventHandler(object sender, DataGridControlCellKeyDownEventArgs e);
 
-    public class DataGridControlCellEventArgs : EventArgs
+    public class DataGridControlToolTipArgs : EventArgs
     {
-        public string? CellContent = "";
+        public string CellContent = "";
+        public string DisplayText = "";
         public string ColumnName = "";
         public Rectangle CellRectangle;
+        public Point MouseLocation;
         public bool Shown;
         public int RowIndex;
         public int ColumnIndex;
@@ -41,18 +40,27 @@ namespace SehensWerte.Controls
         public event DataGridViewCellEventHandler CellClick = (s, e) => { };
         public event DataGridControlCellKeyDownEventHandler CellKeyDown = (s, e) => { };
 
-        public event EventHandler<DataGridControlCellEventArgs> ShowTooltipWindow = (s, e) => { };
-        public event EventHandler<DataGridControlCellEventArgs> HideTooltipWindow = (s, e) => { };
+        public event EventHandler<DataGridControlToolTipArgs> ShowTooltipWindow = (s, e) => { };
+        public event EventHandler<DataGridControlToolTipArgs> HideTooltipWindow = (s, e) => { };
 
         public event DataGridViewCellContextMenuStripNeededEventHandler CellContextMenuStripNeeded = (s, e) => { };
         public DataGridViewCell CurrentCell => Grid.CurrentCell;
+
         public Color NullForeColor;
 
         private DataGridView Grid;
-        private System.Windows.Forms.Timer HoverTimer;
-        private DataGridControlCellEventArgs? HoverArgs;
+        private System.Windows.Forms.Timer HoverShowTimer;
+        private System.Windows.Forms.Timer HoverHideTimer;
+        private DataGridControlToolTipArgs? HoverArgs;
 
-        Action<CsvLog.Entry> OnLog;
+        public int ToolTipShowMilliseconds { get; set; } = 10000;
+        public int ToolTipPauseMilliseconds { get; set; } = 500;
+        public int ToolTipMaxLength { get; set; } = 1000;
+
+        public string[]? MaskColumns { get; set; }
+        public string MaskString { get; set; } = new string('\u2022', 5); // small dot
+
+        Action<CsvLog.Entry>? OnLog;
 
         private StatusStrip StatusStrip;
         private ToolStripStatusLabel StatusFilterText;
@@ -70,6 +78,8 @@ namespace SehensWerte.Controls
         private ToolStripDropDownButton TransposeGrid;
         private ToolStripDropDownButton SaveCsvButton;
         private ToolStripDropDownButton LoadCsvButton;
+        private System.Windows.Forms.ToolTip HoverTip;
+
         public BoundData? DataGridBind;
         private string RegexInput = ".*";
 
@@ -91,6 +101,16 @@ namespace SehensWerte.Controls
             OnLog?.Invoke(new CsvLog.Entry("DataGridControl ctor", CsvLog.Priority.Info));
 
             this.Grid = new SehensWerte.Controls.DataGridViewDoubleBuffered();
+            this.HoverTip = new System.Windows.Forms.ToolTip();
+            ShowTooltipWindow += (s, e) =>
+            {
+                int safetyTimer = ToolTipShowMilliseconds + 1000;
+                HoverTip.Show(e.DisplayText, Grid, Grid.PointToClient(e.MouseLocation), safetyTimer);
+            };
+            HideTooltipWindow += (s, e) =>
+            {
+                HoverTip.Hide(Grid);
+            };
             this.StatusStrip = new System.Windows.Forms.StatusStrip();
             this.StatusFilterText = new System.Windows.Forms.ToolStripStatusLabel();
             this.ShowAllStatus = new System.Windows.Forms.ToolStripDropDownButton();
@@ -127,25 +147,19 @@ namespace SehensWerte.Controls
             this.Grid.CellDoubleClick += (s, e) => CellDoubleClick.Invoke(s, e);
             this.Grid.ColumnDividerDoubleClick += Grid_ColumnDividerDoubleClick;
             this.Grid.CellPainting += Grid_CellPainting;
-            this.Grid.KeyDown += (s, e) =>
-            {
-                if (Grid.CurrentCell != null)
-                {
-                    var ee = new DataGridControlCellKeyDownEventArgs() { ColumnIndex = Grid.CurrentCell.ColumnIndex, RowIndex = Grid.CurrentCell.RowIndex, KeyCode = e.KeyCode };
-                    CellKeyDown.Invoke(this, ee);
-                    e.SuppressKeyPress = ee.SuppressKeyPress;
-                }
-            };
+            this.Grid.KeyDown += Grid_KeyDown;
             this.Grid.CellClick += (s, e) => CellClick.Invoke(s, e);
             this.Grid.CellContextMenuStripNeeded += (s, e) => CellContextMenuStripNeeded.Invoke(s, e);
             this.Grid.CellMouseEnter += Grid_CellMouseEnter;
-            this.Grid.CellMouseLeave += Grid_CellMouseLeave;
-            this.Grid.CellToolTipTextNeeded += Grid_CellToolTipTextNeeded;
-            NullForeColor = this.Grid.ForeColor;
+            this.Grid.CellMouseLeave += (s, e) => { HoverHide(); };
+            this.Grid.ShowCellToolTips = false;
+            this.Grid.CellToolTipTextNeeded += (s, e) => { e.ToolTipText = ""; };
+            this.NullForeColor = this.Grid.ForeColor;
 
-            this.HoverTimer = new System.Windows.Forms.Timer();
-            this.HoverTimer.Interval = 500; // 0.5 second delay for preparation
-            this.HoverTimer.Tick += HoverTimer_Tick;
+            this.HoverShowTimer = new System.Windows.Forms.Timer();
+            this.HoverShowTimer.Tick += (s, e) => { HoverShow(); };
+            this.HoverHideTimer = new System.Windows.Forms.Timer();
+            this.HoverHideTimer.Tick += (s, e) => { HoverHide(); };
 
             this.StatusStrip.ImageScalingSize = new System.Drawing.Size(24, 24);
             this.StatusStrip.Items.AddRange(new System.Windows.Forms.ToolStripItem[] {
@@ -288,6 +302,16 @@ namespace SehensWerte.Controls
             this.PerformLayout();
         }
 
+        private void Grid_KeyDown(object? sender, KeyEventArgs e)
+        {
+            if (Grid.CurrentCell != null)
+            {
+                var ee = new DataGridControlCellKeyDownEventArgs() { ColumnIndex = Grid.CurrentCell.ColumnIndex, RowIndex = Grid.CurrentCell.RowIndex, KeyCode = e.KeyCode };
+                CellKeyDown.Invoke(this, ee);
+                e.SuppressKeyPress = ee.SuppressKeyPress;
+            }
+        }
+
         private void Grid_ColumnDividerDoubleClick(object? sender, DataGridViewColumnDividerDoubleClickEventArgs e)
         {
             try
@@ -332,33 +356,6 @@ namespace SehensWerte.Controls
             }
         }
 
-        private void Grid_CellToolTipTextNeeded(object? sender, DataGridViewCellToolTipTextNeededEventArgs e)
-        {
-            try
-            {
-                if (e.RowIndex >= 0 && e.ColumnIndex >= 0)
-                {
-                    var cellValue = Grid.Rows[e.RowIndex].Cells[e.ColumnIndex].Value?.ToString();
-                    if (!string.IsNullOrEmpty(cellValue))
-                    {
-                        int maxLength = 1000;
-                        if (cellValue.Length > maxLength)
-                        {
-                            e.ToolTipText = cellValue.Substring(0, maxLength) + "...";
-                        }
-                        else
-                        {
-                            e.ToolTipText = cellValue;
-                        }
-                    }
-                }
-            }
-            catch (Exception ex)
-            {
-                e.ToolTipText = ex.Message;
-            }
-        }
-
         public new void Focus()
         {
             if (Grid != null)
@@ -373,52 +370,61 @@ namespace SehensWerte.Controls
 
         private void Grid_CellMouseEnter(object? sender, DataGridViewCellEventArgs e)
         {
-            if (e.RowIndex >= 0 && e.ColumnIndex >= 0)
+            string colName = ColumnName(e.ColumnIndex);
+            bool masked = MaskColumns?.Contains(colName) ?? false;
+            string? cellContent = GetCell(e.ColumnIndex, e.RowIndex);
+            string displayText = cellContent ?? "null";
+
+            if (displayText.Length > ToolTipMaxLength)
             {
-                HoverTimer.Stop();
-                if (HoverArgs != null)
-                {
-                    if (HoverArgs.Shown)
-                    {
-                        HideTooltipWindow?.Invoke(this, HoverArgs);
-                        HoverArgs = null;
-                    }
-                }
+                displayText = displayText.Substring(0, ToolTipMaxLength) + "...";
+            }
+
+            if (e.RowIndex >= 0 && e.ColumnIndex >= 0 && !masked && cellContent != null)
+            {
+                HoverHide();
 
                 var rectangle = Grid.GetCellDisplayRectangle(e.ColumnIndex, e.RowIndex, false);
                 Point screenLocation = Grid.PointToScreen(new Point(rectangle.Left, rectangle.Top));
 
-                HoverArgs = new DataGridControlCellEventArgs()
+                HoverArgs = new DataGridControlToolTipArgs()
                 {
-                    CellContent = GetCell(e.ColumnIndex, e.RowIndex),
-                    ColumnName = ColumnName(e.ColumnIndex),
+                    CellContent = cellContent,
+                    DisplayText = displayText,
+                    ColumnName = colName,
                     CellRectangle = new Rectangle(screenLocation.X, screenLocation.Y, rectangle.Width, rectangle.Height),
+                    MouseLocation = Cursor.Position,
                     RowIndex = e.RowIndex,
                     ColumnIndex = e.ColumnIndex,
                     Shown = false,
                 };
-                HoverTimer.Start();
+                HoverShowTimer.Interval = ToolTipPauseMilliseconds;
+                HoverShowTimer.Start();
             }
         }
 
-        private void Grid_CellMouseLeave(object? sender, DataGridViewCellEventArgs e)
+        private void HoverShow()
         {
+            HoverShowTimer.Stop();
+            HoverHideTimer.Stop();
+            if (HoverArgs != null && !HoverArgs.Shown)
+            {
+                HoverHideTimer.Interval = ToolTipShowMilliseconds;
+                HoverHideTimer.Start();
+                ShowTooltipWindow?.Invoke(this, HoverArgs);
+                HoverArgs.Shown = true;
+            }
+        }
+
+        private void HoverHide()
+        {
+            HoverShowTimer.Stop();
+            HoverHideTimer.Stop();
             if (HoverArgs != null && HoverArgs.Shown)
             {
                 HideTooltipWindow?.Invoke(this, HoverArgs);
             }
-            HoverTimer.Stop();
             HoverArgs = null;
-        }
-
-        private void HoverTimer_Tick(object? sender, EventArgs e)
-        {
-            HoverTimer.Stop();
-            if (HoverArgs != null && !HoverArgs.Shown)
-            {
-                ShowTooltipWindow?.Invoke(this, HoverArgs);
-                HoverArgs.Shown = true;
-            }
         }
 
         private void Grid_SelectionChanged(object? sender, EventArgs e)
@@ -598,11 +604,15 @@ namespace SehensWerte.Controls
         {
             if (e.RowIndex < 0 || e.ColumnIndex < 0) return;
 
-            bool isNull = e.Value == null || e.Value == DBNull.Value;
             e.PaintBackground(e.ClipBounds, e.State.HasFlag(DataGridViewElementStates.Selected));
             e.Paint(e.ClipBounds, DataGridViewPaintParts.Border);
 
-            string displayText = (e.Value ?? "null").ToString();
+            string colName = Grid.Columns[e.ColumnIndex].Name;
+            bool isNull = e.Value == null;
+            string realText = e.Value?.ToString() ?? "null";
+            bool masked = !isNull && realText != "" && (MaskColumns?.Contains(colName) ?? false);
+            string displayText = masked ? MaskString : realText;
+
             Font cellFont = isNull ? new Font(e.CellStyle.Font, FontStyle.Italic) : e.CellStyle.Font;
             Color textColor = isNull ? NullForeColor : e.CellStyle.ForeColor;
             StringFormat stringFormat = new StringFormat
@@ -746,7 +756,7 @@ namespace SehensWerte.Controls
 
         public void CollapseColumn(string column)
         {
-            if (Grid.Columns.Contains(column)) 
+            if (Grid.Columns.Contains(column))
             {
                 Grid.Columns[column].Width = Grid.Columns[column].MinimumWidth;
             }
@@ -761,7 +771,7 @@ namespace SehensWerte.Controls
 
         public string? GetCell(int colIndex, int rowIndex)
         {
-            return ((DataGridBind?.FilteredData[rowIndex])?.Column(colIndex));
+            return rowIndex >= 0 && colIndex >= 0 ? ((DataGridBind?.FilteredData[rowIndex])?.Column(colIndex)) : null;
         }
 
         public void SetCell(int colIndex, int rowIndex, string to)

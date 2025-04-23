@@ -157,7 +157,9 @@ namespace SehensWerte.Utils
                 var tc = Activator.CreateInstance(t, null);
                 foreach (var m in methods)
                 {
+                    Debug.WriteLine($"Running test {m.Name}...");
                     m.Invoke(tc, null);
+                    Debug.WriteLine($"Completed test {m.Name}");
                 }
             }
         }
