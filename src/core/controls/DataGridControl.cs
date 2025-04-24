@@ -1008,19 +1008,6 @@ namespace SehensWerte.Controls
 
                 if (numeric)
                 {
-                    CSVLoad<string> source = new CSVLoad<string>(filename: csvFileName,
-                        parse: s => s, defaultValue: "", separator: ',', headerRowPrefix: "");
-                    ColumnNames = source.ColumnHeadings.ToList();
-                    foreach (var v in source)
-                    {
-                        BoundDataRow item = new BoundDataRowString(index, v.Row);
-                        IndexToRow.Add(item);
-                        UnfilteredData.Add(item);
-                        index++;
-                    }
-                }
-                else
-                {
                     CSVLoad<double> source = new CSVLoad<double>(filename: csvFileName,
                         parse: s => s.ToDouble(0), defaultValue: 0, separator: ',', headerRowPrefix: "");
                     ColumnNames = source.ColumnHeadings.ToList();
@@ -1028,6 +1015,19 @@ namespace SehensWerte.Controls
                     foreach (var v in source)
                     {
                         BoundDataRow item = new BoundDataRowDouble(index, v.Row);
+                        IndexToRow.Add(item);
+                        UnfilteredData.Add(item);
+                        index++;
+                    }
+                }
+                else
+                {
+                    CSVLoad<string> source = new CSVLoad<string>(filename: csvFileName,
+                        parse: s => s, defaultValue: "", separator: ',', headerRowPrefix: "");
+                    ColumnNames = source.ColumnHeadings.ToList();
+                    foreach (var v in source)
+                    {
+                        BoundDataRow item = new BoundDataRowString(index, v.Row);
                         IndexToRow.Add(item);
                         UnfilteredData.Add(item);
                         index++;
