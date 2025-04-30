@@ -712,6 +712,15 @@ namespace SehensWerte.Controls
             UpdateStatusStrip();
         }
 
+        public DataGridViewCellEventArgs? GetSelectedCell
+        {
+            get
+            {
+                var cell = Grid.SelectedCells.Count == 1 ? Grid.SelectedCells[0] : null;
+                return cell == null ? null : new DataGridViewCellEventArgs(cell.ColumnIndex, cell.RowIndex);
+            }
+        }
+
         public string?[] GetSelectedRowsOfColumn(string header)
         {
             return DataGridBind?.GetSelectedRowsOfColumn(header, this) ?? new string?[] { };

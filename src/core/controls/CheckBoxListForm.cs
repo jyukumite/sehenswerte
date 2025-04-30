@@ -132,7 +132,7 @@ namespace SehensWerte.Controls
                 }
             }
             names.Sort();
-            selection = Show(Prompt, Title, names, selection);
+            selection = Show(Prompt, Title, names, selection) ?? selection;
 
             uint result = 0;
             foreach (string s in selection)
@@ -142,7 +142,7 @@ namespace SehensWerte.Controls
             return result;
         }
 
-        public static List<string> Show(string prompt, string title, IEnumerable<string> selection, IEnumerable<string> checkedSelection)
+        public static List<string>? Show(string prompt, string title, IEnumerable<string> selection, IEnumerable<string> checkedSelection)
         {
             CheckBoxListForm input = new CheckBoxListForm();
             input.Title = title;
@@ -150,7 +150,7 @@ namespace SehensWerte.Controls
             input.Selection = new List<string>(selection);
             input.CheckedSelection = new List<string>(checkedSelection);
             input.ShowDialog();
-            return (input.ResultButton == DialogResult.OK) ? input.CheckedSelection : new List<string>(checkedSelection);
+            return (input.ResultButton == DialogResult.OK) ? input.CheckedSelection : null;
         }
     }
 }
