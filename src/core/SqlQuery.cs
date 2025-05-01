@@ -2,6 +2,7 @@
 using System.Globalization;
 using System.Text;
 using System.Text.RegularExpressions;
+using System.Web;
 
 namespace SehensWerte.Utils
 {
@@ -52,20 +53,49 @@ namespace SehensWerte.Utils
 
         private static string? MainTable(Queue<string> tokens)
         {
-            //fixme: improve, unit test
-            while (tokens.Count() >= 2)
+            // not exhaustive!
+
+            Queue<string>? withTokens = null;
+            string withTable = "";
+            string? mainTable = null;
+
+            while (tokens.Count() >= 2 && mainTable == null)
             {
+                if (peek(tokens).ToUpper() == "WITH" && withTokens == null)
+                {
+                    next(tokens); // WITH
+                    withTable = next(tokens); // name of the "with"
+                    withTokens = new Queue<string>(tokens.ToArray()); // AS ( SELECT ...
+                }
                 if (peek(tokens) == "(")
                 {
                     next(tokens);
-                    skipToClosingBracket(tokens);
+                    skipPastClosingBracket(tokens);
                 }
                 else if (next(tokens).ToUpper() == "FROM")
                 {
-                    return next(tokens);
+                    mainTable = next(tokens);
+                    if (mainTable.ToLower() == withTable.ToLower())
+                    {
+                        // mainTable is actually a WITH table, find the innermost from (not exhaustive)
+                        if (next(withTokens).ToUpper() == "AS"
+                            && next(withTokens) == "(")
+                        {
+                            // find a FROM in the outermost bracket
+                            bool found = false;
+                            while (withTokens.Count >= 2 && !found)
+                            {
+                                switch (next(withTokens).ToUpper())
+                                {
+                                    case "(": skipPastClosingBracket(withTokens); break;
+                                    case "FROM": found = true; mainTable = next(withTokens); break;
+                                }
+                            }
+                        }
+                    }
                 }
             }
-            return null;
+            return mainTable;
         }
 
         private static int? LastLimit(Queue<string> tokens)
@@ -77,7 +107,7 @@ namespace SehensWerte.Utils
                 if (peek(tokens) == "(")
                 {
                     next(tokens);
-                    skipToClosingBracket(tokens);
+                    skipPastClosingBracket(tokens);
                 }
                 else if (next(tokens).ToUpper() == "LIMIT")
                 {
@@ -109,7 +139,7 @@ namespace SehensWerte.Utils
                     next(tokens); // name of temp table
                     if (next(tokens).ToUpper() != "AS") return "";
                     if (next(tokens).ToUpper() != "(") return "";
-                    skipToClosingBracket(tokens);
+                    skipPastClosingBracket(tokens);
                 } while (tokens.Count() != 0 && peek(tokens).ToUpper() == ",");
             }
             return next(tokens);
@@ -129,7 +159,7 @@ namespace SehensWerte.Utils
                 }
                 else if (name == "(")
                 {
-                    skipToClosingBracket(tokens, fullClause);
+                    skipPastClosingBracket(tokens, fullClause);
                 }
             }
             name = name == "(" ? fullClause.ToString() : name;
@@ -149,13 +179,13 @@ namespace SehensWerte.Utils
             return name;
         }
 
-        private static void skipToClosingBracket(Queue<string> tokens, StringBuilder? sum = null)
+        private static void skipPastClosingBracket(Queue<string> tokens, StringBuilder? sum = null)
         {
             while (tokens.Count() != 0 && peek(tokens) != ")")
             {
                 if (next(tokens, sum) == "(")
                 {
-                    skipToClosingBracket(tokens, sum);
+                    skipPastClosingBracket(tokens, sum);
                 }
             }
             next(tokens, sum); // skip )
@@ -639,6 +669,19 @@ newline and "" and ''.'", ",",
                 Assert.AreEqual(expectedTokens[loop], tokenList[loop], $"Expected '{expectedTokens[loop]}', got '{tokenList[loop]}'.");
             }
             Assert.AreEqual(expectedTokens.Count, tokenList.Count);
+        }
+
+        [TestClass]
+        public class QueryStructureTests
+        {
+            [TestMethod]
+            public void TestMainTable()
+            {
+                Assert.AreEqual("bob", SqlQuery.MainTable("SELECT foo FROM bob;"));
+                Assert.AreEqual("bob", SqlQuery.MainTable("SELECT foo FROM bob WHERE foo='something';"));
+                Assert.AreEqual("bob", SqlQuery.MainTable("WITH withtable AS (SELECT something FROM bob) SELECT foo FROM withtable WHERE foo='something';"));
+                Assert.AreEqual("bob", SqlQuery.MainTable("WITH withtable AS (SELECT (nested brackets not real sql) FROM bob) SELECT foo FROM withtable WHERE foo='something';"));
+            }
         }
 
         [TestClass]

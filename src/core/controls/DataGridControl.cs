@@ -783,7 +783,7 @@ namespace SehensWerte.Controls
             return rowIndex >= 0 && colIndex >= 0 ? ((DataGridBind?.FilteredData[rowIndex])?.Column(colIndex)) : null;
         }
 
-        public void SetCell(int colIndex, int rowIndex, string to)
+        public void SetCell(int colIndex, int rowIndex, string? to)
         {
             if (DataGridBind == null) return;
             BoundDataRow? row;
