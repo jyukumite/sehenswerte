@@ -604,8 +604,19 @@ namespace SehensWerte.Controls
         {
             if (e.RowIndex < 0 || e.ColumnIndex < 0) return;
 
-            e.PaintBackground(e.ClipBounds, e.State.HasFlag(DataGridViewElementStates.Selected));
+            bool selected = e.State.HasFlag(DataGridViewElementStates.Selected);
+            e.PaintBackground(e.ClipBounds, selected);
             e.Paint(e.ClipBounds, DataGridViewPaintParts.Border);
+
+            if (!selected && DataGridBind?.FilteredData.Count > e.RowIndex)
+            {
+                var a = DataGridBind.FilteredData[e.RowIndex];
+                var b = a?.Colours?[e.ColumnIndex];
+                if (b != null)
+                {
+                    e.Graphics.FillRectangle(new SolidBrush(b.Value), e.CellBounds);
+                }
+            }
 
             string colName = Grid.Columns[e.ColumnIndex].Name;
             bool isNull = e.Value == null;
@@ -673,6 +684,11 @@ namespace SehensWerte.Controls
 
         private void DataGrid_CellMouseDown(object? sender, DataGridViewCellMouseEventArgs e)
         {
+        }
+
+        public void SortByColumn(string heading)
+        {
+            Grid.Sort(Grid.Columns[heading], ListSortDirection.Ascending);
         }
 
         public void UpdateStatusStrip()
@@ -746,6 +762,13 @@ namespace SehensWerte.Controls
             return DataGridBind?.GetColumn(index) ?? new string?[] { };
         }
 
+        public string?[] GetRow(int index)
+        {
+            return DataGridBind?.FilteredData[index].Strings ?? new string?[] { };
+        }
+
+        public int RowCount => DataGridBind?.FilteredData.Count ?? 0;
+
         public IEnumerable<string> ColumnNames => DataGridBind?.ColumnNames ?? new List<string>();
 
         public string[] GetSelectedColumnNames()
@@ -808,12 +831,18 @@ namespace SehensWerte.Controls
             }
         }
 
+        public void CellColour(int col, int row, Color colour)
+        {
+            DataGridBind?.CellColour(col, row, colour);
+        }
+
         public abstract class BoundDataRow
         {
             public bool Visible = true;
             public bool HideNot = false;
             public int Index;
             public int ResortIndex;
+            public Color?[]? Colours = null;
 
             public BoundDataRow(int index)
             {
@@ -854,6 +883,15 @@ namespace SehensWerte.Controls
             public String? col88 => Column(88); public String? col89 => Column(89); public String? col90 => Column(90); public String? col91 => Column(91);
             public String? col92 => Column(92); public String? col93 => Column(93); public String? col94 => Column(94); public String? col95 => Column(95);
             public String? col96 => Column(96); public String? col97 => Column(97); public String? col98 => Column(98); public String? col99 => Column(99);
+
+            public void CellColour(int col, Color colour)
+            {
+                if (Colours == null)
+                {
+                    Colours = new Color?[Count];
+                }
+                Colours[col] = colour;
+            }
         }
 
         public class BoundDataRowString : BoundDataRow
@@ -1098,6 +1136,11 @@ namespace SehensWerte.Controls
                 dataGrid.DataSource = this;
             }
 
+            public void CellColour(int col, int row, Color colour)
+            {
+                FilteredData[row].CellColour(col, colour);
+            }
+
             public void Undo()
             {
                 if (UndoList.Count() > 0)
@@ -1122,6 +1165,7 @@ namespace SehensWerte.Controls
             private void Refilter()
             {
                 Profile.Enter();
+
                 PushUndoVisibleRows();
 
                 var temp = UnfilteredData.Where(x => x.Visible).ToList();
