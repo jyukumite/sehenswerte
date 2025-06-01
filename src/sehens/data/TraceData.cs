@@ -530,7 +530,7 @@ namespace SehensWerte.Controls.Sehens
             lock (DataLock)
             {
                 if (m_ViewedData.UnixTime == null) return;
-                var array = DataStore.CopyToDouble(m_ViewedData.InputSamples);
+                var array = m_ViewedData.InputSamples.CopyToDoubleArray();
                 for (int loop = leftSampleNumber; loop < rightSampleNumber; loop++)
                 {
                     if (loop >= 0 && loop < array.Length)
@@ -661,7 +661,7 @@ namespace SehensWerte.Controls.Sehens
             public double[] InputSampleCopy()
             {
                 if (InputSampleCache != null) return InputSampleCache;
-                InputSampleCache = CopyToDouble(InputSamples);
+                InputSampleCache = InputSamples.CopyToDoubleArray();
                 return InputSampleCache;
             }
 
@@ -670,32 +670,6 @@ namespace SehensWerte.Controls.Sehens
                 if (InterpolatedSampleCache != null) return InterpolatedSampleCache;
                 InterpolatedSampleCache = InterpolateYT();
                 return InterpolatedSampleCache;
-            }
-
-            public static double[] CopyToDouble(object input)
-            {
-                if (input == null) return new double[0];
-
-                if (input is Array array)
-                {
-                    if (input is double[] doublearray) return doublearray.Copy();
-                    else if (input is byte[] bytearray) return Array.ConvertAll(bytearray, x => (double)x);
-                    else if (input is short[] shortarray) return Array.ConvertAll(shortarray, x => (double)x);
-                    else if (input is ushort[] ushortarray) return Array.ConvertAll(ushortarray, x => (double)x);
-                    else if (input is int[] intarray) return Array.ConvertAll(intarray, x => (double)x);
-                    else if (input is uint[] uintarray) return Array.ConvertAll(uintarray, x => (double)x);
-                    else if (input is float[] floatarray) return Array.ConvertAll(floatarray, x => (double)x);
-                    else return new double[array.Length];
-                }
-                else if (input is List<double> doublelist) return doublelist.Select(x => (double)x).ToArray();
-                else if (input is List<byte> bytelist) return bytelist.Select(x => (double)x).ToArray();
-                else if (input is List<short> shortlist) return shortlist.Select(x => (double)x).ToArray();
-                else if (input is List<ushort> ushortlist) return ushortlist.Select(x => (double)x).ToArray();
-                else if (input is List<int> intlist) return intlist.Select(x => (double)x).ToArray();
-                else if (input is List<uint> uintlist) return uintlist.Select(x => (double)x).ToArray();
-                else if (input is List<float> floatlist) return floatlist.Select(x => (double)x).ToArray();
-                else if (input is Ring<double> ring) return ring.AllSamples();
-                else return new double[0];
             }
 
             public static int Count(object input)
@@ -709,7 +683,7 @@ namespace SehensWerte.Controls.Sehens
 
             private double[] InterpolateYT()
             {
-                double[] samples = CopyToDouble(InputSamples);
+                double[] samples = InputSamples.CopyToDoubleArray();
                 if (UnixTime == null || samples.Length == 0 || samples.Length != UnixTime.Length)
                 {
                     return samples;
@@ -791,7 +765,7 @@ namespace SehensWerte.Controls.Sehens
             {
                 return new DataStore()
                 {
-                    InputSamples = CopyToDouble(InputSamples),
+                    InputSamples = InputSamples.CopyToDoubleArray(),
                     UnixTime = UnixTime == null ? null : UnixTime.Copy(),
                     SamplesPerSecond = SamplesPerSecond,
                     LeftmostUnixTime = LeftmostUnixTime,

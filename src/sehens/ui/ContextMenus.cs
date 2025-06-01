@@ -479,6 +479,18 @@ namespace SehensWerte.Controls.Sehens
 
             contextMenu.Add(new ScopeContextMenu.MenuItem
             {
+                Text = "Show selected displayed samples in Data Grid",
+                ShownWhenTrace = ScopeContextMenu.MenuItem.ShowWhen.TracesPresent,
+                ShownWhenMouse = PaintBoxMouseInfo.GuiSection.Anywhere,
+                Call = ScopeContextMenu.MenuItem.CallWhen.Once,
+                ShownText = ScopeContextMenu.MenuItem.TextDisplay.NoChange,
+                Clicked = ImportExport.ShowDataGridView,
+                HotKeyModifier = ScopeContextMenu.MenuItem.HotKeyModifierState.CtrlShift,
+                HotKeyCode = Keys.G
+            });
+
+            contextMenu.Add(new ScopeContextMenu.MenuItem
+            {
                 Text = "Combine to new YT trace (copy) - ",
                 ShownWhenTrace = ScopeContextMenu.MenuItem.ShowWhen.TwoSelected,
                 ShownWhenMouse = PaintBoxMouseInfo.GuiSection.TraceArea,

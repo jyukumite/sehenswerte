@@ -69,35 +69,36 @@ namespace SehensWerte.Generators
         [TestMethod]
         public void TestSpeed()
         {
-            return;
+            bool testSpeed = false;
+            if (testSpeed)
+            {
+                int n = 100000000;
+                double a = HighResTimer.StaticSeconds;
+                ToneGenerator a1 = new ToneGenerator() { UseMathSin = false };
+                a1.Generate(n);
+                double b = HighResTimer.StaticSeconds;
+                ToneGenerator a2 = new ToneGenerator() { UseMathSin = true };
+                a2.Generate(n);
+                double c = HighResTimer.StaticSeconds;
+                ToneGenerator a3 = new ToneGenerator() { UseMathSin = false, FrequencyStart = 1000, FrequencyEnd = 2000 };
+                a3.Generate(n);
+                double d = HighResTimer.StaticSeconds;
+                ToneGenerator a4 = new ToneGenerator() { UseMathSin = true, FrequencyStart = 1000, FrequencyEnd = 2000 };
+                a4.Generate(n);
+                double e = HighResTimer.StaticSeconds;
 
-            int n = 100000000;
-            double a = HighResTimer.StaticSeconds;
-            ToneGenerator a1 = new ToneGenerator() { UseMathSin = false };
-            a1.Generate(n);
-            double b = HighResTimer.StaticSeconds;
-            ToneGenerator a2 = new ToneGenerator() { UseMathSin = true };
-            a2.Generate(n);
-            double c = HighResTimer.StaticSeconds;
-            ToneGenerator a3 = new ToneGenerator() { UseMathSin = false, FrequencyStart = 1000, FrequencyEnd = 2000 };
-            a3.Generate(n);
-            double d = HighResTimer.StaticSeconds;
-            ToneGenerator a4 = new ToneGenerator() { UseMathSin = true, FrequencyStart = 1000, FrequencyEnd = 2000 };
-            a4.Generate(n);
-            double e = HighResTimer.StaticSeconds;
+                // example on i9-13900K
+                // 1.0523086 seconds for 100000000 samples sin=false
+                // 0.9688325 seconds for 100000000 samples sin=true
+                // 1.0904067 seconds for 100000000 samples sweep sin=false
+                // 0.9693191 seconds for 100000000 samples sweep sin=true
 
-// example on i9-13900K
-// 1.0523086 seconds for 100000000 samples sin=false
-// 0.9688325 seconds for 100000000 samples sin=true
-// 1.0904067 seconds for 100000000 samples sweep sin=false
-// 0.9693191 seconds for 100000000 samples sweep sin=true
-
-            MessageBox.Show(@$"Generators:
+                MessageBox.Show(@$"Generators:
 {b - a} seconds for {n} samples sin=false
 {c - b} seconds for {n} samples sin=true
 {d - c} seconds for {n} samples sweep sin=false
 {e - d} seconds for {n} samples sweep sin=true");
-
+            }
         }
     }
 }

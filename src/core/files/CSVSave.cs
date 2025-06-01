@@ -16,7 +16,7 @@ namespace SehensWerte.Files
             }
         }
 
-        public static void SaveRows(StreamWriter writer, IEnumerable<string> header, IEnumerable<object> rowArrays, string separator)
+        public static void SaveRows(StreamWriter writer, IEnumerable<string>? header, IEnumerable<object> rowArrays, string separator)
         {
             if (header != null)
             {

@@ -83,7 +83,8 @@ namespace SehensWerte.Controls.Sehens
                 None,
                 Alt,
                 Ctrl,
-                AltCtrl
+                CtrlShift,
+                AltCtrl,
             }
 
             public Action<DropDownArgs>? Clicked;
@@ -105,10 +106,11 @@ namespace SehensWerte.Controls.Sehens
                     && HotKeyCode != 0
                     && HotKeyModifier switch
                     {
-                        HotKeyModifierState.Alt => e.Alt && !e.Control,
-                        HotKeyModifierState.AltCtrl => e.Alt && e.Control,
-                        HotKeyModifierState.Ctrl => e.Control && !e.Alt,
-                        _ => !e.Control && !e.Alt,
+                        HotKeyModifierState.Alt => e.Alt && !e.Control && !e.Shift,
+                        HotKeyModifierState.AltCtrl => e.Alt && e.Control && !e.Shift,
+                        HotKeyModifierState.Ctrl => !e.Alt && e.Control && !e.Shift,
+                        HotKeyModifierState.CtrlShift => !e.Alt && e.Control && e.Shift,
+                        _ => !e.Alt && !e.Control && !e.Shift,
                     };
 
             public string DisplayText(string selected)
@@ -245,12 +247,13 @@ namespace SehensWerte.Controls.Sehens
 
             foreach (var dup in ContextMenuList
                 .Where(x => x.HotKeyCode != Keys.None)
-                .Select(x => new { x.HotKeyModifier, x.HotKeyCode })
-                .GroupBy(x => x)
+                .GroupBy(x => new { x.HotKeyModifier, x.HotKeyCode })
                 .Where(x => x.Count() > 1)
-                .Select(x => x.FirstOrDefault()))
+                .ToArray())
             {
-                throw new Exception($"Duplicate hotkey {dup!.HotKeyModifier}-{dup.HotKeyCode}");
+                var issue = dup.FirstOrDefault()!;
+                var names = string.Join(", ", dup.Select(x => x.Text));
+                throw new Exception($"Duplicate hotkey {issue.HotKeyModifier}-{issue.HotKeyCode} in ({names})");
             }
         }
 

@@ -497,21 +497,21 @@ namespace SehensWerte.Controls.Sehens
                             ? traceView.Samples.SnapshotYTProjection(info.LeftUnixTime, info.RightUnixTime)
                             : traceView.Samples.SnapshotYTProjection(traceView.Samples.UnixTimeRange.Left, traceView.Samples.UnixTimeRange.Right);
 
-                        add((double[]?)snapshot.time.Copy(snapshot.leftIndex, snapshot.rightIndex - snapshot.leftIndex + 1), "\"" + traceView.ViewName + ".Time\"");
-                        add((double[]?)snapshot.samples.Copy(snapshot.leftIndex, snapshot.rightIndex - snapshot.leftIndex + 1), "\"" + traceView.ViewName + ".Value\"");
+                        add((double[]?)snapshot.time.Copy(snapshot.leftIndex, snapshot.rightIndex - snapshot.leftIndex + 1), traceView.ViewName + ".Time");
+                        add((double[]?)snapshot.samples.Copy(snapshot.leftIndex, snapshot.rightIndex - snapshot.leftIndex + 1), traceView.ViewName + ".Value");
                     }
                     else if (traceView.PaintMode == TraceView.PaintModes.PeakHold)
                     {
                         double[]? min = drawnSamples ? traceView.PeakHoldMinDrawn : traceView.PeakHoldMinAll;
-                        add(min, "\"" + traceView.ViewName + ".Min\"");
+                        add(min, traceView.ViewName + ".Min");
 
                         double[]? max = drawnSamples ? traceView.PeakHoldMaxDrawn : traceView.PeakHoldMaxAll;
-                        add(max, "\"" + traceView.ViewName + ".Max\"");
+                        add(max, traceView.ViewName + ".Max");
                     }
                     else
                     {
                         double[]? item = drawnSamples ? traceView.DrawnSamples : traceView.CalculatedBeforeZoom;
-                        add(item, "\"" + traceView.ViewName + "\"");
+                        add(item, traceView.ViewName);
                     }
 
                     void add(double[]? data, string traceName)
@@ -620,7 +620,7 @@ namespace SehensWerte.Controls.Sehens
                 edit = (ExportDataFormBase?)ImportExportEdit(type, autoEditorForm);
                 if (edit == null)
                 {
-                    canSave = type == ExportType.SehensXML || type == ExportType.SehensBinary;
+                    canSave = !ImportExportHasEdit(type);
                 }
                 else
                 {
@@ -720,7 +720,7 @@ namespace SehensWerte.Controls.Sehens
                 stop = true;
                 for (int channel = 0; channel < waveforms.Extracted.Count; channel++)
                 {
-                    double[] array = (double[])waveforms.Extracted[channel];
+                    var array = waveforms.Extracted[channel].CopyToDoubleArray();
                     samples[channel] = (array.Length > index) ? array[index] : 0.0;
                     if (array.Length > index)
                     {
@@ -836,14 +836,24 @@ namespace SehensWerte.Controls.Sehens
             }
         }
 
+        private static bool ImportExportHasEdit<T>(T value)
+        {
+            return
+                typeof(T).GetField(value?.ToString() ?? "")
+                    ?.GetCustomAttributes(typeof(EditFormTypeAttribute), inherit: false)
+                    ?.Length != 0;
+        }
+
         private static object? ImportExportEdit<T>(T value, AutoEditorForm form)
         {
-            object[] customAttributes = typeof(T).GetField(value?.ToString() ?? "")?.GetCustomAttributes(typeof(EditFormTypeAttribute), inherit: false) ?? new object[0];
+            object[] customAttributes =
+                typeof(T).GetField(value?.ToString() ?? "")
+                    ?.GetCustomAttributes(typeof(EditFormTypeAttribute), inherit: false) ?? new object[0];
             Type? type = customAttributes.Length == 0 ? null : ((EditFormTypeAttribute)customAttributes[0]).Form;
             object? obj = null;
             if (type != null)
             {
-                if (ImportExportForms.ContainsKey(value))
+                if (value != null && ImportExportForms.ContainsKey(value))
                 {
                     obj = ImportExportForms[value];
                 }
@@ -1204,6 +1214,35 @@ namespace SehensWerte.Controls.Sehens
                 TargetTrace = trace,
                 SamplesPerSecond = samplesPerSecond
             });
+        }
+
+        internal static void ShowDataGridView(ScopeContextMenu.DropDownArgs a)
+        {
+            try
+            {
+                Traces traces = ExtractWaveformsToSave(a, new ExportDataForm() { ExportScope = ExportDataForm.Scope.SelectedDisplayedSamples });
+                var screen = Screen.FromPoint(Cursor.Position);
+                var workingArea = screen.WorkingArea;
+                var form = new Form();
+                form.Text = "SehensWerte DataGrid";
+                form.Width = workingArea.Width * 4 / 5;
+                form.Height = workingArea.Height * 4 / 5;
+                form.Left = workingArea.Left + (workingArea.Width - form.Width) / 2;
+                form.Top = workingArea.Top + (workingArea.Height - form.Height) / 2;
+                var grid = new DataGridControl(CsvLog.ExtendPath(a.Scope.OnLog!, "DataGrid"), prettyColours: true)
+                {
+                    Dock = DockStyle.Fill,
+                };
+                form.Controls.Add(grid);
+
+                var rows = traces.Extracted.Select(x => x.CopyToDoubleArray()).Transpose();
+                grid.LoadRows(rows, traces.Names);
+                form.Show();
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show(ex.Message, "Can't export");
+            }
         }
     }
 }

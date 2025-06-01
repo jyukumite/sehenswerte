@@ -651,7 +651,7 @@ namespace SehensWerte.Files
 
                 Buffer = channels.Select(x => x.ToArray()).ToArray();
             }
-            catch (Exception e)
+            catch (Exception)
             {
                 throw;
             }

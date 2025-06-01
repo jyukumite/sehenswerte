@@ -169,7 +169,7 @@ namespace SehensWerte
     public class StringTests
     {
         [TestMethod]
-        public async void TestConstantTimeCompare()
+        public void TestConstantTimeCompare()
         {
             Assert.IsTrue("test".CompareConstantTime("test"));
             Assert.IsFalse("test".CompareConstantTime("test2"));

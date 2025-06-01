@@ -145,11 +145,12 @@ namespace SehensWerte.Utils
 
         public static void RunTestsInAssembly(string assemblyName)
         {
-            var path = System.IO.Path.Combine(Process.AssemblyPath, assemblyName);
-            var asm = Assembly.LoadFrom(path);
-            var testClassTypes = asm.GetTypes()
-                .Where(t => t.CustomAttributes.Any(a => a.AttributeType.Name == "TestClassAttribute"));
-            foreach (var t in testClassTypes)
+            var path = System.IO.Path.IsPathFullyQualified(assemblyName)
+                ? assemblyName
+                : System.IO.Path.Combine(Process.AssemblyPath, assemblyName);
+
+            foreach (var t in Assembly.LoadFrom(path).GetTypes()
+                .Where(t => t.CustomAttributes.Any(a => a.AttributeType.Name == "TestClassAttribute")))
             {
                 var methods = t.GetMethods().Where(m => m.CustomAttributes
                     .Any(a => a.AttributeType.Name == "TestMethodAttribute"))
@@ -161,6 +162,30 @@ namespace SehensWerte.Utils
                     m.Invoke(tc, null);
                     Debug.WriteLine($"Completed test {m.Name}");
                 }
+            }
+        }
+
+        public static void RunAllTests()
+        {
+            try
+            {
+                var assemblies = AppDomain.CurrentDomain.GetAssemblies();
+
+                foreach (var assembly in assemblies)
+                {
+                    var location = assembly.Location;
+                    string fileName = Path.GetFileNameWithoutExtension(location);
+                    if (!string.IsNullOrEmpty(location)
+                        && !(new[] { "System.", "Microsoft.", "Windows." })
+                        .Any(prefix => fileName.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)))
+                    {
+                        RunTestsInAssembly(location);
+                    }
+                }
+            }
+            catch (Exception e)
+            {
+                MessageBox.Show(e.ToString());
             }
         }
 

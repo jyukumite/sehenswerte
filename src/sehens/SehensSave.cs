@@ -148,8 +148,8 @@ namespace SehensWerte
             {
                 OtherElements = XmlSaveAttribute.Extract(obj);
                 Features = obj.Features.Select(x => (TraceFeature)x.Clone()).ToArray();
-                InputSamples = DataStore.CopyToDouble(obj.InputSamples);
-                UnixTime = obj.UnixTime == null ? null : DataStore.CopyToDouble(obj.UnixTime);
+                InputSamples = obj.InputSamples.CopyToDoubleArray();
+                UnixTime = obj.UnixTime == null ? null : obj.UnixTime.CopyToDoubleArray();
             }
 
             internal void SaveTo(DataStore obj)

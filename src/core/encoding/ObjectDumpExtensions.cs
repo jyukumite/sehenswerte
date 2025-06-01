@@ -29,8 +29,8 @@ namespace SehensWerte.Utils
             return obj == null ?
                 mode switch
                 {
-                    DumpMode.Verbose => NullName,
                     DumpMode.CSharp => CNullName,
+                    _ => NullName,
                 }
                 : Object(obj, obj.GetType(), NullName, indent, mode);
         }
@@ -52,8 +52,8 @@ namespace SehensWerte.Utils
         {
             return mode switch
             {
-                DumpMode.Verbose => Pad(indent, "{0} ({1}): {2}\r\n", name, type.Name, obj),
-                DumpMode.CSharp => Pad(indent, (obj is string) ? "{0} = \"{2}\",\r\n" : "{0} = {2},\r\n", name, type.Name, obj)
+                DumpMode.CSharp => Pad(indent, (obj is string) ? "{0} = \"{2}\",\r\n" : "{0} = {2},\r\n", name, type.Name, obj),
+                _ => Pad(indent, "{0} ({1}): {2}\r\n", name, type.Name, obj),
             };
         }
 
@@ -61,8 +61,8 @@ namespace SehensWerte.Utils
         {
             string text = mode switch
             {
-                DumpMode.Verbose => Pad(indent, "{0} ({1}):\r\n", name == NullName ? "" : name, type.Name),
-                DumpMode.CSharp => Pad(indent, "new {0}() {{\r\n", name == CNullName ? "" : name)
+                DumpMode.CSharp => Pad(indent, "new {0}() {{\r\n", name == CNullName ? "" : name),
+                _ => Pad(indent, "{0} ({1}):\r\n", name == NullName ? "" : name, type.Name),
             };
 
             if (obj is byte[])
@@ -98,8 +98,8 @@ namespace SehensWerte.Utils
             return text +
                 mode switch
                 {
-                    DumpMode.Verbose => "",
-                    DumpMode.CSharp => "\r\n" + Pad(indent, "}}\r\n")
+                    DumpMode.CSharp => "\r\n" + Pad(indent, "}}\r\n"),
+                    _ => "",
                 };
             ;
         }
@@ -131,14 +131,14 @@ namespace SehensWerte.Utils
             {
                 text += mode switch
                 {
-                    DumpMode.Verbose => Pad(indent + 1, "[{0}] ({1}):\r\n", key, key.GetType().Name),
-                    DumpMode.CSharp => Pad(indent + 1, "{{ {0}.{1}, ", GetFullName(key), key)
+                    DumpMode.CSharp => Pad(indent + 1, "{{ {0}.{1}, ", GetFullName(key), key),
+                    _ => Pad(indent + 1, "[{0}] ({1}):\r\n", key, key.GetType().Name),
                 };
                 text += Object(dictionary[key] ?? ((mode == DumpMode.CSharp) ? CNullName : NullName), indent + 2, mode);
                 text += mode switch
                 {
-                    DumpMode.Verbose => "",
-                    DumpMode.CSharp => Pad(indent + 1, "}},\r\n")
+                    DumpMode.CSharp => Pad(indent + 1, "}},\r\n"),
+                    _ => "",
                 };
             }
             return text;

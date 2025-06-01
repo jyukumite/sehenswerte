@@ -114,7 +114,7 @@ namespace SehensWerte
         public class NaturalCompareTest
         {
             [TestMethod]
-            public async void Test()
+            public void Test()
             {
                 Action<string, string> testless = (a, b) =>
                 {
