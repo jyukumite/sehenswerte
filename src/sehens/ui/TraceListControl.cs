@@ -182,6 +182,15 @@ namespace SehensWerte.Controls.Sehens
             typeof(Control).GetProperty("DoubleBuffered", BindingFlags.Instance | BindingFlags.NonPublic)?.SetValue(PaintBox, true, null);
         }
 
+        protected override void OnResize(EventArgs e)
+        {
+            base.OnResize(e);
+            if (PaintBox.IsHandleCreated)
+            {
+                PaintBox.Invalidate();
+            }
+        }
+
         protected override void Dispose(bool disposing)
         {
             if (disposing)

@@ -25,7 +25,7 @@ namespace SehensWerte.Controls
         private HScrollBar HorizontalScrollZoomBar;
         private HScrollBar HorizontalScrollPanBar;
         private System.Windows.Forms.SplitContainer PaintBoxScrollBarContainer;
-        private Panel PanelLeft;
+        private Panel PanelScope;
         internal SehensPaintBox PaintBox;
         internal VScrollBar VerticalScrollBar;
         private SehensWerte.Controls.SplitContainer LeftRightSplit;
@@ -274,12 +274,13 @@ namespace SehensWerte.Controls
         public SehensControl()
         {
             ViewProxyCallback = new ViewProxy(this);
+
             SuspendLayout();
             base.Size = new Size(800, 450);
             base.AutoScaleDimensions = new SizeF(6f, 13f);
             base.AutoScaleMode = AutoScaleMode.Font;
             LeftRightSplit = new SehensWerte.Controls.SplitContainer();
-            PanelLeft = new Panel();
+            PanelScope = new Panel();
 
             TraceListView = new TraceListControl(this, CsvLog.ExtendPath((a) => OnLog?.Invoke(a), "TraceListView"));
             LeftRightSplit.CollapsingPanel = SplitContainer.ControlledPanel.Panel1;
@@ -293,12 +294,12 @@ namespace SehensWerte.Controls
             HorizontalScrollZoomBar = new HScrollBar();
             VerticalScrollBar = new VScrollBar();
             PaintBox = new SehensPaintBox(this, CsvLog.ExtendPath((a) => OnLog?.Invoke(a), "PaintBox"));
+
             ((ISupportInitialize)PaintBoxScrollBarContainer).BeginInit();
+            PaintBoxScrollBarContainer.SuspendLayout();
             PaintBoxScrollBarContainer.Panel1.SuspendLayout();
             PaintBoxScrollBarContainer.Panel2.SuspendLayout();
-            PaintBoxScrollBarContainer.SuspendLayout();
 
-            SuspendLayout();
             PaintBoxScrollBarContainer.Dock = DockStyle.Bottom;
             PaintBoxScrollBarContainer.Location = new Point(0, 472);
             PaintBoxScrollBarContainer.PreviewKeyDown += PaintBox_PreviewKeyDown;
@@ -352,9 +353,9 @@ namespace SehensWerte.Controls
             PaintBox.MouseWheel += PaintBox_MouseWheel;
             PaintBox.PreviewKeyDown += PaintBox_PreviewKeyDown;
 
-            PanelLeft.Controls.Add(PaintBox);
-            PanelLeft.Controls.Add(VerticalScrollBar);
-            PanelLeft.Controls.Add(PaintBoxScrollBarContainer);
+            PanelScope.Controls.Add(PaintBox);
+            PanelScope.Controls.Add(VerticalScrollBar);
+            PanelScope.Controls.Add(PaintBoxScrollBarContainer);
 
             base.Name = "SehensControl";
             base.Size = new Size(398, 490);
@@ -368,25 +369,23 @@ namespace SehensWerte.Controls
             };
             PaintBoxScrollBarContainer.Panel1.ResumeLayout(performLayout: false);
             PaintBoxScrollBarContainer.Panel2.ResumeLayout(performLayout: false);
-            ((ISupportInitialize)PaintBoxScrollBarContainer).EndInit();
             PaintBoxScrollBarContainer.ResumeLayout(performLayout: false);
-            ResumeLayout(performLayout: false);
             UpdateVerticalScrollbar();
             m_ToolTip = new ToolTip();
             ContextMenu = new ScopeContextMenu(PaintBox, this);
-            LeftRightSplit.Panel2.Controls.Add(PanelLeft);
+            LeftRightSplit.Panel2.Controls.Add(PanelScope);
             LeftRightSplit.Panel1.Controls.Add(TraceListView);
             base.Controls.Add(LeftRightSplit);
             LeftRightSplit.Dock = DockStyle.Fill;
-            PanelLeft.Dock = DockStyle.Fill;
+            PanelScope.Dock = DockStyle.Fill;
             TraceListView.Dock = DockStyle.Fill;
             Dock = DockStyle.None;
-            ResumeLayout(performLayout: false);
+            ResumeLayout();
+            ((ISupportInitialize)PaintBoxScrollBarContainer).EndInit();
+
             ReprocessMathAfterZoom();
         }
-
-
-
+        
 
         ////////////////////////////////////////////////////////////////
         //Internal
