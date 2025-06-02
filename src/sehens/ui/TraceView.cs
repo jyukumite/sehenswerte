@@ -669,60 +669,60 @@ namespace SehensWerte.Controls.Sehens
         }
 
 
-        private double m_FftBandpass0LowCutHz;
+        private double m_FftBandpassHPF6dB;
         [XmlSave]
         public double FftBandpassHPF6dB
         {
-            get => m_FftBandpass0LowCutHz;
+            get => m_FftBandpassHPF6dB;
             set
             {
-                if (m_FftBandpass0LowCutHz == value) return;
-                m_FftBandpass0LowCutHz = value;
+                if (m_FftBandpassHPF6dB == value) return;
+                m_FftBandpassHPF6dB = value;
                 BeforeZoomCalculateRequired();
                 Scope.ViewNeedsRepaint(this);
                 GuiUpdateControls?.Invoke(this);
             }
         }
 
-        private double m_FftBandpass1LowPassHz;
+        private double m_FftBandpassHPF3dB;
         [XmlSave]
         public double FftBandpassHPF3dB
         {
-            get => m_FftBandpass1LowPassHz;
+            get => m_FftBandpassHPF3dB;
             set
             {
-                if (m_FftBandpass1LowPassHz == value) return;
-                m_FftBandpass1LowPassHz = value;
+                if (m_FftBandpassHPF3dB == value) return;
+                m_FftBandpassHPF3dB = value;
                 BeforeZoomCalculateRequired();
                 Scope.ViewNeedsRepaint(this);
                 GuiUpdateControls?.Invoke(this);
             }
         }
 
-        private double m_FftBandpass2HighPassHz;
+        private double m_FftBandpassLPF3dB;
         [XmlSave]
         public double FftBandpassLPF3dB
         {
-            get => m_FftBandpass2HighPassHz;
+            get => m_FftBandpassLPF3dB;
             set
             {
-                if (m_FftBandpass2HighPassHz == value) return;
-                m_FftBandpass2HighPassHz = value;
+                if (m_FftBandpassLPF3dB == value) return;
+                m_FftBandpassLPF3dB = value;
                 BeforeZoomCalculateRequired();
                 Scope.ViewNeedsRepaint(this);
                 GuiUpdateControls?.Invoke(this);
             }
         }
 
-        private double m_FftBandpass3HighCutHz;
+        private double m_FftBandpassLPF6dB;
         [XmlSave]
         public double FftBandpassLPF6dB
         {
-            get => m_FftBandpass3HighCutHz;
+            get => m_FftBandpassLPF6dB;
             set
             {
-                if (m_FftBandpass3HighCutHz == value) return;
-                m_FftBandpass3HighCutHz = value;
+                if (m_FftBandpassLPF6dB == value) return;
+                m_FftBandpassLPF6dB = value;
                 BeforeZoomCalculateRequired();
                 Scope.ViewNeedsRepaint(this);
                 GuiUpdateControls?.Invoke(this);
@@ -990,7 +990,7 @@ namespace SehensWerte.Controls.Sehens
         }
 
         internal bool UseFftFilter => m_Samples.InputSamplesPerSecond != 0.0 && m_FftFilterType != 0
-                        && (m_FftBandpass0LowCutHz != 0.0 || m_FftBandpass1LowPassHz != 0.0 || m_FftBandpass2HighPassHz != 0.0 || m_FftBandpass3HighCutHz != 0.0);
+                        && (m_FftBandpassHPF6dB != 0.0 || m_FftBandpassHPF3dB != 0.0 || m_FftBandpassLPF3dB != 0.0 || m_FftBandpassLPF6dB != 0.0);
         internal bool IsLogarithmicY => m_MathType == MathTypes.FFT10Log10 || m_MathType == MathTypes.FFT20Log10;
         internal bool IsRebasedResult => IsFftTrace && CalculateAfterZoom;
         internal bool IsRecalculateProjectionRequired => m_RecalculateProjectionRequired != 0 || m_AfterZoomCalculateRequired;
@@ -1237,6 +1237,7 @@ namespace SehensWerte.Controls.Sehens
 
                 if (before || after)
                 {
+                    //fixme: don't call if the samples didn't actually change (recursive invalidate)
                     m_Samples.ForEachViewer(viewer =>
                     {
                         viewer.TraceDataCalculatedSamplesChanged(m_Samples);
@@ -1467,48 +1468,52 @@ namespace SehensWerte.Controls.Sehens
             switch (m_FftFilterType)
             {
                 case FftFilterTypes.BandPass:
-                    {
-                        double high6dBHz = (m_FftBandpass3HighCutHz == 0.0) ? (m_Samples.InputSamplesPerSecond / 2.0) : m_FftBandpass3HighCutHz;
-                        result = FftFilter.BandPass(input, m_FftBandpass0LowCutHz, m_FftBandpass1LowPassHz, m_FftBandpass2HighPassHz, high6dBHz, m_Samples.InputSamplesPerSecond, m_FftBandpassWindow);
-                        break;
-                    }
-                case FftFilterTypes.Notch:
-                    {
-                        double high6dBHz = (m_FftBandpass3HighCutHz == 0.0) ? (m_Samples.InputSamplesPerSecond / 2.0) : m_FftBandpass3HighCutHz;
-                        result = FftFilter.Notch(input, m_FftBandpass0LowCutHz, m_FftBandpass1LowPassHz, m_FftBandpass2HighPassHz, high6dBHz, m_Samples.InputSamplesPerSecond, m_FftBandpassWindow);
-                        break;
-                    }
+                    result = FftFilter.BandPass(input,
+                        m_FftBandpassHPF6dB, m_FftBandpassHPF3dB,
+                        m_FftBandpassLPF3dB, m_FftBandpassLPF6dB,
+                        m_Samples.InputSamplesPerSecond, m_FftBandpassWindow);
+                    break;
                 case FftFilterTypes.BandPassFit:
-                    if (m_FftBandpass1LowPassHz == m_FftBandpass2HighPassHz)
-                    {
-                        result = input;
-                    }
-                    else
-                    {
-                        result = FftFilter.BandPass(input, m_FftBandpass1LowPassHz, m_FftBandpass2HighPassHz, m_Samples.InputSamplesPerSecond, m_FftBandpassWindow);
-                    }
+                    result = FftFilter.BandPass(input,
+                        m_FftBandpassHPF3dB,
+                        m_FftBandpassLPF3dB,
+                        m_Samples.InputSamplesPerSecond, m_FftBandpassWindow);
+                    break;
+                case FftFilterTypes.Notch:
+                    result = FftFilter.Notch(input,
+                        m_FftBandpassLPF3dB, m_FftBandpassLPF6dB,
+                        m_FftBandpassHPF6dB, m_FftBandpassHPF3dB,
+                        m_Samples.InputSamplesPerSecond, m_FftBandpassWindow);
                     break;
                 case FftFilterTypes.NotchFit:
-                    if (m_FftBandpass1LowPassHz == m_FftBandpass2HighPassHz)
-                    {
-                        result = input;
-                    }
-                    else
-                    {
-                        result = FftFilter.Notch(input, m_FftBandpass1LowPassHz, m_FftBandpass2HighPassHz, m_Samples.InputSamplesPerSecond, m_FftBandpassWindow);
-                    }
+                    result = FftFilter.Notch(input, 
+                        m_FftBandpassLPF3dB, 
+                        m_FftBandpassHPF3dB, 
+                        m_Samples.InputSamplesPerSecond, m_FftBandpassWindow);
                     break;
                 case FftFilterTypes.HighPass:
-                    result = FftFilter.HighPass(input, m_FftBandpass0LowCutHz, m_FftBandpass1LowPassHz, m_Samples.InputSamplesPerSecond, m_FftBandpassWindow);
+                    result = FftFilter.HighPass(input, 
+                        m_FftBandpassHPF6dB, 
+                        m_FftBandpassHPF3dB, 
+                        m_Samples.InputSamplesPerSecond, m_FftBandpassWindow);
                     break;
                 case FftFilterTypes.HighPass3dBPerOctave:
-                    result = FftFilter.HighPass(input, m_FftBandpass1LowPassHz / 2.0, m_FftBandpass1LowPassHz, m_Samples.InputSamplesPerSecond, m_FftBandpassWindow);
+                    result = FftFilter.HighPass(input, 
+                        m_FftBandpassHPF3dB / 2.0, 
+                        m_FftBandpassHPF3dB, 
+                        m_Samples.InputSamplesPerSecond, m_FftBandpassWindow);
                     break;
                 case FftFilterTypes.LowPass:
-                    result = FftFilter.LowPass(input, m_FftBandpass2HighPassHz, m_FftBandpass3HighCutHz, m_Samples.InputSamplesPerSecond, m_FftBandpassWindow);
+                    result = FftFilter.LowPass(input, 
+                        m_FftBandpassLPF3dB, 
+                        m_FftBandpassLPF6dB, 
+                        m_Samples.InputSamplesPerSecond, m_FftBandpassWindow);
                     break;
                 case FftFilterTypes.LowPass3dBPerOctave:
-                    result = FftFilter.LowPass(input, m_FftBandpass2HighPassHz, m_FftBandpass2HighPassHz * 2.0, m_Samples.InputSamplesPerSecond, m_FftBandpassWindow);
+                    result = FftFilter.LowPass(input, 
+                        m_FftBandpassLPF3dB, 
+                        m_FftBandpassLPF3dB * 2.0, 
+                        m_Samples.InputSamplesPerSecond, m_FftBandpassWindow);
                     break;
                 case FftFilterTypes.None:
                 default:

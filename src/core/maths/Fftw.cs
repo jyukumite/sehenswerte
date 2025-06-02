@@ -395,7 +395,8 @@ namespace SehensWerte.Maths
         public double[] GenerateFir(double samplesPerSecond, double[] fftCoefficients)
         {
             if (samplesPerSecond == 0) throw new NotImplementedException();
-            float one = 0.5f;// (float)(1 / Math.Sqrt(2));// 1f;// 1f/ (float)Width;
+            //int gain_bins = fftCoefficients.Count(x => x > 0);
+            float one = (float)1 / (float)Width;
             for (int loop = 0; loop < m_SpectralComplexFloat.Length; loop += 2)
             {
                 m_SpectralComplexFloat[loop] = one;

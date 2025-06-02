@@ -45,6 +45,17 @@ namespace SehensWerte.Maths
             return array;
         }
 
+        public static double[] Complement(this double[] rhs, double lhs = 1.0)
+        {
+            int length = rhs.Length;
+            double[] array = new double[length];
+            for (int loop = 0; loop < length; loop++)
+            {
+                array[loop] = lhs - rhs[loop];
+            }
+            return array;
+        }
+
         public static double[] Append(this double[] lhs, double[] rhs)
         {
             double[] array = new double[lhs.Length + rhs.Length];
@@ -957,6 +968,7 @@ namespace SehensWerte.Maths
         {
             Assert.IsTrue(new double[] { 1, 2, 3 }.Add(new double[] { 2, 3, 4 }).IsEqualTo(new double[] { 3, 5, 7 }));
             Assert.IsTrue(new double[] { 1, 2, 3 }.Add(2).IsEqualTo(new double[] { 3, 4, 5 }));
+            Assert.IsTrue(new double[] { 1, 2, 3 }.Complement().IsEqualTo(new double[] { 0, -1, -2 }));
             Assert.IsTrue(new double[] { 1, 2, 3 }.Append(new double[] { 2, 3, 4 }).IsEqualTo(new double[] { 1, 2, 3, 2, 3, 4 }));
             Assert.IsTrue(new double[] { 1, 2, 3 }.Divide(2).IsEqualTo(new double[] { 0.5, 1, 1.5 }));
             Assert.IsTrue(new double[] { 1, 2, 3 }.DotProduct(new double[] { 2, 3, 4 }) == 2 + 2 * 3 + 3 * 4);
