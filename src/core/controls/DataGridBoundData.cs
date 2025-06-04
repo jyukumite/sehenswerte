@@ -612,7 +612,7 @@ namespace SehensWerte.Controls
                 CSVSave.SaveRows(fileName, ColumnNames, FilteredData.Select(x => x.Strings), ",");
             }
 
-            internal string SelectedCellsToTSV(bool numericGrid)
+            internal (string csv, string tsv, string html, string wrappedHtml) SelectedCellsToClipboardFormats(bool numericGrid)
             {
                 var cells = DataGrid.SelectedCells.Cast<DataGridViewCell>().ToArray();
 
@@ -644,12 +644,12 @@ namespace SehensWerte.Controls
                     }
                 }
 
-                string headers = string.Join("\t", colFlags.Select((x, i) => new { x, i }).Where(x => x.x).Select(x => ColumnNames[x.i]));
+                string[] headers = colFlags.Select((x, i) => new { x, i }).Where(x => x.x).Select(x => ColumnNames[x.i]).ToArray();
 
                 StringBuilder sb = new StringBuilder();
                 if (resultRows > 1)
                 {
-                    sb.AppendLine(headers);
+                    sb.AppendLine(string.Join("\t", headers));
                 }
 
                 string?[,] strings = new string[resultRows, resultCols];
@@ -674,8 +674,77 @@ namespace SehensWerte.Controls
                         sb.Append(strings[row, col]);
                     }
                 }
+                string tsv = sb.ToString();
 
-                return sb.ToString();
+                string csv = StringArrayToCsv(headers, strings);
+                string html = StringArrayToHtml(headers, strings);
+
+                return (csv, tsv, html, WrapHtml(html));
+            }
+
+            private string WrapHtml(string html)
+            { // excel requires the html section to be wrapped like this
+                const string header = // {0000:D10} is 10 chars long
+@"Version:1.0
+StartHTML:{0000:D10}
+EndHTML:{0001:D10}
+StartFragment:{0002:D10}
+EndFragment:{0003:D10}
+";
+                string pre = "<html><body>\r\n<!--StartFragment-->";
+                string post = "<!--EndFragment-->\r\n</body></html>";
+
+                string htmlFragment = pre + html + post;
+
+                int startHTML = header.Length;
+                int startFragment = startHTML + pre.Length;
+                int endFragment = startFragment + html.Length;
+                int endHTML = startFragment + htmlFragment.Length;
+
+                return string.Format(
+                    header,
+                    startHTML,
+                    startHTML + htmlFragment.Length,
+                    startFragment,
+                    endFragment
+                ) + htmlFragment;
+            }
+
+            private static string StringArrayToCsv(string[] headers, string?[,] strings)
+            {
+                int rows = strings.GetLength(0);
+                int cols = strings.GetLength(1);
+                IEnumerable<string?> getRow(int row) => Enumerable.Range(0, cols).Select(col => strings[row, col]);
+                var csvRows = Enumerable.Range(0, rows).Select(row => CSVSave.RowToCsvText(getRow(row)));
+                string csv = @$"{CSVSave.RowToCsvText(headers)}
+{string.Join(@"
+", csvRows)}";
+                return csv;
+            }
+
+            private static string StringArrayToHtml(string[] headers, string?[,] strings)
+            {
+                int rows = strings.GetLength(0);
+                int cols = strings.GetLength(1);
+
+                string Escape(string? s) => System.Net.WebUtility.HtmlEncode(s ?? "");
+                IEnumerable<string?> getRow(int row) => Enumerable.Range(0, cols).Select(col => strings[row, col]);
+
+                var result = new StringBuilder();
+                result.AppendLine("<table border=\"1\">");
+                result.AppendLine("<thead><tr>");
+                headers.ForEach(header => result.Append("<th>").Append(Escape(header)).AppendLine("</th>"));
+                result.AppendLine("</tr></thead>");
+                result.AppendLine("<tbody>");
+                for (int row = 0; row < rows; row++)
+                {
+                    result.AppendLine("<tr>");
+                    getRow(row).ForEach(cell => result.Append("<td>").Append(Escape(cell)).AppendLine("</td>"));
+                    result.AppendLine("</tr>");
+                }
+                result.AppendLine("</tbody>");
+                result.AppendLine("</table>");
+                return result.ToString();
             }
         }
     }

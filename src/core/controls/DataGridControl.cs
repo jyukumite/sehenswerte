@@ -310,7 +310,21 @@ namespace SehensWerte.Controls
         {
             if (e.Control && e.KeyCode == Keys.C)
             {
-                Clipboard.SetText(DataGridBind?.SelectedCellsToTSV(NumericGrid));
+                string[] formats = new string[] { DataFormats.Html, DataFormats.Text, DataFormats.UnicodeText, DataFormats.CommaSeparatedValue };
+
+
+                if (DataGridBind != null)
+                {
+                    //var temp = Grid.GetClipboardContent();
+
+                    var data = DataGridBind.SelectedCellsToClipboardFormats(NumericGrid);
+                    var dataObj = new DataObject();
+                    dataObj.SetData(DataFormats.Text, data.tsv);
+                    dataObj.SetData(DataFormats.UnicodeText, data.tsv);
+                    dataObj.SetData(DataFormats.Html, data.wrappedHtml);
+                    dataObj.SetData(DataFormats.CommaSeparatedValue, data.csv);
+                    Clipboard.SetDataObject(dataObj, true);
+                }
                 e.Handled = true;
             }
             else if (Grid.CurrentCell != null)
@@ -444,10 +458,6 @@ namespace SehensWerte.Controls
 
         private void Grid_SelectionChanged(object? sender, EventArgs e)
         {
-            var rows = DataGridBind?.RowsWithSelection()?.ToArray();
-            this.Grid.ClipboardCopyMode = ((rows?.Length ?? 0) > 1) ?
-                        DataGridViewClipboardCopyMode.EnableAlwaysIncludeHeaderText :
-                        DataGridViewClipboardCopyMode.EnableWithoutHeaderText;
         }
 
         private void ShowAllStatus_Click(object? sender, EventArgs e)
