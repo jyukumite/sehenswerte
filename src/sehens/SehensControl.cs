@@ -554,18 +554,23 @@ namespace SehensWerte.Controls
             }
         }
 
-        public TraceView DuplicateTraceView(TraceView view)
+        // make a new view pointing at the same data
+        public TraceView DuplicateTraceView(TraceView view, bool group = true)
         {
             lock (m_ViewGroupsLock)
             {
                 TraceView result = new TraceView(this, view);
                 result.ViewName = EnsureUnique(view.ViewName, x => TryGetTrace(x) != null || TryGetView(x) != null);
                 AddView(result);
-                result.GroupWithView = view.ViewName;
+                if (group)
+                {
+                    result.GroupWithView = view.ViewName;
+                }
                 return result;
             }
         }
 
+        // make a new view with a copy of the data
         public TraceView DuplicateTraceData(TraceView view)
         {
             TraceView traceView = DuplicateTraceView(view);

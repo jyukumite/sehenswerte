@@ -16,7 +16,7 @@ namespace SehensWerte.Maths
         private GCHandle m_TemporalComplexFloatHandle;
         private GCHandle m_SpectralComplexFloatHandle;
 
-        private static object GeneratePlanLock = new object();
+        private static object EverythingLock = new object();
         private static Dictionary<int, IntPtr> m_ForwardPlans = new Dictionary<int, IntPtr>();
         private static Dictionary<int, IntPtr> m_BackwardPlans = new Dictionary<int, IntPtr>();
 
@@ -30,7 +30,7 @@ namespace SehensWerte.Maths
 
         private static IntPtr GetPlan(int width, Dictionary<int, IntPtr> dict, Import.Direction direction)
         {
-            lock (GeneratePlanLock)
+            lock (EverythingLock)
             {
                 Import.fftw_plan_with_nthreads(Environment.ProcessorCount);
                 IntPtr plan;
@@ -40,6 +40,10 @@ namespace SehensWerte.Maths
                     IntPtr inFloatPointer = Import.malloc(width * complex * sizeof(float));
                     IntPtr outFloatPointer = Import.malloc(width * complex * sizeof(float));
                     plan = Import.plan_dft_1d(width, inFloatPointer, outFloatPointer, direction, Import.Flags.Estimate);
+                    if (plan == IntPtr.Zero)
+                    {
+                        throw new InvalidOperationException("FFTW failed to create plan");
+                    }
                     Import.free(outFloatPointer);
                     Import.free(inFloatPointer);
                     dict[width] = plan;
@@ -277,8 +281,11 @@ namespace SehensWerte.Maths
         {
             int complex = 2;
             m_Width = width;
-            m_TemporalComplexFloatPointer = Import.malloc(m_Width * complex * sizeof(float));
-            m_SpectralComplexFloatPointer = Import.malloc(m_Width * complex * sizeof(float));
+            lock (EverythingLock)
+            {
+                m_TemporalComplexFloatPointer = Import.malloc(m_Width * complex * sizeof(float));
+                m_SpectralComplexFloatPointer = Import.malloc(m_Width * complex * sizeof(float));
+            }
             m_TemporalComplexFloat = new float[m_Width * complex];
             m_SpectralComplexFloat = new float[m_Width * complex];
             m_TemporalComplexFloatHandle = GCHandle.Alloc(m_TemporalComplexFloat, GCHandleType.Pinned);
@@ -625,11 +632,14 @@ namespace SehensWerte.Maths
             Process currentProcess = Process.GetCurrentProcess();
             try
             {
-                foreach (ProcessModule item in (ReadOnlyCollectionBase)currentProcess.Modules)
+                lock (EverythingLock)
                 {
-                    if (item.FileName?.Contains("libfftw3f") ?? false)
+                    foreach (ProcessModule item in (ReadOnlyCollectionBase)currentProcess.Modules)
                     {
-                        Import.FreeLibrary(item.BaseAddress);
+                        if (item.FileName?.Contains("libfftw3f") ?? false)
+                        {
+                            Import.FreeLibrary(item.BaseAddress);
+                        }
                     }
                 }
             }
@@ -641,7 +651,7 @@ namespace SehensWerte.Maths
 
         private void FreeFftw()
         {
-            lock (GeneratePlanLock)
+            lock (EverythingLock)
             {
                 Import.free(m_TemporalComplexFloatPointer);
                 Import.free(m_SpectralComplexFloatPointer);
