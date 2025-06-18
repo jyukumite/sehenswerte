@@ -165,6 +165,7 @@ namespace SehensWerte.Controls
             }
         }
 
+        public record struct SelectedCellsData(string[] headers, string?[,] strings, string csv, string tsv, string html, string wrappedHtml);
 
         public class BoundData : IBindingList
         {
@@ -612,7 +613,7 @@ namespace SehensWerte.Controls
                 CSVSave.SaveRows(fileName, ColumnNames, FilteredData.Select(x => x.Strings), ",");
             }
 
-            internal (string csv, string tsv, string html, string wrappedHtml) SelectedCellsToClipboardFormats(bool numericGrid)
+            internal SelectedCellsData SelectedCellsToClipboardFormats(bool numericGrid)
             {
                 var cells = DataGrid.SelectedCells.Cast<DataGridViewCell>().ToArray();
 
@@ -679,7 +680,7 @@ namespace SehensWerte.Controls
                 string csv = StringArrayToCsv(headers, strings);
                 string html = StringArrayToHtml(headers, strings);
 
-                return (csv, tsv, html, WrapHtml(html));
+                return new SelectedCellsData(headers, strings, csv, tsv, html, WrapHtml(html));
             }
 
             private string WrapHtml(string html)

@@ -306,6 +306,16 @@ namespace SehensWerte.Controls
             this.PerformLayout();
         }
 
+
+        public SelectedCellsData SelectedCellsToClipboardFormats(bool numeric = false)
+        {
+            if (DataGridBind == null)
+            {
+                throw new NullReferenceException("DataGridBind is null, cannot copy to clipboard");
+            }   
+            return DataGridBind!.SelectedCellsToClipboardFormats(numeric);
+        }
+
         private void Grid_KeyDown(object? sender, KeyEventArgs e)
         {
             if (e.Control && e.KeyCode == Keys.C)
@@ -316,7 +326,6 @@ namespace SehensWerte.Controls
                 if (DataGridBind != null)
                 {
                     //var temp = Grid.GetClipboardContent();
-
                     var data = DataGridBind.SelectedCellsToClipboardFormats(NumericGrid);
                     var dataObj = new DataObject();
                     dataObj.SetData(DataFormats.Text, data.tsv);
