@@ -351,7 +351,7 @@ namespace SehensWerte.Maths
 
         public double HzPerBin(double samplesPerSecond)
         {
-            return HzPerBin(samplesPerSecond);
+            return HzPerBin(Bins, samplesPerSecond);
         }
 
         private void ClearCache()
