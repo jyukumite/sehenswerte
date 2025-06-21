@@ -959,11 +959,11 @@ namespace SehensWerte.Controls.Sehens
                         {
                             TraceView.FftFilterTypes.BandPass => FftFilter.GenerateBandPassFir(FilterGenInfo.Width,
                                                 FilterGenInfo.FftBandpassLPF6dB, FilterGenInfo.FftBandpassLPF3dB,
-                                                FilterGenInfo.FftBandpassHPF3dB, FilterGenInfo.FftBandpassHPF6dB, 
+                                                FilterGenInfo.FftBandpassHPF3dB, FilterGenInfo.FftBandpassHPF6dB,
                                                 FilterGenInfo.SamplesPerSecond, FilterGenInfo.FftBandpassWindow),
                             TraceView.FftFilterTypes.BandPassFit => FftFilter.GenerateBandPassFir(FilterGenInfo.Width,
                                                 FilterGenInfo.FftBandpassLPF3dB,
-                                                FilterGenInfo.FftBandpassHPF3dB, 
+                                                FilterGenInfo.FftBandpassHPF3dB,
                                                 FilterGenInfo.SamplesPerSecond,
                                                 FilterGenInfo.FftBandpassWindow),
                             TraceView.FftFilterTypes.Notch => FftFilter.GenerateNotchFir(FilterGenInfo.Width,
@@ -1744,45 +1744,12 @@ namespace SehensWerte.Controls.Sehens
             }
 
             double[] samples = a.Views[0].Samples.InputSamplesAsDouble;
-            List<double[]> result = new List<double[]>();
-
-            bool foundFirstTrigger = false;
-            int startSliceIndex = 0;
-
-            for (int loop = 1; loop < samples.Length; loop++)
-            {
-                bool trigger;
-                switch (TriggeredSliceInfo.Phase)
-                {
-                    default:
-                    case TriggeredSliceForm.TriggerPhase.Rising:
-                        trigger = (samples[loop - 1] < TriggeredSliceInfo.TriggerValue && samples[loop] >= TriggeredSliceInfo.TriggerValue);
-                        break;
-                    case TriggeredSliceForm.TriggerPhase.Falling:
-                        trigger = (samples[loop - 1] > TriggeredSliceInfo.TriggerValue && samples[loop] <= TriggeredSliceInfo.TriggerValue);
-                        break;
-                }
-                if (trigger)
-                {
-                    if (!foundFirstTrigger)
-                    {
-                        startSliceIndex = loop;
-                        foundFirstTrigger = true;
-                    }
-                    else
-                    {
-                        if ((loop - startSliceIndex) >= TriggeredSliceInfo.PostTriggerMinimumSamples)
-                        {
-                            Add(startSliceIndex, loop);
-                            startSliceIndex = loop;
-                        }
-                    }
-                }
-            }
-            if (startSliceIndex != 0)
-            {
-                Add(startSliceIndex, samples.Length);
-            }
+            var result = SehensWerte.Maths.FFTAnalyse.SliceSamples(
+                samples: samples,
+                triggerValue: TriggeredSliceInfo.TriggerValue,
+                risingPhase: TriggeredSliceInfo.Phase == TriggeredSliceForm.TriggerPhase.Rising,
+                preTriggerSamples: TriggeredSliceInfo.PreTriggerSamples,
+                postTriggerMinimumSamples: TriggeredSliceInfo.PostTriggerMinimumSamples);
 
             int index = 1;
             int maxLen = result.Max(x => x.Length);
@@ -1798,12 +1765,8 @@ namespace SehensWerte.Controls.Sehens
 
             a.Scope.GroupViews(viewNames);
 
-            void Add(int start, int end)
-            {
-                int pretrigger = TriggeredSliceInfo.PreTriggerSamples;
-                result.Add(samples.Copy(start - pretrigger, end - start + pretrigger));
-            }
         }
+
 
         private static void AddTraceFilterSubMenu(List<ScopeContextMenu.MenuItem> contextMenu)
         {

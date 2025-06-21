@@ -2,7 +2,6 @@ using MathNet.Numerics;
 using MathNet.Numerics.Interpolation;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using SehensWerte.Maths;
-using static Core.maths.FFTAnalyse;
 
 namespace SehensWerte.Filters
 {

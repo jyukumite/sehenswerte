@@ -10,7 +10,7 @@ using System.Text;
 using System.Threading.Tasks;
 using static System.Windows.Forms.VisualStyles.VisualStyleElement;
 
-namespace Core.maths
+namespace SehensWerte.Maths
 {
     public class FFTAnalyse
     {
@@ -108,6 +108,70 @@ namespace Core.maths
             m_Fft = new Fftw(window.Length);
             m_SamplesPerSecond = samplesPerSecond;
             m_AvgCount = avgCount;
+        }
+
+        public static IEnumerable<double[]> SliceSamples(double[] samples, double triggerValue, bool risingPhase, int preTriggerSamples, int postTriggerMinimumSamples)
+        {
+            List<double[]> result = new List<double[]>();
+
+            bool foundFirstTrigger = false;
+            int startSliceIndex = 0;
+            for (int loop = 1; loop < samples.Length; loop++)
+            {
+                bool trigger;
+                if (risingPhase)
+                {
+                    trigger = (samples[loop - 1] < triggerValue && samples[loop] >= triggerValue);
+                }
+                else
+                {
+                    trigger = (samples[loop - 1] > triggerValue && samples[loop] <= triggerValue);
+                }
+                if (trigger)
+                {
+                    if (!foundFirstTrigger)
+                    {
+                        startSliceIndex = loop;
+                        foundFirstTrigger = true;
+                    }
+                    else
+                    {
+                        if ((loop - startSliceIndex) >= postTriggerMinimumSamples)
+                        {
+                            Add(startSliceIndex, loop);
+                            startSliceIndex = loop;
+                        }
+                    }
+                }
+            }
+            if (startSliceIndex != 0)
+            {
+                Add(startSliceIndex, samples.Length);
+            }
+
+            void Add(int start, int end)
+            {
+                result.Add(samples.Copy(start - preTriggerSamples, end - start + preTriggerSamples));
+            }
+
+            return result;
+        }
+
+        public static double[] SliceMean(IEnumerable<double[]> slices)
+        {
+            var maxSlice = slices.Max(x => x.Length);
+            slices = slices.Select(x => x.Copy(0, maxSlice)).ToList();
+            var meanSlice = new double[maxSlice];
+            int count = 0;
+            foreach (var slice in slices)
+            {
+                count++;
+                for (int loop = 0; loop < maxSlice; loop++)
+                {
+                    meanSlice[loop] += slice[loop];
+                }
+            }
+            return meanSlice.ElementProduct(1.0 / count);
         }
 
         public Result Analyse(double[] samples)
@@ -334,6 +398,11 @@ namespace Core.maths
                 return (weight == 0 ? 0 : (moment * hzPerBin / weight), weight);
             }
 
+        }
+
+        public static object SliceSamples(double[] original, object sliceTriggerThreshold, bool v1, int v2, int v3)
+        {
+            throw new NotImplementedException();
         }
     }
 
