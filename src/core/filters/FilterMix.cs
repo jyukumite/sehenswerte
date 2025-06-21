@@ -29,28 +29,56 @@ namespace SehensWerte.Filters
         public double[]? Copy(ref int tail, int count, int stride, Ring<double>.Underflow underflowMode)
         {
             var needed = Math.Max(count, stride);
-            Filter.EnsureBufferSize(ref m_OutputBuffer, needed);
+            Filter.EnsureBufferSize(ref m_OutputBuffer, needed * 2);
             int available = m_OutputBuffer?.TailCount(tail) ?? 0;
             if (available < needed)
             {
-                int samples = needed - available;
-                double[]? array = null;
-                for (int loop = 0; loop < m_SourceFilter.Length; loop++)
-                {
-                    double[]? array2 =
-                        m_SourceFilter[loop]?.Copy(
-                            ref m_SourceFilterTail[loop],
-                            samples, samples,
-                            Ring<double>.Underflow.Empty)
-                        ?.ElementProduct(m_Gain[loop]);
-                    array = (array == null) ? array2 : array2 == null ? array : array.Add(array2);
-                }
+                Calculate(needed - available);
+            }
+            return m_OutputBuffer?.TailCopy(ref tail, count, stride, underflowMode);
+        }
+
+        private void Calculate(int count)
+        {
+            List<double[]> arrays = new();
+            for (int loop = 0; loop < m_SourceFilter.Length; loop++)
+            {
+                double[]? array = m_SourceFilter[loop]?.Copy(
+                                        ref m_SourceFilterTail[loop],
+                                        count, 0,
+                                        Ring<double>.Underflow.Available);
                 if (array != null)
                 {
-                    m_OutputBuffer?.Insert(array);
+                    arrays.Add(array.ElementProduct(m_Gain[loop]));
                 }
             }
-            return m_OutputBuffer?.TailCopy(ref tail, count, stride, underflowMode) ?? new double[0];
+            double[] result;
+            if (arrays.Count == 1)
+            {
+                result = arrays[0];
+            }
+            else
+            {
+                result = new double[arrays.Max(a => a.Length)];
+                int length = result.Length;
+                foreach (var array in arrays)
+                {
+                    for (int loop = 0; loop < length; loop++)
+                    {
+                        result[loop] += array[loop];
+                    }
+                }
+            }
+            for (int loop = 0; loop < m_SourceFilter.Length; loop++)
+            {
+                m_SourceFilter[loop]?.Skip(ref m_SourceFilterTail[loop], result.Length);
+            }
+            m_OutputBuffer?.Insert(result);
+        }
+
+        public void Skip(ref int tail, int skip)
+        {
+            m_OutputBuffer?.Skip(ref tail, skip);
         }
     }
 }

@@ -2,6 +2,7 @@ using MathNet.Numerics;
 using MathNet.Numerics.Interpolation;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using SehensWerte.Maths;
+using static Core.maths.FFTAnalyse;
 
 namespace SehensWerte.Filters
 {
@@ -76,15 +77,13 @@ namespace SehensWerte.Filters
             m_Fft.Dispose();
         }
 
-        public override void OutputBufferUnderflow(int samples, Ring<double>.Underflow underflowMode)
+        protected override void Calculate(int count)
         {
-            int width = m_Fft.Width;
-            int halfWidth = width / 2;
-            int needed = samples;
-
-            while (needed > 0)
+            while (count > 0)
             {
-                double[]? array = SourceFilter?.Copy(ref m_SourceFilterTail, width, halfWidth, Ring<double>.Underflow.Empty);
+                int width = m_Fft.Width;
+                int halfWidth = width / 2;
+                double[]? array = SourceFilter?.Copy(ref m_SourceFilterTail, width, halfWidth, Ring<double>.Underflow.Null);
                 if (array == null)
                 {
                     break;
@@ -98,7 +97,7 @@ namespace SehensWerte.Filters
                     result[loop] = m_Output1[loop + halfWidth] + m_Output2[loop];
                 }
                 m_OutputBuffer?.Insert(result);
-                needed -= halfWidth;
+                count -= result.Length;
             }
         }
 
@@ -106,8 +105,6 @@ namespace SehensWerte.Filters
         {
             throw new NotImplementedException();
         }
-
-
 
         // simple FFT spectral convolution bandpass coefficients - rectangular, low and high bucket
         public static double[] GenerateBandpassCoefficients(int bins, int lowBucket, int highBucket)
@@ -127,13 +124,21 @@ namespace SehensWerte.Filters
         public static double[] GenerateBandpassCoefficients(int bins, double low3dBBucket, double high3dBBucket, SampleWindow.WindowType windowType)
         {
             double[] array = new double[bins];
-            double low3dB = windowType == SampleWindow.WindowType.Rectangular ? 0.5 : SampleWindow.Inverse(1.0 / Math.Sqrt(2.0), windowType);
-            double windowLength = (high3dBBucket - low3dBBucket) * (1.0 / (1.0 - low3dB * 2.0));
+            double windowLength;
+            if (windowType == SampleWindow.WindowType.Rectangular)
+            {
+                windowLength = high3dBBucket - low3dBBucket;
+            }
+            else
+            {
+                double low3dB = SampleWindow.Inverse(1.0 / Math.Sqrt(2.0), windowType);
+                windowLength = (high3dBBucket - low3dBBucket) * (1.0 / (1.0 - low3dB * 2.0));
+            }
             double left = (high3dBBucket + low3dBBucket - windowLength) / 2.0;
             for (int loop = 0; loop < bins; loop++)
             {
                 double ratio = (loop - left) / windowLength;
-                array[loop] = SampleWindow.Coefficient(ratio < 0 ? 0 : ratio > 1 ? 1 : ratio, windowType);
+                array[loop] = SampleWindow.Coefficient(ratio <= 0 ? 0 : ratio > 1 ? 1 : ratio, windowType);
             }
             return array;
         }
@@ -467,6 +472,8 @@ namespace SehensWerte.Filters
             coefficients = FftFilter.GenerateBandpassCoefficients(bins: 256, lowBucket: 10, highBucket: 50);
             coefficients = FftFilter.GenerateBandpassCoefficients(bins: 256, low3dBBucket: 10, high3dBBucket: 50, SampleWindow.WindowType.RaisedCosine);
             coefficients = FftFilter.GenerateBandpassCoefficients(bins: 256, lowCutValue: 0.25, lowCutBucket: 20, lowPassValue: .5, lowPassBucket: 40, highPassValue: 0.5, highPassBucket: 150, highCutValue: .25, highCutBucket: 170, SampleWindow.WindowType.RaisedCosine);
+            
+            CollectionAssert.AreEqual(new double[] { 1, 1, 1, 1, 0, 0, 0, 0 }, FftFilter.GenerateBandpassCoefficients(8, 0, 4, SampleWindow.WindowType.Rectangular)); // bin 0 left must make bin 0 == 1
 
             fir = FftFilter.GenerateBandPassFir(width: 256, low3dBHz: 10, high3dBHz: 50, samplesPerSecond: 1000, SampleWindow.WindowType.RaisedCosine);
             fir = FftFilter.GenerateBandPassFir(width: 256, low6dBHz: 20, low3dBHz: 40, high3dBHz: 150, high6dBHz: 170, samplesPerSecond: 1000, SampleWindow.WindowType.RaisedCosine);

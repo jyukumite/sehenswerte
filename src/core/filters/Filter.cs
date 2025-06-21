@@ -63,31 +63,40 @@ namespace SehensWerte.Filters
             set { m_SourceFilter = value; EnsureBufferSize(value?.BufferSize ?? 0); }
         }
 
+        protected Ring<double>? m_OutputBuffer;
+        public int BufferSize { get => m_OutputBuffer?.Length ?? 0; set { EnsureBufferSize(value); } }
+
         public virtual double[]? Copy(ref int tail, int count, int stride, Ring<double>.Underflow underflowMode)
         {
-            int needed = Math.Max(count, stride);
-            EnsureBufferSize(needed);
+            var needed = Math.Max(count, stride);
+            Filter.EnsureBufferSize(ref m_OutputBuffer, needed * 2);
             int available = m_OutputBuffer?.TailCount(tail) ?? 0;
             if (available < needed)
             {
-                int samples = needed - available;
-                OutputBufferUnderflow(samples, underflowMode);
+                Calculate(needed - available);
             }
-            return m_OutputBuffer?.TailCopy(ref tail, count, stride, underflowMode) ?? new double[0];
+            return m_OutputBuffer?.TailCopy(ref tail, count, stride, underflowMode);
         }
 
-        public virtual void OutputBufferUnderflow(int samples, Ring<double>.Underflow underflowMode)
+        protected virtual void Calculate(int count)
         {
-            double[]? array = m_SourceFilter?.Copy(ref m_SourceFilterTail, samples, samples, underflowMode);
-            if (array != null && m_OutputBuffer != null)
+            double[]? value = m_SourceFilter?.Copy(ref m_SourceFilterTail, count, count, Ring<double>.Underflow.Available);
+            if (value != null)
             {
-                double[] values = Insert(array);
-                m_OutputBuffer.Insert(values);
+                count = value.Length;
+                double[] result = new double[count];
+                for (int loop = 0; loop < count; loop++)
+                {
+                    result[loop] = Insert(value[loop]);
+                }
+                m_OutputBuffer?.Insert(result);
             }
         }
 
-        protected Ring<double>? m_OutputBuffer;
-        public int BufferSize { get => m_OutputBuffer?.Length ?? 0; set { EnsureBufferSize(value); } }
+        public void Skip(ref int tail, int skip)
+        {
+            m_OutputBuffer?.Skip(ref tail, skip);
+        }
 
         public void EnsureBufferSize(int count)
         {
@@ -102,7 +111,7 @@ namespace SehensWerte.Filters
                 {
                     throw new Exception("Output ring buffer is too short but contains data");
                 }
-                buffer = new Ring<double>(count);
+                buffer = new Ring<double>(Math.Max(1000, count)); //fixme: assumes a buffer size. Maybe have callers provide a hint.
             }
         }
 

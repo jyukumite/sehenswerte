@@ -16,14 +16,20 @@ namespace SehensWerte.Generators
 
         public double[]? Copy(ref int tail, int count, int stride, Ring<double>.Underflow underflowMode)
         {
-            int max = Math.Max(count, stride);
-            Filter.EnsureBufferSize(ref m_OutputBuffer, max);
-            int tailCount = m_OutputBuffer?.TailCount(tail) ?? 0;
-            if (tailCount < max)
+            int needed = Math.Max(count, stride);
+            Filter.EnsureBufferSize(ref m_OutputBuffer, needed * 2);
+
+            int available = m_OutputBuffer?.TailCount(tail) ?? 0;
+            if (available < needed)
             {
-                m_OutputBuffer?.Insert(Generate(max - tailCount));
+                m_OutputBuffer!.Insert(Generate(needed - available));
             }
-            return m_OutputBuffer?.TailCopy(ref tail, count, stride, underflowMode) ?? new double[0];
+            return m_OutputBuffer!.TailCopy(ref tail, count, stride, underflowMode);
+        }
+
+        public void Skip(ref int tail, int skip)
+        {
+            m_OutputBuffer?.Skip(ref tail, skip);
         }
     }
 }

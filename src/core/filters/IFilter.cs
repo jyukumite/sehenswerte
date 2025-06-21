@@ -24,6 +24,7 @@ namespace SehensWerte.Filters
     public interface IFilterSource
     {
         double[]? Copy(ref int tail, int count, int stride, Ring<double>.Underflow underflowMode);
+        void Skip(ref int tail, int skip);
         int BufferSize { get; set; }
     }
 }

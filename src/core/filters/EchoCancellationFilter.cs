@@ -63,36 +63,38 @@ namespace SehensWerte.Filters
 
         public double[]? Copy(ref int tail, int count, int stride, Ring<double>.Underflow underflowMode)
         {
-            int needed = Math.Max(count, stride);
-            Filter.EnsureBufferSize(ref m_OutputBuffer, needed);
-            if (m_OutputBuffer == null || m_OutputBuffer!.Length < needed * 2)
-            {
-                throw new Exception("Buffer too short");
-            }
-
-            int available = m_OutputBuffer!.TailCount(tail);
+            var needed = Math.Max(count, stride);
+            Filter.EnsureBufferSize(ref m_OutputBuffer, needed * 2);
+            int available = m_OutputBuffer?.TailCount(tail) ?? 0;
             if (available < needed)
             {
-                int need = needed - available;
-                double[] real = m_SourceReal?.Copy(ref m_SourceRealTail, need, need, underflowMode) ?? new double[0];
-                double[] delayed = m_SourceDelayed?.Copy(ref m_SourceDelayedTail, need, need, underflowMode) ?? new double[0];
-
-                if (real != null && delayed != null)
-                {
-                    int pairCount = Math.Min(real.Length, delayed.Length);
-                    double[] result = new double[pairCount];
-
-                    for (int loop = 0; loop < pairCount; loop++)
-                    {
-                        m_Nlms.AdaptiveHold = m_Hold || ThresholdCheck(real, delayed, loop);
-
-                        double correction = m_Nlms.Insert(real[loop] - RealPower.HistoryMean, delayed[loop] - DelayedPower.HistoryMean);
-                        result[loop] = m_Enable ? (delayed[loop] - correction) : delayed[loop];
-                    }
-                    m_OutputBuffer.Insert(result);
-                }
+                Calculate(needed - available);
             }
-            return m_OutputBuffer.TailCopy(ref tail, count, stride, underflowMode);
+            return m_OutputBuffer?.TailCopy(ref tail, count, stride, underflowMode);
+        }
+
+        private void Calculate(int count)
+        {
+            double[]? real = m_SourceReal?.Copy(ref m_SourceRealTail, count, 0, Ring<double>.Underflow.Available);
+            double[]? delayed = m_SourceDelayed?.Copy(ref m_SourceDelayedTail, count, 0, Ring<double>.Underflow.Available);
+            if (real == null || delayed == null) return;
+            count = Math.Min(real.Length, delayed.Length);
+            m_SourceReal?.Skip(ref m_SourceRealTail, count);
+            m_SourceDelayed?.Skip(ref m_SourceDelayedTail, count);
+
+            double[] result = new double[count];
+            for (int loop = 0; loop < count; loop++)
+            {
+                m_Nlms.AdaptiveHold = m_Hold || ThresholdCheck(real, delayed, loop);
+                double correction = m_Nlms.Insert(real[loop] - RealPower.HistoryMean, delayed[loop] - DelayedPower.HistoryMean);
+                result[loop] = m_Enable ? (delayed[loop] - correction) : delayed[loop];
+            }
+            m_OutputBuffer?.Insert(result);
+        }
+
+        public void Skip(ref int tail, int skip)
+        {
+            m_OutputBuffer?.Skip(ref tail, skip);
         }
 
         private bool ThresholdCheck(double[] real, double[] delayed, int loop)

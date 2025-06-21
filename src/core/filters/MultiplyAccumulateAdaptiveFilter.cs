@@ -6,8 +6,13 @@ namespace SehensWerte.Filters
     {
         protected int m_SourceDesiredBufferTail;
 
-        private IFilterSource? m_SourceFilterDesired;
-        protected IFilterSource? SourceFilterDesired { get => m_SourceFilterDesired; set => m_SourceFilterDesired = value; }
+        private IFilterSource? m_SourceDesired;
+        public IFilterSource? SourceDesired { get => m_SourceDesired; set => m_SourceDesired = value; }
+        private int m_SourceDesiredTail;
+
+        private IFilterSource? m_SourceValue;
+        public IFilterSource? SourceValue { get => m_SourceValue; set => m_SourceValue = value; }
+        private int m_SourceValueTail;
 
         protected bool m_Hold;
         public bool Hold { get => m_Hold; set { m_Hold = value; } }
@@ -19,17 +24,19 @@ namespace SehensWerte.Filters
         {
         }
 
-        public override void OutputBufferUnderflow(int count, Ring<double>.Underflow underflowMode)
+        protected override void Calculate(int count)
         {
-            double[]? samples = SourceFilter?.Copy(ref m_SourceFilterTail, count, count, underflowMode);
-            double[]? desired = m_SourceFilterDesired?.Copy(ref m_SourceDesiredBufferTail, count, count, underflowMode);
-            if (samples == null || desired == null) return;
+            double[]? desired = m_SourceDesired?.Copy(ref m_SourceDesiredTail, count, 0, Ring<double>.Underflow.Available);
+            double[]? value = m_SourceValue?.Copy(ref m_SourceValueTail, count, 0, Ring<double>.Underflow.Available);
+            if (desired == null || value == null) return;
+            count = Math.Min(desired.Length, value.Length);
+            m_SourceDesired?.Skip(ref m_SourceDesiredTail, count);
+            m_SourceValue?.Skip(ref m_SourceValueTail, count);
 
-            int len = Math.Min(samples.Length, desired.Length);
             double[] result = new double[count];
-            for (int loop = 0; loop < len; loop++)
+            for (int loop = 0; loop < count; loop++)
             {
-                result[loop] = Insert(samples[loop], desired[loop]);
+                result[loop] = Insert(value[loop], desired[loop]);
             }
             m_OutputBuffer?.Insert(result);
         }

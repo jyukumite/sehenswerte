@@ -74,7 +74,7 @@ namespace SehensWerte.Maths
         private static double Hamming(double ratio) => 0.54 - 0.46 * Math.Cos(ratio * Math.PI * 2.0);
         private static double Log60dB(double ratio) => Math.Pow(10.0, (((ratio > 0.5) ? (1.0 - ratio) : ratio) * 2.0 - 1.0) * 6.0);
         private static double RaisedCosine(double ratio) => 0.5 * (1.0 - Math.Cos(ratio * Math.PI * 2.0));
-        private static double Rectangular(double ratio) => ratio > 0.0 && ratio < 1.0 ? 1.0 : 0.0; // rectangular BETWEEN 0 and 1, so inverse has a chance and we don't need to use epsilon or 1.0+epsilon(?) or [double]0x3FF0000000000001 or 1.00000000000000015
+        private static double Rectangular(double ratio) => ratio >= 0 && ratio < 1.0 ? 1.0 : 0.0; // rectangular BETWEEN 0 and 1, so inverse has a chance and we don't need to use epsilon or 1.0+epsilon(?) or [double]0x3FF0000000000001 or 1.00000000000000015
         private static double RaisedCosineSquared(double ratio) => Math.Pow(0.5 * (1.0 - Math.Cos(ratio * Math.PI * 2.0)), 2.0);
 
         private static double InverseBlackman(double value) => value.FindIn(Blackman, left: 0.0, right: 0.5, steps: 20); //fixme!

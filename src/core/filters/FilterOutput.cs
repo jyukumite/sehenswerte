@@ -12,7 +12,7 @@ namespace SehensWerte.Filters
             m_Source = source;
         }
 
-        public double[]? Get(int samples, Ring<double>.Underflow mode = Ring<double>.Underflow.Zero)
+        public double[]? Get(int samples, Ring<double>.Underflow mode = Ring<double>.Underflow.Zeros)
         {
             return m_Source?.Copy(ref m_Tail, samples, samples, mode);
         }
