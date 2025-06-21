@@ -2,9 +2,56 @@
 using System.Linq;
 using System.Windows.Forms;
 using System;
+using Microsoft.VisualStudio.TestTools.UnitTesting;
 
 namespace SehensWerte.Controls
 {
+
+    /// <summary>
+    /// AutoEditor provides a dynamic reflection-based UI binding framework for WinForms,
+    /// enabling form controls to be automatically linked to properties and fields of a data source object.
+    /// 
+    /// Features:
+    /// - Automatically maps data source members to controls via reflection.
+    /// - Supports a rich set of UI interaction features (e.g., ComboBoxes, Buttons, Panels, etc.).
+    /// - Allows extensible customization through attributes:
+    ///   - <see cref="ValuesAttribute"/> for value lists, e.g. user defined combo boxes,
+    ///   - <see cref="DisplayNameAttribute"/>, control order of field display,
+    ///   - <see cref="SubEditorAttribute"/> for nested edit forms,
+    ///   - <see cref="PushButtonAttribute"/> for action binding,
+    ///   - <see cref="HiddenAttribute"/> and <see cref="DisabledAttribute"/> for visibility/enabling.
+    /// - Automatically propagates UI changes to the data source and vice versa.
+    /// - Provides optional callbacks <see cref="OnChanging"/> and <see cref="OnChanged"/> for data change notification.
+    /// 
+    /// Intended Use:
+    /// - Create an instance of AutoEditor by providing a data object and a control collection, e.g. a form or a panel's controls).
+    /// - Define your data class with appropriate attributes to indicate UI behavior and layout.
+    /// - AutoEditor will walk through the control hierarchy, attach event handlers, and keep controls and data in sync.
+    /// 
+    /// Design Notes:
+    /// - Internally maintains recursion guards
+    /// 
+    /// Related:
+    /// - <see cref="AutoEditorBase"/>: A base class for data models that integrates with AutoEditor:
+    ///   - <c>UpdateControls</c> action for forcing UI refreshes
+    ///   - <c>OnChanged</c> callback for post-edit hooks
+    ///   - <c>Updating</c> flag for guarding re-entrant updates
+    ///   
+    /// Example:
+    /// <code>
+    /// class MyData {
+    ///     [AutoEditor.DisplayName("Label")] 
+    ///     public string Name { get; set; }
+    /// }
+    /// 
+    /// var editor = new AutoEditor(myDataInstance, this.Controls);
+    /// [or]
+    /// AutoEditorControl AutoEdit;
+    /// [add control to form]
+    /// AutoEdit.Generate(myDataInstance);
+    /// </code>
+    /// </summary>
+
     public class AutoEditor
     {
         public object SourceData;
@@ -20,22 +67,51 @@ namespace SehensWerte.Controls
             public MemberInfo MemberInfo;
             public string? DisplayText;
             public int? ObjectIndex;
-            public int DisplayOrder;
+            public double DisplayOrder;
+            public string? GroupName;
             public Type Type;
         }
 
         [AttributeUsage(AttributeTargets.Property | AttributeTargets.Field)]
         public class ValuesAttribute : Attribute
         {
-            public string[] Values;
+            private Type? m_Type;
+            public string[]? m_Values;
+
+            public string[] Values
+            {
+                get
+                {
+                    if (m_Values != null)
+                    {
+                        return m_Values;
+                    }
+                    else if (m_Type == null)
+                    {
+                        return new string[0];
+                    }
+                    else if (m_Type.IsEnum)
+                    {
+                        return m_Values = Enum.GetNames(m_Type);
+                    }
+                    else
+                    {
+                        var obj = Activator.CreateInstance(m_Type);
+                        string name = nameof(ValuesAttributeInterface.GetValues);
+                        var array = (m_Type?.GetMethod(name))?.Invoke(obj, null);
+                        return array == null ? new string[0] : ((IEnumerable<string>)array).ToArray();
+                    }
+                }
+            }
+
             public ValuesAttribute() : this(new string[0]) { }
-            public ValuesAttribute(string[] values) { Values = values; }
+            public ValuesAttribute(string[] values)
+            {
+                m_Values = values;
+            }
             public ValuesAttribute(Type type)
             {
-                string name = nameof(ValuesAttributeInterface.GetValues);
-                object? obj = Activator.CreateInstance(type);
-                var array = type?.GetMethod(name)?.Invoke(obj, null);
-                Values = array == null ? new string[0] : ((IEnumerable<string>)array).ToArray();
+                m_Type = type;
             }
         }
 
@@ -50,9 +126,15 @@ namespace SehensWerte.Controls
         [AttributeUsage(AttributeTargets.Property | AttributeTargets.Field)]
         public class DisplayOrderAttribute : Attribute
         {
-            public int DisplayOrder;
+            public double DisplayOrder;
+            public string? GroupName; // groups on (int)DisplayOrder so items can be reordered within group
+
             public DisplayOrderAttribute() : this(0) { }
-            public DisplayOrderAttribute(int displayOrder) { DisplayOrder = displayOrder; }
+            public DisplayOrderAttribute(double displayOrder, string? groupName = null)
+            {
+                DisplayOrder = displayOrder;
+                GroupName = groupName;
+            }
         }
 
         [AttributeUsage(AttributeTargets.Property | AttributeTargets.Field)]
@@ -64,8 +146,8 @@ namespace SehensWerte.Controls
 
         public class ValueListEntry // for List<ValueArrayEntry>
         {
-            public string Name;
-            public string Value;
+            public string Name = "";
+            public string Value = "";
             public int Order;
             public object? Tag;
         }
@@ -89,7 +171,7 @@ namespace SehensWerte.Controls
 
         public interface ValuesAttributeInterface
         {
-            IEnumerable<string> GetValues();
+            public IEnumerable<string> GetValues();
         }
 
         public AutoEditor(object source, Control.ControlCollection? controls)
@@ -116,13 +198,52 @@ namespace SehensWerte.Controls
         internal static string DisplayName(MemberInfo info)
         {
             object[] customAttributes = info.GetCustomAttributes(typeof(DisplayNameAttribute), inherit: false);
-            return (customAttributes.Length == 0) ? info.Name : (customAttributes[0] as DisplayNameAttribute)?.DisplayName ?? info.Name;
+            if (customAttributes.Length != 0 && customAttributes[0] is DisplayNameAttribute attr && !string.IsNullOrWhiteSpace(attr.DisplayName))
+            {
+                return attr.DisplayName;
+            }
+            else
+            {
+                return PrettyName(info.Name);
+            }
         }
 
-        internal static int DisplayOrder(MemberInfo info)
+        internal static string PrettyName(string rawName)
+        {
+            string name = rawName.StartsWith("m_") ? rawName.Substring(2) : rawName;
+            string padded = "  " + name + " ";
+            var sb = new System.Text.StringBuilder();
+            for (int loop = 0; loop < name.Length; loop++)
+            {
+                char prev2 = padded[loop + 0];
+                char prev = padded[loop + 1];
+                char curr = padded[loop + 2];
+                char next = padded[loop + 3];
+                bool split =
+                    // lowercase -> uppercase, but not after digit (3dB)
+                    (char.IsLower(prev) && char.IsUpper(curr) && !char.IsDigit(prev2)) ||
+                    // acronym -> Word, but not after digit (2MHz)
+                    (char.IsUpper(prev) && char.IsUpper(curr) && char.IsLower(next) && !char.IsDigit(prev2)) ||
+                    // letter -> digit
+                    (char.IsLetter(prev) && char.IsDigit(curr));
+                sb.Append(split ? " " : "");
+                sb.Append(curr);
+            }
+            return sb.ToString();
+        }
+
+        internal static (double order, string? name) DisplayOrder(MemberInfo info)
         {
             object[] customAttributes = info.GetCustomAttributes(typeof(DisplayOrderAttribute), inherit: false);
-            return (customAttributes.Length == 0) ? 0 : (customAttributes[0] as DisplayOrderAttribute)?.DisplayOrder ?? 0;
+            if ((customAttributes.Length == 0))
+            {
+                return (0, null);
+            }
+            else
+            {
+                DisplayOrderAttribute? att = customAttributes[0] as DisplayOrderAttribute;
+                return (att?.DisplayOrder ?? 0, att?.GroupName);
+            }
         }
 
         internal static bool IsHidden(MemberInfo info)
@@ -293,7 +414,7 @@ namespace SehensWerte.Controls
                     object? value = GetValue(sourceData, comboBox.Tag as EditRow);
                     if (value != null && (string)comboBox.SelectedText != value.ToString())
                     {
-                        comboBox.SelectedIndex =comboBox.Items.IndexOf(value.ToString());
+                        comboBox.SelectedIndex = comboBox.Items.IndexOf(value.ToString());
                     }
                 }
                 else if (control is RadioButton)
@@ -619,6 +740,80 @@ namespace SehensWerte.Controls
                 num = Math.Max(num, TextRenderer.MeasureText(item.ToString(), combobox.Font).Width);
             }
             return num;
+        }
+    }
+
+
+    [TestClass]
+    public class AutoEditorTest
+    {
+        class TestClass : AutoEditorBase
+        {
+            [AutoEditor.Values(new string[] { "a", "b", "c" })]
+            public string TestString { get; set; } = "a";
+            [AutoEditor.DisplayName("integer")]
+            [AutoEditor.DisplayOrder(1)]
+            public int TestInt { get; set; } = 42;
+
+            [AutoEditor.SubEditor]
+            public List<AutoEditor.ValueListEntry> TestList { get; set; } = new List<AutoEditor.ValueListEntry>
+            {
+                new AutoEditor.ValueListEntry { Name = "i1", Value = "v1", Order = 1 },
+                new AutoEditor.ValueListEntry { Name = "i2", Value = "v2", Order = 2 }
+            };
+
+            [AutoEditor.Hidden]
+            public string Hidden { get; set; } = "Hidden";
+        }
+
+        class TestValues : AutoEditor.ValuesAttributeInterface
+        {
+            public IEnumerable<string> GetValues()
+            {
+                return new string[] { "a", "b", "c" };
+            }
+        }
+
+
+        [TestMethod]
+        public void TestAutoEditor()
+        {
+            //fixme: test
+        }
+
+        [TestMethod]
+        public void TestAttributes()
+        {
+            //fixme: test these
+
+            Attribute att;
+            att = new AutoEditor.ValuesAttribute(new string[] { "a", "b", "c" });
+            att = new AutoEditor.ValuesAttribute(typeof(System.Windows.Forms.AnchorStyles));
+            att = new AutoEditor.ValuesAttribute(typeof(TestValues));
+            att = new AutoEditor.DisplayNameAttribute("bob");
+            att = new AutoEditor.DisplayOrderAttribute(42);
+            att = new AutoEditor.SubEditorAttribute(closeOnClick: true);
+            att = new AutoEditor.HiddenAttribute();
+            att = new AutoEditor.DisabledAttribute();
+            att = new AutoEditor.PushButtonAttribute("test");
+        }
+
+        [TestMethod]
+        [DataRow("FftBandpassHPF3dB", "Fft Bandpass HPF 3dB")]
+        [DataRow("bob6dB", "bob 6dB")]
+        [DataRow("My2MHzTest", "My 2MHz Test")]
+        [DataRow("Signal3dBRange", "Signal 3dB Range")]
+        [DataRow("XMLHTTPReader2D", "XMLHTTP Reader 2D")]
+        [DataRow("m_SampleRate4200Hz", "Sample Rate 4200Hz")]
+        [DataRow("m_SampleRate10kHz", "Sample Rate 10kHz")]
+        [DataRow("PadLeftWithFirst", "Pad Left With First")]
+        [DataRow("TriggerValue", "Trigger Value")]
+        [DataRow("HPF", "HPF")]
+        [DataRow("PreTriggerSample", "Pre Trigger Sample")]
+        public void TestDisplayNameFormatting(string input, string expected)
+        {
+            var result = AutoEditor.PrettyName(input);
+            Assert.AreEqual(expected, result);
         }
     }
 }

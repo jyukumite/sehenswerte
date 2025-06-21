@@ -68,8 +68,9 @@ namespace SehensWerte.Controls
                 AutoScroll = true
             };
             LayoutPanel.SuspendLayout();
-            LayoutPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 35f));
-            LayoutPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 65f));
+            LayoutPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 45f));
+            LayoutPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 55f));
+            LayoutPanel.RowStyles.Add(new RowStyle(SizeType.AutoSize));
 
             List<string> names = new List<string>();
             if (SourceData != null)
@@ -97,33 +98,72 @@ namespace SehensWerte.Controls
                     }
                     else if (memberInfo is FieldInfo || memberInfo is PropertyInfo)
                     {
+                        var order = AutoEditor.DisplayOrder(memberInfo);
                         rows.Add(new AutoEditor.EditRow()
                         {
                             MemberInfo = memberInfo,
                             DisplayText = AutoEditor.DisplayName(memberInfo),
                             Type = memberInfo is FieldInfo ? ((FieldInfo)memberInfo).FieldType : ((PropertyInfo)memberInfo).PropertyType,
                             ObjectIndex = null,
-                            DisplayOrder = AutoEditor.DisplayOrder(memberInfo),
-
+                            DisplayOrder = order.order,
+                            GroupName = order.name,
                         });
                     }
                 }
 
-                rows.OrderBy(x => x.DisplayOrder).ThenBy(x => x.DisplayText).ForEach(v => GenerateControl(LayoutPanel, v));
+                double prevDisplayOrder = double.NaN;
+                rows.OrderBy(row => row.DisplayOrder).ThenBy(row => row.DisplayText)
+                    .ForEach(row =>
+                    {
+                        if ((int)row.DisplayOrder != (int)prevDisplayOrder)
+                        {
+                            string? groupName = rows
+                                .Where(x => (int)x.DisplayOrder == (int)row.DisplayOrder)
+                                .FirstOrDefault(x => x.GroupName != null, new AutoEditor.EditRow())
+                                .GroupName;
+                            if (groupName != null && groupName.Length > 0)
+                            {
+                                AddGroupNameRow(groupName);
+                            }
+                            prevDisplayOrder = row.DisplayOrder;
+                        }
+                        GenerateControl(LayoutPanel, row);
+                    });
 
-                Panel panel = new Panel
-                {
-                    AutoSize = true
-                };
-                LayoutPanel.Controls.Add(panel, 1, ++LayoutPanel.RowCount);
-                LayoutPanel.Controls.Add(panel, 0, LayoutPanel.RowCount);
-                LayoutPanel.ResumeLayout();
+                AddFinalRow();
+                LayoutPanel?.ResumeLayout();
                 Controls.Add(LayoutPanel);
                 if (SourceData != null)
                 {
                     m_StartValues = AutoEditor.GetValueList(SourceData, rows);
                 }
             }
+        }
+
+        private void AddGroupNameRow(string groupName)
+        {
+            Label groupLabel = new Label
+            {
+                Text = groupName,
+                Dock = DockStyle.Top,
+                TextAlign = ContentAlignment.MiddleCenter,
+                Font = new Font(Font, FontStyle.Bold),
+                AutoSize = true,
+                MinimumSize = new Size(0, 24),
+            };
+            groupLabel.UseMnemonic = false;
+            LayoutPanel?.Controls.Add(groupLabel, 0, ++LayoutPanel.RowCount);
+            LayoutPanel?.SetColumnSpan(groupLabel, 2);
+        }
+
+        private void AddFinalRow()
+        {
+            Panel panel = new Panel
+            {
+                AutoSize = true
+            };
+            LayoutPanel?.Controls.Add(panel, 1, ++LayoutPanel.RowCount);
+            LayoutPanel?.Controls.Add(panel, 0, LayoutPanel.RowCount);
         }
 
         private static void GenerateControl(TableLayoutPanel tableLayout, AutoEditor.EditRow row)
@@ -139,8 +179,10 @@ namespace SehensWerte.Controls
             Label control = new Label
             {
                 Text = row.DisplayText,
-                Dock = DockStyle.Fill,
-                TextAlign = (ContentAlignment)16
+                Dock = DockStyle.Top,
+                AutoSize = true,
+                MinimumSize = new Size(0, 24),
+                TextAlign = ContentAlignment.MiddleLeft,
             };
             try
             {
@@ -148,7 +190,7 @@ namespace SehensWerte.Controls
                 {
                     Button control2 = new Button
                     {
-                        Dock = DockStyle.Fill,
+                        Dock = DockStyle.Top,
                         AutoSize = true,
                         Tag = row,
                         Text = (AutoEditor.PushButtonCaption(row.MemberInfo) ?? "...")
@@ -162,7 +204,7 @@ namespace SehensWerte.Controls
                     {
                         AutoSize = true,
                         Tag = row,
-                        Dock = DockStyle.Fill,
+                        Dock = DockStyle.Top,
                         DropDownStyle = ComboBoxStyle.DropDownList
                     };
                     tableLayout.Controls.Add(control, 0, ++tableLayout.RowCount);
@@ -185,7 +227,7 @@ namespace SehensWerte.Controls
                 {
                     TextBox textBox = new TextBox
                     {
-                        Dock = DockStyle.Fill,
+                        Dock = DockStyle.Top,
                         AutoSize = true,
                         Tag = row,
                     };
@@ -199,7 +241,7 @@ namespace SehensWerte.Controls
                     {
                         AutoSize = true,
                         Tag = row,
-                        Dock = DockStyle.Fill,
+                        Dock = DockStyle.Top,
                         Text = AutoEditor.PushButtonCaption(row.MemberInfo)
                     };
                     tableLayout.Controls.Add(control, 0, ++tableLayout.RowCount);
@@ -212,7 +254,7 @@ namespace SehensWerte.Controls
                     {
                         AutoSize = true,
                         Tag = row,
-                        Dock = DockStyle.Fill,
+                        Dock = DockStyle.Top,
                         Text = AutoEditor.PushButtonCaption(row.MemberInfo)
                     };
                     tableLayout.Controls.Add(control, 0, ++tableLayout.RowCount);
@@ -238,7 +280,7 @@ namespace SehensWerte.Controls
                     {
                         AutoSize = true,
                         Tag = row,
-                        Dock = DockStyle.Fill,
+                        Dock = DockStyle.Top,
                         DropDownStyle = ComboBoxStyle.DropDownList
                     };
                     tableLayout.Controls.Add(control, 0, ++tableLayout.RowCount);
@@ -255,7 +297,7 @@ namespace SehensWerte.Controls
                     {
                         AutoSize = true,
                         Tag = row,
-                        Dock = DockStyle.Fill
+                        Dock = DockStyle.Top
                     };
                     tableLayout.Controls.Add(control, 0, ++tableLayout.RowCount);
                     tableLayout.Controls.Add(panel, 1, tableLayout.RowCount);
@@ -266,7 +308,7 @@ namespace SehensWerte.Controls
             {
                 TextBox errorControl = new TextBox
                 {
-                    Dock = DockStyle.Fill,
+                    Dock = DockStyle.Top,
                     AutoSize = true,
                     Tag = row,
                     ReadOnly = true

@@ -1,7 +1,10 @@
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using SehensWerte.Filters;
+using MathNet.Numerics;
+using MathNet.Numerics.LinearAlgebra;
+using MathNet.Numerics.LinearRegression;
 
-//fixme? consider replacing some of the more complex functions with mat.net numerics https://numerics.mathdotnet.com/Matrix
+//fixme? consider replacing more of the more complex functions with MathNet.Numerics https://numerics.mathdotnet.com/Matrix
 
 namespace SehensWerte.Maths
 {
@@ -365,30 +368,32 @@ namespace SehensWerte.Maths
         // [0]x^2 + [1]x^1 + [2]x^0 ...
         public static double[] PolyFit(this double[] y, int order)
         {
-            return PolyFit(y, Enumerable.Range(0, y.Length).Select(x => (double)x).ToArray(), order);
+            return Fit.Polynomial(Generate.LinearRange(0, 1, y.Length - 1), y, order).Reversed();
         }
 
         // [0]x^2 + [1]x^1 + [2]x^0 ...
         public static double[] PolyFit(this double[] y, double[] x, int order)
         {
-            double[,] matrix = new double[order + 1, order + 2];
-            for (int i = 0; i <= order; i++)
-            {
-                matrix[i, order + 1] = 0.0;
-                for (int j = 0; j < x.Length; j++)
-                {
-                    matrix[i, order + 1] -= Math.Pow(x[j], i) * y[j];
-                }
-                for (int j = 0; j <= order; j++)
-                {
-                    matrix[i, j] = 0.0;
-                    for (int k = 0; k < x.Length; k++)
-                    {
-                        matrix[i, j] -= Math.Pow(x[k], j + i);
-                    }
-                }
-            }
-            return matrix.GaussianElimination().Reversed();
+            // note: x might need to be normalised to [0..1] by caller if it is excessively large
+            return Fit.Polynomial(x, y, order).Reversed();
+            // double[,] matrix = new double[order + 1, order + 2];
+            // for (int i = 0; i <= order; i++)
+            // {
+            //     matrix[i, order + 1] = 0.0;
+            //     for (int j = 0; j < x.Length; j++)
+            //     {
+            //         matrix[i, order + 1] -= Math.Pow(x[j], i) * y[j];
+            //     }
+            //     for (int j = 0; j <= order; j++)
+            //     {
+            //         matrix[i, j] = 0.0;
+            //         for (int k = 0; k < x.Length; k++)
+            //         {
+            //             matrix[i, j] -= Math.Pow(x[k], j + i);
+            //         }
+            //     }
+            // }
+            // return matrix.GaussianElimination().Reversed();
         }
 
         // [0]x^2 + [1]x^1 + [2]x^0 ...
@@ -1011,6 +1016,18 @@ namespace SehensWerte.Maths
             Assert.IsTrue(poly.IsEqualTo(new double[] { 0.1667, -1.2143, 3.1905, 0.9714 }, 0.001));
             double[] re = Enumerable.Range(0, 5).Select(x => poly.PolyVal(x)).ToArray();
             Assert.IsTrue(re.IsEqualTo(orig, 0.2));
+
+            double[] origY = new double[] { 1, 3, 4, 4, 5 };
+            double[] origX = new double[] { 0, 2, 4, 6, 8 };
+            poly = origY.PolyFit(origX, 3);
+            re = origX.Select(x => poly.PolyVal(x)).ToArray();
+            Assert.IsTrue(re.IsEqualTo(origY, 0.2));
+
+            origX = new double[] { 0, 10, 20, 30, 40, 50 };
+            origY = origX.Select(x => 0.05 * x * x - 2 * x + 10).ToArray();
+            poly = origY.PolyFit(origX, 3);
+            re = origX.Select(x => poly.PolyVal(x)).ToArray();
+            Assert.IsTrue(re.IsEqualTo(origY, 0.2));
         }
 
         [TestMethod]

@@ -990,6 +990,10 @@ namespace SehensWerte.Controls.Sehens
                                                 FilterGenInfo.FftBandpassLPF3dB, FilterGenInfo.FftBandpassLPF3dB * 2.0,
                                                 FilterGenInfo.SamplesPerSecond,
                                                 FilterGenInfo.FftBandpassWindow),
+                            TraceView.FftFilterTypes.WeightedAudioA => FftFilter.GenerateArbitraryFir(
+                                                FilterGenInfo.Width, FftFilter.WeightingA, FilterGenInfo.SamplesPerSecond),
+                            TraceView.FftFilterTypes.WeightedAudioC => FftFilter.GenerateArbitraryFir(
+                                                FilterGenInfo.Width, FftFilter.WeightingC, FilterGenInfo.SamplesPerSecond),
                             _ => new double[] { 1 },
                         };
                         a.Scope[FilterGenInfo.Name].UpdateByRef(array.ElementProduct(FilterGenInfo.Amplitude), FilterGenInfo.SamplesPerSecond);

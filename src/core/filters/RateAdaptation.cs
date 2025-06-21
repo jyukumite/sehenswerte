@@ -4,6 +4,8 @@ namespace SehensWerte.Filters
 {
     public class SampleRateChangeFilter : IFilterSource
     {
+        // linear interpolation resample
+
         private Ring<double>? m_OutputBuffer;
         private double m_Step;
         private double m_Accumulator = 0;

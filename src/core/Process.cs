@@ -148,19 +148,34 @@ namespace SehensWerte.Utils
             var path = System.IO.Path.IsPathFullyQualified(assemblyName)
                 ? assemblyName
                 : System.IO.Path.Combine(Process.AssemblyPath, assemblyName);
-
             foreach (var t in Assembly.LoadFrom(path).GetTypes()
                 .Where(t => t.CustomAttributes.Any(a => a.AttributeType.Name == "TestClassAttribute")))
             {
-                var methods = t.GetMethods().Where(m => m.CustomAttributes
-                    .Any(a => a.AttributeType.Name == "TestMethodAttribute"))
-                    .ToList();
-                var tc = Activator.CreateInstance(t, null);
-                foreach (var m in methods)
+                var methods = t.GetMethods().Where(m =>
+                    m.GetCustomAttributes().Any(a => a.GetType().Name == "TestMethodAttribute"));
+                var testClassInstance = Activator.CreateInstance(t, null);
+                foreach (var method in methods)
                 {
-                    Debug.WriteLine($"Running test {m.Name}...");
-                    m.Invoke(tc, null);
-                    Debug.WriteLine($"Completed test {m.Name}");
+                    var dataRows = method.GetCustomAttributes()
+                        .Where(attr => attr.GetType().Name == "DataRowAttribute")
+                        .ToList();
+                    if (dataRows.Count > 0)
+                    {
+                        foreach (var row in dataRows)
+                        {
+                            var props = row.GetType().GetProperty("Data");
+                            var args = (object[]?)props?.GetValue(row);
+                            Debug.WriteLine($"Running test {method.Name}({string.Join(", ", args ?? Array.Empty<object>())})...");
+                            method.Invoke(testClassInstance, args);
+                            Debug.WriteLine($"Completed test {method.Name}");
+                        }
+                    }
+                    else
+                    {
+                        Debug.WriteLine($"Running test {method.Name}...");
+                        method.Invoke(testClassInstance, null);
+                        Debug.WriteLine($"Completed test {method.Name}");
+                    }
                 }
             }
         }

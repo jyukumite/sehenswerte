@@ -1,7 +1,9 @@
+using MathNet.Numerics;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using SehensWerte.Generators;
 using System.Collections;
 using System.Diagnostics;
+using System.Numerics;
 using System.Runtime.InteropServices;
 
 namespace SehensWerte.Maths
@@ -246,6 +248,20 @@ namespace SehensWerte.Maths
             }
         }
 
+        internal void SetTemporal(double[] real, double[] imag)
+        {
+            if (real.Length != m_Width || imag.Length != m_Width)
+            {
+                throw new ArgumentException("Length mismatch");
+            }
+            TemporalComplex = new float[m_Width * 2];
+            for (int loop = 0; loop < m_Width; loop++)
+            {
+                m_TemporalComplexFloat[loop * 2] = (float)real[loop];
+                m_TemporalComplexFloat[loop * 2 + 1] = (float)imag[loop];
+            }
+        }
+
         public void SetSpectral(double[] mag, double[] phase)
         {
             int count = m_Width * 2;
@@ -279,6 +295,10 @@ namespace SehensWerte.Maths
 
         public Fftw(int width = 256)
         {
+            if (width <= 0)
+            {
+                throw new ArgumentOutOfRangeException("Width must be >=1");
+            }
             int complex = 2;
             m_Width = width;
             lock (EverythingLock)
@@ -299,12 +319,17 @@ namespace SehensWerte.Maths
 
         public static int SampleCountToBinCount(int samples)
         {
-            return (samples + 1) / 2 + ((samples % 2 == 0) ? 1 : 0);
+            return samples == 0 ? 0 : (samples + 1) / 2 + ((samples % 2 == 0) ? 1 : 0);
         }
 
         public double HzToBin(double hz, double samplesPerSecond)
         {
-            return hz / (samplesPerSecond / Width);
+            return Fftw.HzToBin(Width, samplesPerSecond, hz);
+        }
+
+        public static double HzToBin(int bins, double samplesPerSecond, double hz)
+        {
+            return hz / (samplesPerSecond / bins);
         }
 
         public double HighestFrequency(double samplesPerSecond)
@@ -312,10 +337,9 @@ namespace SehensWerte.Maths
             return samplesPerSecond / Width * (Bins - 1);
         }
 
-        public double HzPerBin(double samplesPerSecond)
+        public static double HzPerBin(int bins, double samplesPerSecond)
         {
-            double bins = Bins;
-            if ((Bins & 1) == 0)
+            if ((bins & 1) == 0)
             {
                 return samplesPerSecond / ((bins * 2) - 1);
             }
@@ -323,6 +347,11 @@ namespace SehensWerte.Maths
             {
                 return samplesPerSecond / ((bins - 1) * 2);
             }
+        }
+
+        public double HzPerBin(double samplesPerSecond)
+        {
+            return HzPerBin(samplesPerSecond);
         }
 
         private void ClearCache()
@@ -357,7 +386,14 @@ namespace SehensWerte.Maths
         public void ExecuteForward(double[] samples)
         {
             TemporalReal = samples;
-            ExecuteForward();
+            if (samples.Length > 0)
+            {
+                ExecuteForward();
+            }
+            else
+            {
+                m_SpectralComplexFloat = new float[0];
+            }
         }
 
         public void ExecuteForward()
@@ -661,6 +697,113 @@ namespace SehensWerte.Maths
         }
     }
 
+    public static class FFTSimple
+    {
+        // simple Cooley-Tukey FFT
+        public static void FFT(Complex[] x)
+        {
+            int bins = x.Length;
+            if (bins == 0 || (bins & (bins - 1)) != 0)
+            {
+                throw new ArgumentOutOfRangeException("Length must be a non-0 power of 2");
+            }
+            BitReverse(x);
+            for (int size = 2; size <= bins; size *= 2)
+            {
+                int halfSize = size / 2;
+                double angleStep = -2.0 * Math.PI / size;
+
+                for (int loop1 = 0; loop1 < bins; loop1 += size)
+                {
+                    for (int loop2 = 0; loop2 < halfSize; loop2++)
+                    {
+                        double angle = angleStep * loop2;
+                        Complex w = Complex.Exp(new Complex(0, angle));
+                        Complex even = x[loop1 + loop2];
+                        Complex odd = x[loop1 + loop2 + halfSize] * w;
+                        x[loop1 + loop2] = even + odd;
+                        x[loop1 + loop2 + halfSize] = even - odd;
+                    }
+                }
+            }
+
+            for (int loop = 0; loop < bins; loop++)
+            {
+                x[loop] /= bins;
+            }
+        }
+
+        public static void IFFT(Complex[] x)
+        {
+            int bins = x.Length;
+            for (int loop = 0; loop < bins; loop++)
+            {
+                x[loop] = Complex.Conjugate(x[loop]);
+            }
+            FFT(x);
+            for (int loop = 0; loop < bins; loop++)
+            {
+                x[loop] = Complex.Conjugate(x[loop]) * bins;
+            }
+        }
+
+        private static void BitReverse(Complex[] x)
+        {
+            int bins = x.Length;
+            int bits = (int)Math.Log2(bins);
+            for (int loop = 0; loop < bins; loop++)
+            {
+                int revbits = ReverseBits(loop, bits);
+                if (revbits > loop)
+                {
+                    (x[loop], x[revbits]) = (x[revbits], x[loop]);
+                }
+            }
+        }
+
+        private static int ReverseBits(int value, int bits)
+        {
+            int reversed = 0;
+            for (int loop = 0; loop < bits; loop++)
+            {
+                reversed = (reversed << 1) | (value & 1);
+                value >>= 1;
+            }
+            return reversed;
+        }
+
+
+        public static void FFT(double[] real, double[] imag)
+        {
+            Proxy(real, imag, FFT);
+        }
+
+        public static void IFFT(double[] real, double[] imag)
+        {
+            Proxy(real, imag, IFFT);
+        }
+
+        private static void Proxy(double[] real, double[] imag, Action<Complex[]> fn)
+        {
+            if (real.Length != imag.Length)
+            {
+                throw new ArgumentException("Real and imaginary arrays must be the same length");
+            }
+            int bins = real.Length;
+            var complex = new Complex[bins];
+            for (int loop = 0; loop < bins; loop++)
+            {
+                complex[loop] = new Complex(real[loop], imag[loop]);
+            }
+            fn(complex);
+            for (int loop = 0; loop < bins; loop++)
+            {
+                real[loop] = complex[loop].Real;
+                imag[loop] = complex[loop].Imaginary;
+            }
+        }
+    }
+
     [TestClass]
     public class FftWTest
     {
@@ -674,7 +817,6 @@ namespace SehensWerte.Maths
             Assert.AreEqual(Fftw.SampleCountToBinCount(9), 5); // dc,1,2,3,4 [removes ,3,2,1]
             Assert.AreEqual(new Fftw(1024).HighestFrequency(samplesPerSecond: 44100), 22050, delta: 0.01);
             Assert.AreEqual(new Fftw(1024).HzToBin(hz: 129.2, samplesPerSecond: 44100), 3, delta: 0.01);
-
         }
 
         [TestMethod]
@@ -686,10 +828,34 @@ namespace SehensWerte.Maths
             var realSinc8 = WaveformGenerator.SinCardinal(samples: 8, amplitude: 1, leftTime: -1, rightTime: 1, halfWidthTime: 0.5, delayTime: 0, baseline: 0);
             Assert.IsTrue(nearlyEqual(realSinc8, new double[] { 0, -0.21, 0, 0.64, 1, 0.64, 0, -0.21 }));
 
-            var fft = new Fftw(realSinc8);
+            Fftw fft;
+            {
+                double[] realT = { -2, -1, 0, 1, 2, 3, 4, 5 };
+                double[] imagT = { -5, -4, -3, -2, -1, 0, 1, 2 };
+                double[] realS = realT.Copy();
+                double[] imagS = imagT.Copy();
+                FFTSimple.FFT(realS, imagS);
+                double[] realT2 = realS.Copy();
+                double[] imagT2 = imagS.Copy();
+                FFTSimple.IFFT(realT2, imagT2);
+
+                fft = new Fftw(8);
+                fft.SetTemporal(realT, imagT);
+                fft.ExecuteForward();
+                double[] compare = realS.Zip(imagS, (r, i) => new double[] { r, i }).SelectMany(pair => pair).ToArray();
+                Assert.IsTrue(nearlyEqualF(fft.SpectralComplex, compare));
+                Assert.IsTrue(nearlyEqualF(fft.SpectralComplex, new double[] { 1.5, -1.5, -1.7071, 0.7071, -1, 0, -0.7071, -0.2929, -0.5, -0.5, -0.2929, -0.7071, 0, -1, 0.7071, -1.7071 }));
+
+                compare = realT2.Zip(imagT2, (r, i) => new double[] { r, i }).SelectMany(pair => pair).ToArray();
+                fft.SetTemporal(new double[] { 0, 0, 0, 0, 0, 0, 0, 0 }, new double[] { 0, 0, 0, 0, 0, 0, 0, 0 });
+                fft.ExecuteReverse();
+                Assert.IsTrue(nearlyEqualF(fft.TemporalComplex, compare));
+                Assert.IsTrue(nearlyEqualF(fft.TemporalComplex, new double[] { -2, -5, -1, -4, 0, -3, 1, -2, 2, -1, 3, 0, 4, 1, 5, 2 }));
+            }
+
+            fft = new Fftw(realSinc8);
             Assert.AreEqual(fft.Bins, 5);
             Assert.AreEqual(fft.Width, 8);
-
             Assert.IsTrue(nearlyEqual(fft.TemporalReal, new double[] { 0, -0.21, 0, 0.64, 1, 0.64, 0, -0.21 }));
             Assert.IsTrue(nearlyEqual(fft.TemporalMagnitude, new double[] { 0, 0.21, 0, 0.64, 1, 0.64, 0, 0.21 })); // all positive
             Assert.IsTrue(nearlyEqualF(fft.TemporalComplex, new double[] { 0, 0, -0.21, 0, 0, 0, 0.64, 0, 1, 0, 0.64, 0, 0, 0, -0.21, 0 }));

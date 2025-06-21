@@ -121,6 +121,7 @@ namespace SehensWerte.Controls.Sehens
         }
 
         private string m_ViewName = ""; //serialsied by SehensSave
+        [AutoEditor.DisplayOrder(1, "Display Settings")]
         public string ViewName
         {
             get => m_ViewName;
@@ -136,6 +137,7 @@ namespace SehensWerte.Controls.Sehens
 
         private Color m_Colour = Color.Black;
         [XmlSave]
+        [AutoEditor.DisplayOrder(1)]
         public Color Colour
         {
             get => m_Colour;
@@ -151,6 +153,7 @@ namespace SehensWerte.Controls.Sehens
         private string m_GroupWithView = "";
         [XmlSave]
         [AutoEditor.DisplayName("Group With Trace")] //fixme: AutoEditorForm.Values
+        [AutoEditor.DisplayOrder(1.1)]
         public string GroupWithView
         {
             get => m_GroupWithView;
@@ -164,7 +167,8 @@ namespace SehensWerte.Controls.Sehens
             }
         }
 
-        public double SelectTime;// HighResTimer.StaticSeconds;
+        [AutoEditor.Hidden]
+        public double SelectTime; // HighResTimer.StaticSeconds when trace selected
 
         private bool m_Selected;
         [AutoEditor.Hidden]
@@ -203,7 +207,7 @@ namespace SehensWerte.Controls.Sehens
         }
         private PaintModes m_PaintMode = PaintModes.PolygonDigital;
         [XmlSave]
-        [AutoEditor.DisplayName("Paint Mode")]
+        [AutoEditor.DisplayOrder(1.1)]
         public PaintModes PaintMode
         {
             get => m_PaintMode;
@@ -239,6 +243,8 @@ namespace SehensWerte.Controls.Sehens
 
         private string m_TraceFilter = "None";
         [XmlSave]
+        [AutoEditor.Values(typeof(FilterChoice))]
+        [AutoEditor.DisplayOrder(3.5)]
         public string TraceFilter
         {
             get => m_TraceFilter;
@@ -287,6 +293,7 @@ namespace SehensWerte.Controls.Sehens
 
         private bool m_HoldPanZoom = false;
         [XmlSave]
+        [AutoEditor.DisplayOrder(5)]
         public bool HoldPanZoom
         {
             get => m_HoldPanZoom;
@@ -302,6 +309,7 @@ namespace SehensWerte.Controls.Sehens
 
         private int m_LineWidth = 0; // 0 = use from skin
         [XmlSave]
+        [AutoEditor.DisplayOrder(1.1)]
         public int LineWidth
         {
             get => m_LineWidth;
@@ -315,6 +323,7 @@ namespace SehensWerte.Controls.Sehens
 
         private bool m_AutoReduceRange;
         [XmlSave]
+        [AutoEditor.DisplayOrder(5)]
         public bool AutoReduceRange
         {
             get => m_AutoReduceRange;
@@ -331,8 +340,7 @@ namespace SehensWerte.Controls.Sehens
 
         private double m_HighestValue = 1.0;
         [XmlSave]
-        [AutoEditor.DisplayOrder(-2)]
-        [AutoEditor.DisplayName("Highest Value")]
+        [AutoEditor.DisplayOrder(7, "Data Range")]
         public double HighestValue
         {
             get => m_HighestValue;
@@ -345,8 +353,7 @@ namespace SehensWerte.Controls.Sehens
 
         private double m_LowestValue = 0;
         [XmlSave]
-        [AutoEditor.DisplayOrder(-2)]
-        [AutoEditor.DisplayName("Lowest Value")]
+        [AutoEditor.DisplayOrder(7)]
         public double LowestValue
         {
             get => m_LowestValue;
@@ -359,6 +366,7 @@ namespace SehensWerte.Controls.Sehens
 
 
         private double m_TraceHeightFactor = 1;
+        [AutoEditor.DisplayOrder(2)]
         [XmlSave]
         public double HeightFactor
         {
@@ -375,7 +383,7 @@ namespace SehensWerte.Controls.Sehens
 
         private bool m_PadLeftWithFirstValue;
         [XmlSave]
-        [AutoEditor.DisplayName("Pad Left With First Value")]
+        [AutoEditor.DisplayOrder(5)]
         public bool PadLeftWithFirstValue
         {
             get => m_PadLeftWithFirstValue;
@@ -389,7 +397,7 @@ namespace SehensWerte.Controls.Sehens
 
         private bool m_PadRightWithLastValue;
         [XmlSave]
-        [AutoEditor.DisplayName("Pad Right With Last Value")]
+        [AutoEditor.DisplayOrder(5)]
         public bool PadRightWithLastValue
         {
             get
@@ -421,6 +429,7 @@ namespace SehensWerte.Controls.Sehens
         private bool m_LogVertical;
         [XmlSave]
         [AutoEditor.DisplayName("Log vertical axis")]
+        [AutoEditor.DisplayOrder(2)]
         public bool LogVertical
         {
             get => m_LogVertical;
@@ -436,6 +445,8 @@ namespace SehensWerte.Controls.Sehens
 
         private bool m_ShowPictureInPicture;
         [XmlSave]
+        [AutoEditor.DisplayOrder(1.1)]
+
         public bool ShowPictureInPicture
         {
             get => m_ShowPictureInPicture;
@@ -449,8 +460,9 @@ namespace SehensWerte.Controls.Sehens
         }
 
         private TraceView? m_TriggerTrace;
-        //fixme [AutoEditor.Values(m_Display.)]
+        //fixme make editable using [AutoEditor.Values(m_Display.)]
         [AutoEditor.DisplayName("Trigger Trace")]
+        [AutoEditor.DisplayOrder(4)]
         public TraceView? TriggerView
         {
             get => m_TriggerTrace;
@@ -465,7 +477,7 @@ namespace SehensWerte.Controls.Sehens
 
         private double m_TriggerValue;
         [XmlSave]
-        [AutoEditor.DisplayName("Trigger Value")]
+        [AutoEditor.DisplayOrder(4)]
         public double TriggerValue
         {
             get => m_TriggerValue;
@@ -489,7 +501,7 @@ namespace SehensWerte.Controls.Sehens
         }
         private TriggerModes m_TriggerMode;
         [XmlSave]
-        [AutoEditor.DisplayName("Trigger Mode")]
+        [AutoEditor.DisplayOrder(4, "Trigger and Timing")]
         public TriggerModes TriggerMode
         {
             get => m_TriggerMode;
@@ -522,6 +534,7 @@ namespace SehensWerte.Controls.Sehens
         private int m_ViewLengthOverride;
         [XmlSave]
         [AutoEditor.DisplayName("View Length")]
+        [AutoEditor.DisplayOrder(5, "View and Navigation")]
         public int ViewLengthOverride
         {
             get => m_ViewLengthOverride;
@@ -539,6 +552,7 @@ namespace SehensWerte.Controls.Sehens
         private int m_ViewOffsetOverride;
         [XmlSave]
         [AutoEditor.DisplayName("View Offset")]
+        [AutoEditor.DisplayOrder(5)]
         public int ViewOffsetOverride
         {
             get => m_ViewOffsetOverride;
@@ -654,7 +668,7 @@ namespace SehensWerte.Controls.Sehens
 
         private int m_PreTriggerSampleCount;
         [XmlSave]
-        [AutoEditor.DisplayName("PreTrigger Sample Count")]
+        [AutoEditor.DisplayOrder(4)]
         public int PreTriggerSampleCount
         {
             get => m_PreTriggerSampleCount;
@@ -671,6 +685,8 @@ namespace SehensWerte.Controls.Sehens
 
         private double m_FftBandpassHPF6dB;
         [XmlSave]
+        [AutoEditor.DisplayOrder(3.1)]
+        [AutoEditor.DisplayName("FFT Bandpass HPF 6dB Hz")]
         public double FftBandpassHPF6dB
         {
             get => m_FftBandpassHPF6dB;
@@ -686,6 +702,8 @@ namespace SehensWerte.Controls.Sehens
 
         private double m_FftBandpassHPF3dB;
         [XmlSave]
+        [AutoEditor.DisplayOrder(3.2)]
+        [AutoEditor.DisplayName("FFT Bandpass HPF 3dB Hz")]
         public double FftBandpassHPF3dB
         {
             get => m_FftBandpassHPF3dB;
@@ -701,6 +719,8 @@ namespace SehensWerte.Controls.Sehens
 
         private double m_FftBandpassLPF3dB;
         [XmlSave]
+        [AutoEditor.DisplayOrder(3.3)]
+        [AutoEditor.DisplayName("FFT Bandpass LPF 3dB Hz")]
         public double FftBandpassLPF3dB
         {
             get => m_FftBandpassLPF3dB;
@@ -716,6 +736,8 @@ namespace SehensWerte.Controls.Sehens
 
         private double m_FftBandpassLPF6dB;
         [XmlSave]
+        [AutoEditor.DisplayOrder(3.4)]
+        [AutoEditor.DisplayName("FFT Bandpass LPF 6dB Hz")]
         public double FftBandpassLPF6dB
         {
             get => m_FftBandpassLPF6dB;
@@ -739,10 +761,14 @@ namespace SehensWerte.Controls.Sehens
             HighPass,
             HighPass3dBPerOctave,
             Notch,
-            NotchFit
+            NotchFit,
+            WeightedAudioA,
+            WeightedAudioC
         }
         private FftFilterTypes m_FftFilterType;
         [XmlSave]
+        [AutoEditor.DisplayOrder(3.5)]
+        [AutoEditor.DisplayName("FFT Filter Type")]
         public FftFilterTypes FftFilterType
         {
             get => m_FftFilterType;
@@ -758,6 +784,8 @@ namespace SehensWerte.Controls.Sehens
 
         private SampleWindow.WindowType m_FftBandpassWindow = SampleWindow.WindowType.Rectangular;
         [XmlSave]
+        [AutoEditor.DisplayOrder(3.5)]
+        [AutoEditor.DisplayName("FFT Bandpass Window")]
         public SampleWindow.WindowType FftBandpassWindow
         {
             get => m_FftBandpassWindow;
@@ -773,7 +801,7 @@ namespace SehensWerte.Controls.Sehens
 
         private SampleWindow.WindowType m_FftWindow = SampleWindow.WindowType.Rectangular;
         [XmlSave]
-        [AutoEditor.DisplayOrder(-3)]
+        [AutoEditor.DisplayOrder(3.5)]
         [AutoEditor.DisplayName("FFT Display Window")]
         public SampleWindow.WindowType FftWindow
         {
@@ -795,6 +823,7 @@ namespace SehensWerte.Controls.Sehens
         }
         private CalculatePhases m_CalculatePhase = CalculatePhases.AfterZoom;
         [XmlSave]
+        [AutoEditor.DisplayOrder(3.5)]
         public CalculatePhases MathPhase
         {
             get => m_CalculatePhase;
@@ -850,16 +879,12 @@ namespace SehensWerte.Controls.Sehens
 
         public class CalculatedTraceDataQuantise : CalculatedTraceData // XML Serialised
         {
-            [AutoEditor.DisplayName("Offset")]
             public double Offset = 1.0;
-
-            [AutoEditor.DisplayName("Scale")]
             public double Scale = 32767.0;
         }
 
         public class CalculatedTraceDataWindow : CalculatedTraceData // XML Serialised
         {
-            [AutoEditor.DisplayName("Window")]
             public int Window = 100;
         }
 
@@ -874,17 +899,16 @@ namespace SehensWerte.Controls.Sehens
 
         public class CalculatedTraceDataCount : CalculatedTraceData // XML Serialised
         {
-            [AutoEditor.DisplayName("Count")]
             public int Count = 100;
         }
 
         public class CalculatedTraceDataOrder : CalculatedTraceData // XML Serialised
         {
-            [AutoEditor.DisplayName("Order")]
             public int Order = 5;
         }
 
         [XmlSave]
+        [AutoEditor.DisplayOrder(3, "FFT, Filter and Math")]
         public CalculatedTypes CalculateType;
 
         [XmlSave(nestedXml: true, nestedDerivedTypes: new Type[]
@@ -895,7 +919,10 @@ namespace SehensWerte.Controls.Sehens
             typeof(CalculatedTraceDataMinMax),
             typeof(CalculatedTraceDataCount)
         })]
+        [AutoEditor.SubEditor]
+        [AutoEditor.DisplayOrder(3)]
         public CalculatedTraceData CalculatedParameter = new CalculatedTraceData();
+        [AutoEditor.Hidden]
         public List<TraceView> CalculatedSourceViews = new List<TraceView>();        //serialised by ScopeSave
 
         public enum MathTypes
@@ -908,8 +935,7 @@ namespace SehensWerte.Controls.Sehens
         }
         private MathTypes m_MathType;
         [XmlSave]
-        [AutoEditor.DisplayOrder(-3)]
-        [AutoEditor.DisplayName("Math Type")]
+        [AutoEditor.DisplayOrder(3.5)]
         public MathTypes MathType
         {
             get => m_MathType;
@@ -932,6 +958,7 @@ namespace SehensWerte.Controls.Sehens
         private FilterTransforms m_FilterTransform;
 
         [XmlSave]
+        [AutoEditor.DisplayOrder(3.5)]
         public FilterTransforms FilterTransform
         {
             get => m_FilterTransform;
@@ -989,8 +1016,7 @@ namespace SehensWerte.Controls.Sehens
             return clickInfo.YRatio is >= 0.0 and <= 1.0 ? Painter.GetHoverStatistics(this, clickInfo) : "";
         }
 
-        internal bool UseFftFilter => m_Samples.InputSamplesPerSecond != 0.0 && m_FftFilterType != 0
-                        && (m_FftBandpassHPF6dB != 0.0 || m_FftBandpassHPF3dB != 0.0 || m_FftBandpassLPF3dB != 0.0 || m_FftBandpassLPF6dB != 0.0);
+        internal bool UseFftFilter => m_Samples.InputSamplesPerSecond != 0.0 && m_FftFilterType != FftFilterTypes.None;
         internal bool IsLogarithmicY => m_MathType == MathTypes.FFT10Log10 || m_MathType == MathTypes.FFT20Log10;
         internal bool IsRebasedResult => IsFftTrace && CalculateAfterZoom;
         internal bool IsRecalculateProjectionRequired => m_RecalculateProjectionRequired != 0 || m_AfterZoomCalculateRequired;
@@ -1018,22 +1044,22 @@ namespace SehensWerte.Controls.Sehens
 
         ////////////////////////////////////////////////////////////////
         //edit form helpers
-        [AutoEditor.DisplayName("Sample Name")]
+        [AutoEditor.DisplayOrder(1)]
         public string SamplesName
         {
             get => Samples.Name;
             set { Samples.Name = value; }
         }
 
-        [AutoEditor.DisplayOrder(-1)]
         [AutoEditor.DisplayName("First Sample UnixTime")]
+        [AutoEditor.DisplayOrder(4)]
         public double SamplesLeftmostUnixTime
         {
             get => Samples.InputLeftmostUnixTime;
             set { Samples.InputLeftmostUnixTime = value; }
         }
 
-        [AutoEditor.DisplayName("Samples Per Second")]
+        [AutoEditor.DisplayOrder(1.1)]
         public double SamplesPerSecond
         {
             get => Samples.InputSamplesPerSecond;
@@ -1041,6 +1067,7 @@ namespace SehensWerte.Controls.Sehens
         }
 
         [AutoEditor.DisplayName("Vertical Unit")]
+        [AutoEditor.DisplayOrder(2)]
         public string SamplesVerticalUnit
         {
             get => Samples.VerticalUnit;
@@ -1048,6 +1075,7 @@ namespace SehensWerte.Controls.Sehens
         }
 
         [AutoEditor.DisplayName("Axis Title Left")]
+        [AutoEditor.DisplayOrder(2)]
         public string SamplesAxisTitleLeft
         {
             get => Samples.AxisTitleLeft;
@@ -1055,13 +1083,15 @@ namespace SehensWerte.Controls.Sehens
         }
 
         [AutoEditor.DisplayName("Axis Title Bottom")]
+        [AutoEditor.DisplayOrder(2, "Axis and Labels")]
         public string SamplesAxisTitleBottom
         {
             get => Samples.AxisTitleBottom;
             set { Samples.AxisTitleBottom = value; }
         }
 
-        [AutoEditor.DisplayName("Sample Number Display Offset")]
+        [AutoEditor.DisplayName("Display Sample Offset")]
+        [AutoEditor.DisplayOrder(5)]
         public int SamplesNumberDisplayOffset
         {
             get => Samples.InputSampleNumberDisplayOffset;
@@ -1486,35 +1516,47 @@ namespace SehensWerte.Controls.Sehens
                         m_Samples.InputSamplesPerSecond, m_FftBandpassWindow);
                     break;
                 case FftFilterTypes.NotchFit:
-                    result = FftFilter.Notch(input, 
-                        m_FftBandpassLPF3dB, 
-                        m_FftBandpassHPF3dB, 
+                    result = FftFilter.Notch(input,
+                        m_FftBandpassLPF3dB,
+                        m_FftBandpassHPF3dB,
                         m_Samples.InputSamplesPerSecond, m_FftBandpassWindow);
                     break;
                 case FftFilterTypes.HighPass:
-                    result = FftFilter.HighPass(input, 
-                        m_FftBandpassHPF6dB, 
-                        m_FftBandpassHPF3dB, 
+                    result = FftFilter.HighPass(input,
+                        m_FftBandpassHPF6dB,
+                        m_FftBandpassHPF3dB,
                         m_Samples.InputSamplesPerSecond, m_FftBandpassWindow);
                     break;
                 case FftFilterTypes.HighPass3dBPerOctave:
-                    result = FftFilter.HighPass(input, 
-                        m_FftBandpassHPF3dB / 2.0, 
-                        m_FftBandpassHPF3dB, 
+                    result = FftFilter.HighPass(input,
+                        m_FftBandpassHPF3dB / 2.0,
+                        m_FftBandpassHPF3dB,
                         m_Samples.InputSamplesPerSecond, m_FftBandpassWindow);
                     break;
                 case FftFilterTypes.LowPass:
-                    result = FftFilter.LowPass(input, 
-                        m_FftBandpassLPF3dB, 
-                        m_FftBandpassLPF6dB, 
+                    result = FftFilter.LowPass(input,
+                        m_FftBandpassLPF3dB,
+                        m_FftBandpassLPF6dB,
                         m_Samples.InputSamplesPerSecond, m_FftBandpassWindow);
                     break;
                 case FftFilterTypes.LowPass3dBPerOctave:
-                    result = FftFilter.LowPass(input, 
-                        m_FftBandpassLPF3dB, 
-                        m_FftBandpassLPF3dB * 2.0, 
+                    result = FftFilter.LowPass(input,
+                        m_FftBandpassLPF3dB,
+                        m_FftBandpassLPF3dB * 2.0,
                         m_Samples.InputSamplesPerSecond, m_FftBandpassWindow);
                     break;
+                case FftFilterTypes.WeightedAudioA:
+                    result = FftFilter.Arbitrary(input,
+                        FftFilter.WeightingA,
+                        m_Samples.InputSamplesPerSecond);
+                    break;
+                case FftFilterTypes.WeightedAudioC:
+                    result = FftFilter.Arbitrary(input,
+                        FftFilter.WeightingC,
+                        m_Samples.InputSamplesPerSecond);
+                    break;
+
+
                 case FftFilterTypes.None:
                 default:
                     result = input;

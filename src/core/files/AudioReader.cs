@@ -48,10 +48,10 @@ namespace SehensWerte.Files
             AudioReader reader = new AudioReader(fileName);
             double[] array = reader.ChannelSum;
             short[] shortArray = new short[array.Length];
-            for (int i = 0; i < array.Length; i++)
+            for (int loop = 0; loop < array.Length; loop++)
             {
-                int num = (int)(array[i] * 32767.0);
-                shortArray[i] = (short)Math.Clamp(num, -32768, 32767);
+                int num = (int)(array[loop] * 32767.0);
+                shortArray[loop] = (short)Math.Clamp(num, -32768, 32767);
             }
             return shortArray;
         }
@@ -626,9 +626,9 @@ namespace SehensWerte.Files
                 framePtr = av_frame_alloc();
 
                 var channels = new List<double>[ChannelCount];
-                for (int i = 0; i < ChannelCount; i++)
+                for (int loop = 0; loop < ChannelCount; loop++)
                 {
-                    channels[i] = new List<double>();
+                    channels[loop] = new List<double>();
                 }
 
                 while (av_read_frame(formatContextPtr, packetPtr) == 0) // Read packets from file
@@ -708,48 +708,60 @@ namespace SehensWerte.Files
                                     {
                                         byte[] rawData = new byte[numSamples];
                                         Marshal.Copy(channelPtr, rawData, 0, numSamples);
-                                        for (int i = 0; i < numSamples; i++)
-                                            channelData[ch][i] = (rawData[i] - (byte.MaxValue / 2.0)) / (byte.MaxValue / 2.0);
+                                        for (int loop = 0; loop < numSamples; loop++)
+                                        {
+                                            channelData[ch][loop] = (rawData[loop] - (byte.MaxValue / 2.0)) / (byte.MaxValue / 2.0);
+                                        }
                                         break;
                                     }
                                 case AVSampleFormat.S16P:
                                     {
                                         short[] rawData = new short[numSamples];
                                         Marshal.Copy(channelPtr, rawData, 0, numSamples);
-                                        for (int i = 0; i < numSamples; i++)
-                                            channelData[ch][i] = rawData[i] / (double)short.MaxValue;
+                                        for (int loop = 0; loop < numSamples; loop++)
+                                        {
+                                            channelData[ch][loop] = rawData[loop] / (double)short.MaxValue;
+                                        }
                                         break;
                                     }
                                 case AVSampleFormat.S32P:
                                     {
                                         int[] rawData = new int[numSamples];
                                         Marshal.Copy(channelPtr, rawData, 0, numSamples);
-                                        for (int i = 0; i < numSamples; i++)
-                                            channelData[ch][i] = rawData[i] / (double)int.MaxValue;
+                                        for (int loop = 0; loop < numSamples; loop++)
+                                        {
+                                            channelData[ch][loop] = rawData[loop] / (double)int.MaxValue;
+                                        }
                                         break;
                                     }
                                 case AVSampleFormat.FLTP:
                                     {
                                         float[] rawData = new float[numSamples];
                                         Marshal.Copy(channelPtr, rawData, 0, numSamples);
-                                        for (int i = 0; i < numSamples; i++)
-                                            channelData[ch][i] = rawData[i];
+                                        for (int loop = 0; loop < numSamples; loop++)
+                                        {
+                                            channelData[ch][loop] = rawData[loop];
+                                        }
                                         break;
                                     }
                                 case AVSampleFormat.DBLP:
                                     {
                                         double[] rawData = new double[numSamples];
                                         Marshal.Copy(channelPtr, rawData, 0, numSamples);
-                                        for (int i = 0; i < numSamples; i++)
-                                            channelData[ch][i] = rawData[i];
+                                        for (int loop = 0; loop < numSamples; loop++)
+                                        {
+                                            channelData[ch][loop] = rawData[loop];
+                                        }
                                         break;
                                     }
                                 case AVSampleFormat.S64P:
                                     {
                                         long[] rawData = new long[numSamples];
                                         Marshal.Copy(channelPtr, rawData, 0, numSamples);
-                                        for (int i = 0; i < numSamples; i++)
-                                            channelData[ch][i] = rawData[i] / (double)long.MaxValue;
+                                        for (int loop = 0; loop < numSamples; loop++)
+                                        {
+                                            channelData[ch][loop] = rawData[loop] / (double)long.MaxValue;
+                                        }
                                         break;
                                     }
                             }
@@ -773,54 +785,78 @@ namespace SehensWerte.Files
                                 {
                                     byte[] rawData = new byte[totalSamples];
                                     Marshal.Copy(samples, rawData, 0, totalSamples);
-                                    for (int i = 0; i < numSamples; i++)
+                                    for (int loop = 0; loop < numSamples; loop++)
+                                    {
                                         for (int ch = 0; ch < numChannels; ch++)
-                                            channelData[ch][i] = (rawData[i * numChannels + ch] - (byte.MaxValue / 2.0)) / (byte.MaxValue / 2.0);
+                                        {
+                                            channelData[ch][loop] = (rawData[loop * numChannels + ch] - (byte.MaxValue / 2.0)) / (byte.MaxValue / 2.0);
+                                        }
+                                    }
                                     break;
                                 }
                             case AVSampleFormat.S16:
                                 {
                                     short[] rawData = new short[totalSamples];
                                     Marshal.Copy(samples, rawData, 0, totalSamples);
-                                    for (int i = 0; i < numSamples; i++)
+                                    for (int loop = 0; loop < numSamples; loop++)
+                                    {
                                         for (int ch = 0; ch < numChannels; ch++)
-                                            channelData[ch][i] = rawData[i * numChannels + ch] / (double)short.MaxValue;
+                                        {
+                                            channelData[ch][loop] = rawData[loop * numChannels + ch] / (double)short.MaxValue;
+                                        }
+                                    }
                                     break;
                                 }
                             case AVSampleFormat.S32:
                                 {
                                     int[] rawData = new int[totalSamples];
                                     Marshal.Copy(samples, rawData, 0, totalSamples);
-                                    for (int i = 0; i < numSamples; i++)
+                                    for (int loop = 0; loop < numSamples; loop++)
+                                    {
                                         for (int ch = 0; ch < numChannels; ch++)
-                                            channelData[ch][i] = rawData[i * numChannels + ch] / (double)int.MaxValue;
+                                        {
+                                            channelData[ch][loop] = rawData[loop * numChannels + ch] / (double)int.MaxValue;
+                                        }
+                                    }
                                     break;
                                 }
                             case AVSampleFormat.FLT:
                                 {
                                     float[] rawData = new float[totalSamples];
                                     Marshal.Copy(samples, rawData, 0, totalSamples);
-                                    for (int i = 0; i < numSamples; i++)
+                                    for (int loop = 0; loop < numSamples; loop++)
+                                    {
                                         for (int ch = 0; ch < numChannels; ch++)
-                                            channelData[ch][i] = rawData[i * numChannels + ch];
+                                        {
+                                            channelData[ch][loop] = rawData[loop * numChannels + ch];
+                                        }
+                                    }
                                     break;
                                 }
                             case AVSampleFormat.DBL:
                                 {
                                     double[] rawData = new double[totalSamples];
                                     Marshal.Copy(samples, rawData, 0, totalSamples);
-                                    for (int i = 0; i < numSamples; i++)
+                                    for (int loop = 0; loop < numSamples; loop++)
+                                    {
                                         for (int ch = 0; ch < numChannels; ch++)
-                                            channelData[ch][i] = rawData[i * numChannels + ch];
+                                        {
+                                            channelData[ch][loop] = rawData[loop * numChannels + ch];
+                                        }
+                                    }
                                     break;
                                 }
                             case AVSampleFormat.S64:
                                 {
                                     long[] rawData = new long[totalSamples];
                                     Marshal.Copy(samples, rawData, 0, totalSamples);
-                                    for (int i = 0; i < numSamples; i++)
+                                    for (int loop = 0; loop < numSamples; loop++)
+                                    {
                                         for (int ch = 0; ch < numChannels; ch++)
-                                            channelData[ch][i] = rawData[i * numChannels + ch] / (double)long.MaxValue;
+                                        {
+                                            channelData[ch][loop] = rawData[loop * numChannels + ch] / (double)long.MaxValue;
+                                        }
+                                    }
                                     break;
                                 }
                         }
