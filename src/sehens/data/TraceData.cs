@@ -817,7 +817,7 @@ namespace SehensWerte.Controls.Sehens
 
             public override string ToString()
             {
-                return string.Join(",", AsList().Select(x => x.Item1 + "=" + x.Item2.ToStringRound(5, 3)));
+                return string.Join(",", AsList().Select(x => x.Item1 + "=" + x.Item2.ToStringRound(5, 3, trimRight: false)));
             }
 
             public Statistics(double[] samples, double[]? unixTime = null)

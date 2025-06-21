@@ -87,7 +87,7 @@ namespace SehensWerte.Maths
             return value.RoundSignificant(significantDigits, significanceOf, new Func<double, double>(Math.Floor), new Func<double, double>(Math.Ceiling));
         }
 
-        public static string ToStringRound(this double value, int significantDigits, int minimumDecimalDigits, string unit)
+        public static string ToStringRound(this double value, int significantDigits, int minimumDecimalDigits, string unit, bool trimRight = true)
         {
             if (double.IsNaN(value)) return "NaN";
             if (double.IsInfinity(value)) return "Infinity";
@@ -104,14 +104,14 @@ namespace SehensWerte.Maths
             {
                 if (unit == "")
                 {
-                    result = ToStringRound(value, significantDigits, minimumDecimalDigits);
+                    result = ToStringRound(value, significantDigits, minimumDecimalDigits, trimRight: trimRight);
                 }
                 else
                 {
                     int prefixIndex = (int)Math.Floor(Math.Log10(Math.Abs(value)) / 3);
                     prefixIndex = Math.Max(-5, Math.Min(4, prefixIndex));
                     double scaledValue = value / Math.Pow(10, prefixIndex * 3);
-                    result = ToStringRound(scaledValue, significantDigits, minimumDecimalDigits) + prefixes[prefixIndex + 5] + unit;
+                    result = ToStringRound(scaledValue, significantDigits, minimumDecimalDigits, trimRight: trimRight) + prefixes[prefixIndex + 5] + unit;
                 }
             }
             return result;
@@ -156,7 +156,7 @@ namespace SehensWerte.Maths
             return result;
         }
 
-        public static string ToStringRound(this double value, int significantDigits, int minimumDecimalDigits)
+        public static string ToStringRound(this double value, int significantDigits, int minimumDecimalDigits, bool trimRight = true)
         {
             if (double.IsNaN(value)) return "NaN";
             if (double.IsInfinity(value)) return "Inf";
@@ -180,7 +180,9 @@ namespace SehensWerte.Maths
                 wholeDigits = Math.Min(25, -wholeDigits);
                 d = decimal.Round(d, wholeDigits, MidpointRounding.AwayFromZero);
                 d /= 1.0000000000000000000000000000m;
-                return (value < 0.0 ? (-d) : d).ToString();
+                int decimalPlaces = Math.Max(minimumDecimalDigits, wholeDigits);
+                var retval = (value < 0.0 ? -d : d);
+                return trimRight ? retval.ToString() : retval.ToString($"F{decimalPlaces}");
             }
             catch (OverflowException)
             {
@@ -272,11 +274,15 @@ namespace SehensWerte.Maths
 
             Assert.AreEqual((-12.3456789).ToStringRound(3, 2), "-12.35");
             Assert.AreEqual((-12.3).ToStringRound(3, 2), "-12.3");
+            Assert.AreEqual((-12.3).ToStringRound(3, 2, trimRight: false), "-12.30");
             Assert.AreEqual((-12345.3).ToStringRound(3, 0), "-12345");
             Assert.AreEqual((-12.345).ToStringRound(3, 0), "-12.3");
             Assert.AreEqual((-12.345).ToStringRound(3, 2), "-12.35");
             Assert.AreEqual((-12.3456).ToStringRound(3, 3), "-12.346");
             Assert.AreEqual((1e-40).ToStringRound(3, 3), "1E-40");
+            Assert.AreEqual((56.1).ToStringRound(2, 1), "56.1");
+            Assert.AreEqual((56.0).ToStringRound(2, 1, trimRight: false), "56.0");
+            Assert.AreEqual((56.0).ToStringRound(2, 1, trimRight: true), "56");
 
             Assert.AreEqual((-12.3456).ToStringRound(3, 3, "Hz"), "-12.346Hz");
             Assert.AreEqual((-1234.56789).ToStringRound(3, 3, "Hz"), "-1.235kHz");
