@@ -42,19 +42,44 @@ namespace SehensWerte.Maths
             public double CrestFactor; // peak to RMS ratio
             public double SampleDCOffset;
             public double SampleRMS;
+            public double dBFS;
+            public double dBFSA;
+            public double dBFSC;
             public double SamplePeak;
+            public double SPLCalibration; // if supplied
             public List<(double Frequency, double LevelDB)> SpuriousTones = new();
 
-            public void AddToDict(Dictionary<string, List<double>> dict)
+            public string AddToDict(Dictionary<string, List<double>>? dict = null)
             {
+                StringBuilder sb = new StringBuilder();
                 void add(string key, double value)
                 {
-                    if (!dict.ContainsKey(key))
+                    if (dict != null)
                     {
-                        dict[key] = new List<double>();
+                        if (!dict.ContainsKey(key))
+                        {
+                            dict[key] = new List<double>();
+                        }
+                        dict[key].Add(value);
                     }
-                    dict[key].Add(value);
+                    if (sb.Length > 0)
+                    {
+                        sb.Append(", ");
+                    }
+                    sb.Append($"{key}:{value.ToStringRound(3, 1)}");
                 }
+                add("RMS", SampleRMS);
+                add("Peak", SamplePeak);
+                add($"dBFS", dBFS);
+                add($"dBFSA", dBFSA);
+                add($"dBFSC", dBFSC);
+                if (SPLCalibration != 0)
+                {
+                    add($"dBSPL", dBFS + SPLCalibration);
+                    add($"dBSPLA", dBFSA + SPLCalibration);
+                    add($"dBSPLC", dBFSC + SPLCalibration);
+                }
+
                 //add("HighestFrequency", HighestFrequency);
                 //add("HzPerBin", HzPerBin);
                 add("FirstBinFrequency", FirstBinFrequency);
@@ -69,8 +94,7 @@ namespace SehensWerte.Maths
                 add("ENOB", ENOB);
                 add("CrestFactor", CrestFactor);
                 add("DCOffset", SampleDCOffset);
-                add("RMS", SampleRMS);
-                add("Peak", SamplePeak);
+
                 int index = 1;
                 foreach (var v in SpuriousTones)
                 {
@@ -78,14 +102,20 @@ namespace SehensWerte.Maths
                     add($"Frequency_dB {index}", v.LevelDB);
                     index++;
                 }
-                if (AvgMagnitude != null)
+                if (AvgMagnitude != null && dict != null)
                 {
-                    string name = $"Magnitude{Index}";
+                    string name = $"Magnitude {Index}";
                     if (!dict.ContainsKey(name))
                     {
-                        dict.Add(name, AvgMagnitude.Select(x => 10 * Math.Log10(x)).ToList());
+                        dict.Add(name, AvgMagnitude.Select(x => 10 * Math.Log10(x)).ToList()); //fixme? 10 or 20
                     }
                 }
+                return sb.ToString();
+            }
+
+            public override string ToString()
+            {
+                return AddToDict(dict: null);
             }
         }
 
@@ -159,6 +189,8 @@ namespace SehensWerte.Maths
 
         public static double[] SliceMean(IEnumerable<double[]> slices)
         {
+            if (slices.Count() == 0) return new double[0];
+
             var maxSlice = slices.Max(x => x.Length);
             slices = slices.Select(x => x.Copy(0, maxSlice)).ToList();
             var meanSlice = new double[maxSlice];
@@ -174,7 +206,7 @@ namespace SehensWerte.Maths
             return meanSlice.ElementProduct(1.0 / count);
         }
 
-        public Result Analyse(double[] samples)
+        public Result Analyse(double[] samples, double SPLCalibration = 0, Action<string, double[], double>? Scope = null)
         {
             if (samples.Length != m_Window.Length)
             {
@@ -191,6 +223,8 @@ namespace SehensWerte.Maths
                 m_Magnitude.RemoveAt(0);
             }
             int binCount = m_Fft.Bins;
+
+            // average the magnitudes of previous FFTs
             var magnitude = new double[binCount];
             foreach (var v in m_Magnitude)
             {
@@ -211,27 +245,47 @@ namespace SehensWerte.Maths
                 HighestFrequency = m_Fft.HighestFrequency(m_SamplesPerSecond),
                 HzPerBin = m_Fft.HzPerBin(m_SamplesPerSecond),
                 Index = m_Index++,
+                SPLCalibration = SPLCalibration,
             };
 
             // get DC offset, crest factor (peak to RMS ratio)
             result.SampleDCOffset = samples.Mean();
             result.SamplePeak = samples.Subtract(result.SampleDCOffset).Abs().Max();
+
+            double[] samplesA = FftFilter.Arbitrary(samples, FftFilter.WeightingA, m_SamplesPerSecond);
+            double[] samplesC = FftFilter.Arbitrary(samples, FftFilter.WeightingC, m_SamplesPerSecond);
             result.SampleRMS = samples.Subtract(result.SampleDCOffset).Rms();
-            result.CrestFactor = (result.SampleRMS == 0.0) ? 0.0 : (result.SamplePeak / result.SampleRMS);
+            result.dBFS = 20 * Math.Log10(result.SampleRMS);
+            result.dBFSA = 20 * Math.Log10(samplesA.Subtract(samplesA.Mean()).Rms());
+            result.dBFSC = 20 * Math.Log10(samplesC.Subtract(samplesC.Mean()).Rms());
+
+            result.CrestFactor = (result.dBFS == 0.0) ? 0.0 : (result.SamplePeak / result.SampleRMS);
 
             // min/max to find peaks and troughs in magnitude
             {
-                var baseline = magnitude.RollingMean(16);// binCount / 32); // approximate a baseline
-                var peak = baseline.Zip(magnitude)
-                    .Select(x => (10 * Math.Log10(x.Second)) - (10 * Math.Log10(x.First)))
-                    .Select(x => x > 3.01 ? 1.0 : 0.0)
-                    .ToArray()
-                    .RollingMean(3)
-                    .Select(x => x > 0.5)
-                    .ToArray();
+                const int minValue = -120;
+                double peakThreshold = 12.0; // dB above baseline to qualify as a peak
+                int peakWindow = Math.Max(3, binCount / 128); // width for rolling max
+                int baselineWindow = Math.Max(8, binCount / 32); // width for local baseline
+
+                var magLog = magnitude.Select(x => Math.Max(minValue, 20 * Math.Log10(x))).ToArray();
+                Scope?.Invoke("Magnitude", magLog, m_SamplesPerSecond);
+
+                var localMax = magLog.RollingMax(peakWindow);
+                var baseline = localMax.RollingMean(baselineWindow);
+                var isLocalMax = new double[magLog.Length];
+
+                var aboveBaseline = baseline.Select((x, i) => localMax[i] > (x + peakThreshold) ? 1.0 : 0).ToArray();
+                var peakSmoothed = aboveBaseline.RollingMean(3).ToArray();
+
+                Scope?.Invoke("LocalMax", localMax, m_SamplesPerSecond);
+                Scope?.Invoke("Baseline", baseline, m_SamplesPerSecond);
+                Scope?.Invoke("Peaks", peakSmoothed, m_SamplesPerSecond);
+
+                var peak = peakSmoothed.Select(x => x > 0.5).ToArray();
 
                 // find the highest within each block of peaks
-                for (int loop1 = 0; loop1 < peak.Length; loop1++)
+                for (int loop1 = 0; loop1 < aboveBaseline.Length; loop1++)
                 {
                     if (peak[loop1])
                     {
@@ -255,7 +309,6 @@ namespace SehensWerte.Maths
 
                         double freq = CalcMoment(magnitude, index - 1, index + 1, result.HzPerBin).centreFreq;
                         int bin = (int)(freq / result.HzPerBin + 0.5);
-                        double pwr = bin < magnitude.Length ? magnitude[bin] * magnitude[bin] : 0;
                         if (result.FirstBinFrequency == 0)
                         {
                             result.FirstBinFrequency = index == 0 ? 0 : freq;
@@ -263,7 +316,7 @@ namespace SehensWerte.Maths
 
                         if (result.SpuriousTones.Count < 10 && freq > 0)
                         {
-                            result.SpuriousTones.Add((freq, 10 * Math.Log10(pwr)));
+                            result.SpuriousTones.Add((freq, 20 * Math.Log10(bin < magnitude.Length ? magnitude[bin] : 0)));
                         }
                     }
                 }

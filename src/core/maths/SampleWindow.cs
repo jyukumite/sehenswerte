@@ -14,6 +14,7 @@ namespace SehensWerte.Maths
             RaisedCosine, // also Hann
             RaisedCosineSquared,
             Rectangular,
+            // fixme: add Rectangular6dBPerBin - soft edge,
         }
 
         public static double[] GenerateWindow(int length, WindowType type)
