@@ -1487,7 +1487,7 @@ namespace SehensWerte.Controls.Sehens
 
         private double[] CalculateFft(double[] samples)
         {
-            return IsFftTrace ? ExecuteFft(samples) : samples;
+            return samples.Length == 0 ? new double[0] : IsFftTrace ? ExecuteFft(samples) : samples;
         }
 
         private double[] CalculateFftFilter(double[] input)

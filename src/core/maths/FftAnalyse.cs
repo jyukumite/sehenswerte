@@ -76,8 +76,8 @@ namespace SehensWerte.Maths
                 if (SPLCalibration != 0)
                 {
                     add($"dBSPL", dBFS + SPLCalibration);
-                    add($"dBSPLA", dBFSA + SPLCalibration);
-                    add($"dBSPLC", dBFSC + SPLCalibration);
+                    add($"dBA", dBFSA + SPLCalibration);
+                    add($"dBC", dBFSC + SPLCalibration);
                 }
 
                 //add("HighestFrequency", HighestFrequency);

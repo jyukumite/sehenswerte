@@ -160,5 +160,10 @@ namespace SehensWerte.Comms
             m_TransmitQueue.Enqueue(data);
             m_TransmitEvent.Set();
         }
+
+        public static IEnumerable<string> GetPortNames()
+        {
+            return System.IO.Ports.SerialPort.GetPortNames();
+        }
     }
 }
