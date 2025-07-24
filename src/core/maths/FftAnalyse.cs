@@ -125,19 +125,22 @@ namespace SehensWerte.Maths
         private int m_AvgCount;
         private List<double[]> m_Magnitude = new();
         private int m_Index = 0;
+        private List<(double freqHz, double dB)>? m_MagnitudeWeighting;
 
         public int Width => m_Window.Length;
 
         public FFTAnalyse(int width, double samplesPerSecond = 1.0, int avgCount = 2)
             : this(SampleWindow.GenerateWindow(width, SampleWindow.WindowType.RaisedCosine), samplesPerSecond, avgCount)
-        { }
+        { 
+        }
 
-        public FFTAnalyse(double[] window, double samplesPerSecond = 1.0, int avgCount = 2)
+        public FFTAnalyse(double[] window, double samplesPerSecond = 1.0, int avgCount = 2, List<(double freqHz, double dB)>? magnitudeWeighting = null)
         {
             m_Window = window;
             m_Fft = new Fftw(window.Length);
             m_SamplesPerSecond = samplesPerSecond;
             m_AvgCount = avgCount;
+            m_MagnitudeWeighting = magnitudeWeighting;
         }
 
         public static IEnumerable<double[]> SliceSamples(double[] samples, double triggerValue, bool risingPhase, int preTriggerSamples, int postTriggerMinimumSamples)
@@ -206,7 +209,7 @@ namespace SehensWerte.Maths
             return meanSlice.ElementProduct(1.0 / count);
         }
 
-        public Result Analyse(double[] samples, double SPLCalibration = 0, Action<string, double[], double>? Scope = null)
+        public Result Analyse(double[] samples, double SPLCalibration = 0, Action<string, double[], double>? scope = null)
         {
             if (samples.Length != m_Window.Length)
             {
@@ -261,15 +264,21 @@ namespace SehensWerte.Maths
 
             result.CrestFactor = (result.dBFS == 0.0) ? 0.0 : (result.SamplePeak / result.SampleRMS);
 
+            if (m_MagnitudeWeighting != null)
+            {
+                var coefficients = FftFilter.GenerateArbitraryCoefficients(magnitude.Length, m_MagnitudeWeighting, m_SamplesPerSecond);
+                magnitude = magnitude.ElementProduct(coefficients);
+            }
+
             // min/max to find peaks and troughs in magnitude
             {
                 const int minValue = -120;
-                double peakThreshold = 12.0; // dB above baseline to qualify as a peak
+                double peakThreshold = 3.0; // dB above baseline to qualify as a peak
                 int peakWindow = Math.Max(3, binCount / 128); // width for rolling max
                 int baselineWindow = Math.Max(8, binCount / 32); // width for local baseline
 
                 var magLog = magnitude.Select(x => Math.Max(minValue, 20 * Math.Log10(x))).ToArray();
-                Scope?.Invoke("Magnitude", magLog, m_SamplesPerSecond);
+                scope?.Invoke("Magnitude", magLog, m_SamplesPerSecond);
 
                 var localMax = magLog.RollingMax(peakWindow);
                 var baseline = localMax.RollingMean(baselineWindow);
@@ -278,9 +287,9 @@ namespace SehensWerte.Maths
                 var aboveBaseline = baseline.Select((x, i) => localMax[i] > (x + peakThreshold) ? 1.0 : 0).ToArray();
                 var peakSmoothed = aboveBaseline.RollingMean(3).ToArray();
 
-                Scope?.Invoke("LocalMax", localMax, m_SamplesPerSecond);
-                Scope?.Invoke("Baseline", baseline, m_SamplesPerSecond);
-                Scope?.Invoke("Peaks", peakSmoothed, m_SamplesPerSecond);
+                scope?.Invoke("LocalMax", localMax, m_SamplesPerSecond);
+                scope?.Invoke("Baseline", baseline, m_SamplesPerSecond);
+                scope?.Invoke("Peaks", peakSmoothed, m_SamplesPerSecond);
 
                 var peak = peakSmoothed.Select(x => x > 0.5).ToArray();
 
@@ -451,11 +460,6 @@ namespace SehensWerte.Maths
                 return (weight == 0 ? 0 : (moment * hzPerBin / weight), weight);
             }
 
-        }
-
-        public static object SliceSamples(double[] original, object sliceTriggerThreshold, bool v1, int v2, int v3)
-        {
-            throw new NotImplementedException();
         }
     }
 

@@ -453,6 +453,8 @@ namespace SehensWerte.Controls.Sehens
                 Call = ScopeContextMenu.MenuItem.CallWhen.Once,
                 Clicked = (a) => a.Scope.StopUpdates = !a.Scope.StopUpdates,
                 GetStyle = (a) => a.Menu.Menu.Checked = a.Scope.StopUpdates,
+                HotKeyModifier = ScopeContextMenu.MenuItem.HotKeyModifierState.None,
+                HotKeyCode = Keys.Space
             });
 
             contextMenu.Add(new ScopeContextMenu.MenuItem

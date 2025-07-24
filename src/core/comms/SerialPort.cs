@@ -33,7 +33,7 @@ namespace SehensWerte.Comms
         public override string ConfigString
         {
             set { throw new NotImplementedException(); } // fixme: interpret config, e.g. com1:9600,n,8,1
-            get { return $"{Port}:{BaudRate},{Parity.ToString()[0]},{DataBits},{StopBits.ToString()[0]}"; }
+            get { return $"{Port}:{BaudRate},{Parity.ToString()[0]},{DataBits},{(int)StopBits}"; }
         }
 
         public string Port = "";
