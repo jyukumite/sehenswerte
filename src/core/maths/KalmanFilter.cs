@@ -12,8 +12,6 @@ namespace SehensWerte.Filters
         private double[,] m_Eye;
         private double[,] m_ErrorCovariance;
         public double[] PredictedState;
-        private double m_PrevTime;
-        private bool m_First = true;
         private double[,] m_H;
         private double[,] m_Ht;
 
@@ -51,23 +49,13 @@ namespace SehensWerte.Filters
             PredictedState = new double[length];
         }
 
-
-        public double[] Insert(double[] new_state)
-        {
-            return Insert(new_state, m_FauxTime++);
-        }
-
-        public double[] Insert(double[] new_state, double time)
+        public double[] Insert(double[] new_state, double timeStep = 1.0)
         {
             int length = m_PosFactor.Length;
             if (new_state.Length != length)
             {
                 throw new Exception("State vector incorrect length");
             }
-
-            double deltaTime = m_First ? 0.0 : time - m_PrevTime;
-            m_PrevTime = time;
-            m_First = false;
 
             var gain = m_ErrorCovariance.Product(m_Ht).Product(m_H.Product(m_ErrorCovariance).Product(m_Ht).Add(m_VelFactor).Invert());
             m_Estimate = m_Estimate.Add(gain.Product(new_state.AsColumn().Subtract(m_H.Product(m_Estimate))));
@@ -81,7 +69,7 @@ namespace SehensWerte.Filters
             var phi = m_Eye.Copy();
             for (int loop = 0; loop < length; loop++)
             {
-                phi[loop * 2, loop * 2 + 1] = deltaTime;
+                phi[loop * 2, loop * 2 + 1] = timeStep;
             }
             m_Estimate = phi.Product(m_Estimate);
 
@@ -90,14 +78,33 @@ namespace SehensWerte.Filters
             {
                 int row = loop * 2;
                 int col = loop * 2 + 1;
-                projection[row, row] = m_PosFactor[loop] * Math.Pow(deltaTime, 4.0) / 4.0;
-                projection[row, col] = m_PosFactor[loop] * Math.Pow(deltaTime, 3.0) / 2.0;
-                projection[col, row] = m_PosFactor[loop] * Math.Pow(deltaTime, 3.0) / 2.0;
-                projection[col, col] = m_PosFactor[loop] * Math.Pow(deltaTime, 2.0) / 2.0;
+                projection[row, row] = m_PosFactor[loop] * Math.Pow(timeStep, 4.0) / 4.0;
+                projection[row, col] = m_PosFactor[loop] * Math.Pow(timeStep, 3.0) / 2.0;
+                projection[col, row] = m_PosFactor[loop] * Math.Pow(timeStep, 3.0) / 2.0;
+                projection[col, col] = m_PosFactor[loop] * Math.Pow(timeStep, 2.0) / 2.0;
             }
 
             m_ErrorCovariance = phi.Product(m_ErrorCovariance).Product(phi.Transpose()).Add(projection);
             return PredictedState;
+        }
+
+        public double[] PredictFuture(int N, double timeStep = 1.0)
+        {
+            int length = m_PosFactor.Length;
+            var predictions = new double[N];
+
+            var current = m_Estimate.Copy();
+            var phi = m_Eye.Copy();
+            for (int loop = 0; loop < length; loop++)
+            {
+                phi[loop * 2, loop * 2 + 1] = timeStep;
+            }
+            for (int loop = 0; loop < N; loop++)
+            {
+                current = phi.Product(current);
+                predictions[loop] = current[0, 0];
+            }
+            return predictions;
         }
     }
 
@@ -126,7 +133,9 @@ namespace SehensWerte.Filters
             }
 
             Action<double, double> test = (a, b) => Assert.IsTrue(Math.Abs(a - b) < 0.001);
-            test(error.Rms, 0.055);
+            test(error.Rms, 0.028);
+
+            //fixme: test PredictFuture
         }
     }
 }

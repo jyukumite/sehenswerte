@@ -11,6 +11,7 @@
     <AssemblyVersion>1.0.7.0</AssemblyVersion>
     <FileVersion>1.0.7.0</FileVersion>
     <Version>1.0.7.0</Version>
+    <ForceDesignerDpiUnaware>true</ForceDesignerDpiUnaware>
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="..\src\core\Core.csproj" />
