@@ -509,13 +509,16 @@ namespace SehensWerte.Controls
             {
                 // keep the first, hide the rest
                 int colIndex = ColumnNames.IndexOf(column);
-                var seen = new List<string?>();
+                var seen = new HashSet<string?>();
                 HideRowsIf(x =>
                 {
-                    var xx = x.Column(colIndex);
-                    var result = seen.Contains(xx);
-                    seen.Add(xx);
-                    return result;
+                    var value = x.Column(colIndex);
+                    if (seen.Contains(value))
+                    {
+                        return true;
+                    }
+                    seen.Add(value);
+                    return false;
                 });
             }
 
