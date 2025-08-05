@@ -28,7 +28,7 @@
             m_Head = m_Tail = 0;
         }
 
-        public void Insert(T value)
+        public T Insert(T value)
         {
             m_Array[m_Head] = value;
             m_Head = (m_Head + 1) % m_Array.Length;
@@ -36,6 +36,7 @@
             {
                 m_Tail = (m_Tail + 1) % m_Array.Length;
             }
+            return m_Array[m_Head]; // last out
         }
 
         public void Insert(T[] values)

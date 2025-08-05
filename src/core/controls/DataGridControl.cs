@@ -312,7 +312,7 @@ namespace SehensWerte.Controls
             if (DataGridBind == null)
             {
                 throw new NullReferenceException("DataGridBind is null, cannot copy to clipboard");
-            }   
+            }
             return DataGridBind!.SelectedCellsToClipboardFormats(numeric);
         }
 
@@ -840,7 +840,11 @@ namespace SehensWerte.Controls
 
         public string? GetCell(int colIndex, int rowIndex)
         {
-            return rowIndex >= 0 && colIndex >= 0 ? ((DataGridBind?.FilteredData[rowIndex])?.Column(colIndex)) : null;
+            bool valid = rowIndex >= 0 
+                && colIndex >= 0 
+                && rowIndex < (DataGridBind?.FilteredData.Count ?? 0)
+                && colIndex < (DataGridBind?.ColumnNames.Count ?? 0);
+            return valid ? ((DataGridBind?.FilteredData[rowIndex])?.Column(colIndex)) : null;
         }
 
         public void SetCell(int colIndex, int rowIndex, string? to)

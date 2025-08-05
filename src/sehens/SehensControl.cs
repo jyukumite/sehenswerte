@@ -11,6 +11,8 @@ namespace SehensWerte.Controls
 {
     public partial class SehensControl : UserControl
     {
+        //fixme: review System.Windows.Forms.DataVisualization.Charting
+
         ////////////////////////////////////////////////////////////////
         //UI
 
