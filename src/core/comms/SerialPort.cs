@@ -62,8 +62,11 @@ namespace SehensWerte.Comms
                 if (m_SerialPort == null) return;
 
                 OnLog?.Invoke(new CsvLog.Entry($"Closing {ConfigString}", CsvLog.Priority.Info));
-                m_ThreadStop.Set();
-                m_Thread.Join();
+                if (m_Thread.ThreadState == ThreadState.Running)
+                {
+                    m_ThreadStop.Set();
+                    m_Thread.Join();
+                }
                 if (m_SerialPort != null)
                 {
                     m_SerialPort.Close();
