@@ -48,9 +48,10 @@ Some of the planned features and improvements include:
 We welcome contributions to Sehenswerte from the community.
 
 If you would like to contribute, please follow these guidelines:
+* Make an issue to describe the contribution
 * Ensure your code adheres to the project's coding standards and conventions.
 * Write clear commit messages and provide detailed documentation where necessary.
-* Submit a pull request, describing the changes you have made and their purpose.
+* Submit a pull request, e.g. on branch bugfix/issue-123, describing the changes you have made and their purpose.
 * By contributing to Sehenswerte, you agree that your contributions will be licensed under the same license as the project.
 
 ## License
