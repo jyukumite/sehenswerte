@@ -9,6 +9,23 @@ namespace SehensWerte
 {
     public static class ListExtensions
     {
+        public static T[] Shuffle<T>(this IEnumerable<T> array)
+        {
+            // Knuth shuffle
+            T[] retval = array.ToArray();
+            Random rng = new Random();
+            int n = retval.Length;
+            while (n > 1)
+            {
+                n--;
+                int k = rng.Next(n + 1);
+                T value = retval[k];
+                retval[k] = retval[n];
+                retval[n] = value;
+            }
+            return retval;
+        }
+
         public static T[] Dequeue<T>(this Queue<T> queue, int count)
         {
             T[] result = new T[count];
@@ -58,6 +75,44 @@ namespace SehensWerte
             foreach (T item in enumeration)
             {
                 action(item);
+            }
+        }
+
+        public static void ParallelForEach<T>(this IEnumerable<T> enumeration, Action<T> action, int threadCount = 0, bool background = false)
+        {
+            if (threadCount <= 0)
+            {
+                threadCount = Process.GetPhysicalCoreCount();
+            }
+            var enumerator = enumeration.GetEnumerator();
+            object enumLock = new object();
+
+            var threads = new List<Thread>();
+            for (int loop = 0; loop < threadCount; loop++)
+            {
+                var thread = new Thread(() =>
+                {
+                    while (true)
+                    {
+                        T item;
+                        lock (enumLock)
+                        {
+                            if (!enumerator.MoveNext())
+                            {
+                                break;
+                            }
+                            item = enumerator.Current;
+                        }
+                        action(item);
+                    }
+                });
+                thread.IsBackground = background; // true: don't stop the app exiting
+                threads.Add(thread);
+                thread.Start();
+            }
+            foreach (var thread in threads)
+            {
+                thread.Join();
             }
         }
 
