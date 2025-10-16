@@ -220,7 +220,7 @@ namespace SehensWerte.Utils
                 .Select(x => x.Value));
         }
 
-        public static string Parameterise(string baseQuery, Dictionary<string, object?>? parameters)
+        public static string Parameterise(string baseQuery, Dictionary<string, object?>? parameters, bool strictParameters = true)
         {
             // Insert parameters replacing named :variable callouts in the query
 
@@ -254,9 +254,9 @@ namespace SehensWerte.Utils
                 }
                 prevToken = token;
             }
-            if (test.Count != (parameters?.Count ?? 0))
+            if (strictParameters && test.Count != (parameters?.Count ?? 0))
             {
-                throw new ArgumentException($"Parameter count mismatch {test} unique parameters in query, {parameters.Count} parameters");
+                throw new ArgumentException($"Parameter count mismatch {test} unique parameters in query, {parameters?.Count} parameters");
             }
             return result.ToString();
         }
