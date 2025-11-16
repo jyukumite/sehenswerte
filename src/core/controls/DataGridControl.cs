@@ -78,6 +78,7 @@ namespace SehensWerte.Controls
         private ToolStripDropDownButton HideMatchCellStatus;
         private ToolStripDropDownButton HideUnmatchCellStatus;
         private ToolStripDropDownButton UniqueCellStatus;
+        private ToolStripDropDownButton DecimateCellStatus;
         private ToolStripDropDownButton TransposeGrid;
         private ToolStripDropDownButton SaveCsvButton;
         private ToolStripDropDownButton LoadCsvButton;
@@ -128,6 +129,7 @@ namespace SehensWerte.Controls
             this.HideMatchCellStatus = new System.Windows.Forms.ToolStripDropDownButton();
             this.HideUnmatchCellStatus = new System.Windows.Forms.ToolStripDropDownButton();
             this.UniqueCellStatus = new System.Windows.Forms.ToolStripDropDownButton();
+            this.DecimateCellStatus = new System.Windows.Forms.ToolStripDropDownButton();
             this.TransposeGrid = new System.Windows.Forms.ToolStripDropDownButton();
             this.SaveCsvButton = new System.Windows.Forms.ToolStripDropDownButton();
             this.LoadCsvButton = new System.Windows.Forms.ToolStripDropDownButton();
@@ -179,6 +181,7 @@ namespace SehensWerte.Controls
                     this.HideMatchCellStatus,
                     this.HideUnmatchCellStatus,
                     this.UniqueCellStatus,
+                    this.DecimateCellStatus,
                     //this.TransposeGrid,
                     this.SaveCsvButton,
                     this.LoadCsvButton});
@@ -272,6 +275,13 @@ namespace SehensWerte.Controls
             this.UniqueCellStatus.Text = "Unique";
             this.UniqueCellStatus.Click += new System.EventHandler(this.UniqueCellStatus_Click);
             this.UniqueCellStatus.BackColor = prettyColours ? Color.FromArgb(242, 196, 208) : SystemColors.Control;
+
+            this.DecimateCellStatus.Name = "DecimateCellStatus";
+            this.DecimateCellStatus.ShowDropDownArrow = false;
+            this.DecimateCellStatus.Size = new System.Drawing.Size(171, 38);
+            this.DecimateCellStatus.Text = "Decimate";
+            this.DecimateCellStatus.Click += new System.EventHandler(this.DecimateCellStatus_Click);
+            this.DecimateCellStatus.BackColor = prettyColours ? Color.FromArgb(242, 196, 208) : SystemColors.Control;
 
             this.TransposeGrid.Name = "TransposeGrid";
             this.TransposeGrid.ShowDropDownArrow = false;
@@ -590,6 +600,21 @@ namespace SehensWerte.Controls
 
                 string header = Grid.CurrentCell.OwningColumn.HeaderText;
                 DataGridBind?.HideNotFirstUnique(Convert.ToString(header) ?? "");
+            });
+        }
+
+        private void DecimateCellStatus_Click(object? sender, EventArgs e)
+        {
+            this.ExceptionToMessagebox(() =>
+            {
+                if (Grid.SelectedCells.Count == 0)
+                {
+                    return;
+                }
+
+                string header = Grid.CurrentCell.OwningColumn.HeaderText;
+                int counter = 0;
+                DataGridBind?.HideRowsIf(_ => counter++ % 10 != 0);
             });
         }
 

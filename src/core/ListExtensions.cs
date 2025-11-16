@@ -80,6 +80,7 @@ namespace SehensWerte
 
         public static void ParallelForEach<T>(this IEnumerable<T> enumeration, Action<T> action, int threadCount = 0, bool background = false)
         {
+            // Consider per-process separation Process.RunWorker(...) to avoid GC allocation storms etc.
             if (threadCount <= 0)
             {
                 threadCount = Process.GetPhysicalCoreCount();

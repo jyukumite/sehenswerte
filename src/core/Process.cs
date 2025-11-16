@@ -19,6 +19,14 @@ namespace SehensWerte.Utils
             }
         }
 
+        public static string ExePath
+        {
+            get
+            {
+                return System.Diagnostics.Process.GetCurrentProcess().MainModule?.FileName ?? "";
+            }
+        }
+
         public static string Platform
         {
             get
@@ -282,6 +290,146 @@ namespace SehensWerte.Utils
                     }
                 }
             }
+        }
+
+
+        // static class Program
+        // {
+        //     [STAThread]
+        //     static void Main(string[] argv)
+        //     {
+        //         Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
+        //         Application.EnableVisualStyles();
+        //         Application.SetCompatibleTextRenderingDefault(false);
+        //         if (Process.RunAsWorker()) return; // ******* used with Process.RunWorker
+
+        // public static OutputObject StaticRunFunction(InputObject chunk)
+        // {
+
+        // public static void RunSomething(IEnumerable<string> input, Action<CsvLog.Entry> onLog)
+        // {
+        //     int chunk = 50;
+        //     int processes = 8;
+        //     var chunks =
+        //         input
+        //         .Select((o, index) => new { o, index })
+        //         .GroupBy(x => x.index / chunk)
+        //         .Select(g => g.Select(x => x.o).ToList())
+        //         .ToList();
+        // 
+        //     chunks.ParallelForEach(o => run(o), threadCount: processes);
+        //     void run(List<string> input)
+        //     {
+        //         try
+        //         {
+        //             var output = Process.RunWorker(new InputObject(input), StaticRunFunction);
+
+        public static bool RunAsWorker()
+        {
+            var args = Environment.GetCommandLineArgs();
+            if (!args.Contains("--worker"))
+            {
+                return false;
+            }
+
+            string? getArgValue(string[] args, string key)
+            {
+                int idx = Array.IndexOf(args, key);
+                return (idx >= 0 && idx + 1 < args.Length) ? args[idx + 1] : null;
+            }
+
+            try
+            {
+                string? className = getArgValue(args, "--class");
+                string? methodName = getArgValue(args, "--method");
+                string? inTypeName = getArgValue(args, "--in");
+                string? outTypeName = getArgValue(args, "--out");
+
+                if (className == null || methodName == null || inTypeName == null || outTypeName == null)
+                {
+                    return false;
+                }
+
+                Type? resolveType(string name)
+                {
+                    foreach (var asm in AppDomain.CurrentDomain.GetAssemblies())
+                    {
+                        var t = asm.GetType(name, throwOnError: false, ignoreCase: false);
+                        if (t != null) return t;
+                    }
+                    return null;
+                }
+
+                Type tIn = resolveType(inTypeName) ?? throw new Exception($"Cannot resolve type '{inTypeName}'.");
+                Type tOut = resolveType(outTypeName) ?? throw new Exception($"Cannot resolve type '{outTypeName}'.");
+
+                Type targetClass = resolveType(className) ?? throw new Exception($"Cannot resolve class '{className}'.");
+
+                MethodInfo? method = targetClass.GetMethod(methodName,
+                    BindingFlags.Public | BindingFlags.Static | BindingFlags.Instance);
+
+                if (method == null)
+                    throw new MissingMethodException($"Method '{methodName}' not found in class '{className}'.");
+
+                var parms = method.GetParameters();
+                if (parms.Length != 1 || parms[0].ParameterType != tIn)
+                {
+                    throw new Exception($"Method must have signature: {tOut.Name} {methodName}({tIn.Name} arg)");
+                }
+
+                object? instance = method.IsStatic ? null : Activator.CreateInstance(targetClass);
+
+                string xml = Console.In.ReadToEnd();
+                object? inputObj = typeof(StringExtensions)
+                    .GetMethod(nameof(StringExtensions.FromXml))!
+                    .MakeGenericMethod(tIn)
+                    .Invoke(null, new object?[] { xml, null, null });
+
+                object? result = method.Invoke(instance, new object?[] { inputObj });
+
+                string outputXml = (string)typeof(StringExtensions)
+                    .GetMethod(nameof(StringExtensions.ToXml))!
+                    .MakeGenericMethod(tOut)
+                    .Invoke(null, new object?[] { result!, null, false })!;
+
+                Console.Out.Write(outputXml);
+                return true;
+            }
+            catch (Exception ex)
+            {
+                Console.Error.WriteLine(ex.ToString());
+                return true;
+            }
+        }
+
+        public static TOut? RunWorker<TIn, TOut>(TIn input, Func<TIn, TOut> func)
+        {
+            if (func.Method.DeclaringType == null)
+            {
+                throw new Exception("Function must be a static method on a class.");
+            }
+
+            string exe = ExePath;
+            string className = func.Method.DeclaringType.FullName!;
+            string methodName = func.Method.Name;
+            string inTypeName = typeof(TIn).FullName!;
+            string outTypeName = typeof(TOut).FullName!;
+
+            string xmlIn = input.ToXml();
+            MemoryStream stdout = new MemoryStream();
+
+            string parameters =
+                $"--worker --class \"{className}\" --method \"{methodName}\" --in \"{inTypeName}\" --out \"{outTypeName}\"";
+
+            int exitCode = Run(exe, parameters, xmlIn, stdout);
+
+            if (exitCode != 0)
+            {
+                throw new Exception($"Worker process exited with {exitCode}.");
+            }
+
+            string xmlOut = Encoding.UTF8.GetString(stdout.ToArray());
+            return xmlOut.FromXml<TOut>();
         }
     }
 }

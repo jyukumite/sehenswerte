@@ -495,7 +495,7 @@ namespace SehensWerte.Controls
                 Refilter();
             }
 
-            private void HideRowsIf(Func<BoundDataRow, bool> predicate)
+            public void HideRowsIf(Func<BoundDataRow, bool> predicate)
             {
                 if (FilteredData == null) return;
                 foreach (var v in FilteredData.Where(predicate)) //here
