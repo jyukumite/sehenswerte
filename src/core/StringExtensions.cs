@@ -1,6 +1,9 @@
 using Microsoft.VisualStudio.TestTools.UnitTesting;
+using SehensWerte.Utils;
 using System.Globalization;
 using System.Text;
+using System.Text.Json;
+using System.Text.Json.Serialization;
 using System.Text.RegularExpressions;
 using System.Xml;
 using System.Xml.Serialization;
@@ -28,6 +31,23 @@ namespace SehensWerte
                     object? obj = new XmlSerializer(typeof(T), derivedTypes).Deserialize((TextReader)sr);
                     return obj == null ? defaultValue : (T)obj;
                 }
+            }
+            catch
+            {
+                return defaultValue;
+            }
+        }
+
+        public static T? FromJson<T>(this string data, T? defaultValue = default)
+        {
+            try
+            {
+                var options = new JsonSerializerOptions()
+                {
+                    IncludeFields = true
+                };
+                options.Converters.Add(new JsonStringEnumConverter());
+                return JsonSerializer.Deserialize<T>(data, options) ?? defaultValue;
             }
             catch
             {
@@ -125,6 +145,22 @@ namespace SehensWerte
                 }
                 return sw.ToString();
             }
+        }
+
+        public static string ToJson<T>(this T source, bool compact = false)
+        {
+            var options = new JsonSerializerOptions
+            {
+                IncludeFields = true,
+                WriteIndented = !compact,
+                //DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
+                DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingDefault,
+                IgnoreReadOnlyFields = true,
+                IgnoreReadOnlyProperties = true,
+            };
+            options.Converters.Add(new JsonStringEnumConverter());
+
+            return source == null ? "" : JsonSerializer.Serialize(source, options);
         }
 
         public class Utf8StringWriter : StringWriter

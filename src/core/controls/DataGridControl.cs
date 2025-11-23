@@ -799,6 +799,11 @@ namespace SehensWerte.Controls
             }
         }
 
+        public int GetSelectedRowCount()
+        {
+            return DataGridBind?.RowsWithSelection()?.Count() ?? 0;
+        }
+
         public string?[] GetSelectedRowsOfColumn(string header)
         {
             return DataGridBind?.GetSelectedRowsOfColumn(header) ?? new string?[] { };

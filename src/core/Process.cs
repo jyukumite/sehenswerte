@@ -369,7 +369,9 @@ namespace SehensWerte.Utils
                     BindingFlags.Public | BindingFlags.Static | BindingFlags.Instance);
 
                 if (method == null)
+                {
                     throw new MissingMethodException($"Method '{methodName}' not found in class '{className}'.");
+                }
 
                 var parms = method.GetParameters();
                 if (parms.Length != 1 || parms[0].ParameterType != tIn)
