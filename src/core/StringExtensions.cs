@@ -38,6 +38,65 @@ namespace SehensWerte
             }
         }
 
+        public class ForgivingEnumStringConverter<T> : JsonConverter<T> where T : struct, Enum
+        {
+            public override T Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
+            {
+                T retval = default;
+                if (reader.TokenType == JsonTokenType.Number)
+                {
+                    var value = reader.GetInt64();
+                    retval = (T)Enum.ToObject(typeof(T), value);
+                }
+                else if (reader.TokenType == JsonTokenType.String)
+                {
+                    string? str = reader.GetString();
+                    if (!string.IsNullOrWhiteSpace(str))
+                    {
+                        if (typeof(T).IsDefined(typeof(FlagsAttribute), false))
+                        {
+                            ulong result = 0;
+                            foreach (var part in str.Split(',', StringSplitOptions.RemoveEmptyEntries))
+                            {
+                                if (Enum.TryParse<T>(part.Trim(), ignoreCase: true, out var flagParsed))
+                                {
+                                    result |= Convert.ToUInt64(flagParsed);
+                                }
+                            }
+                            retval = (T)Enum.ToObject(typeof(T), result);
+                        }
+                        else if (Enum.TryParse<T>(str, ignoreCase: true, out var normalParsed))
+                        {
+                            retval = normalParsed;
+                        }
+                    }
+                }
+                return retval;
+            }
+
+            public override void Write(Utf8JsonWriter writer, T value, JsonSerializerOptions options)
+            {
+                writer.WriteStringValue(value.ToString());
+            }
+        }
+
+        public class ForgivingEnumStringConverterFactory : JsonConverterFactory
+        {
+            public override bool CanConvert(Type typeToConvert)
+            {
+                var retval = typeToConvert.IsEnum ||
+                       (Nullable.GetUnderlyingType(typeToConvert)?.IsEnum == true);
+                return retval;
+            }
+
+            public override JsonConverter CreateConverter(Type type, JsonSerializerOptions options)
+            {
+                var enumType = Nullable.GetUnderlyingType(type) ?? type;
+                var converterType = typeof(ForgivingEnumStringConverter<>).MakeGenericType(enumType);
+                return (JsonConverter)Activator.CreateInstance(converterType)!;
+            }
+        }
+
         public static T? FromJson<T>(this string data, T? defaultValue = default)
         {
             try
@@ -46,7 +105,7 @@ namespace SehensWerte
                 {
                     IncludeFields = true
                 };
-                options.Converters.Add(new JsonStringEnumConverter());
+                options.Converters.Add(new ForgivingEnumStringConverterFactory());
                 return JsonSerializer.Deserialize<T>(data, options) ?? defaultValue;
             }
             catch
@@ -308,6 +367,98 @@ namespace SehensWerte
                 var result = testCase.Uuid4 ? testCase.Input.ToGuid() : testCase.Input.ToGuid(uuid4: false);
                 Assert.AreEqual(testCase.Expected, result, $"Failed for input: {testCase.Input}");
             }
+        }
+
+        public enum SimpleEnum
+        {
+            None = 0,
+            A = 1,
+            B = 2,
+        }
+
+        [Flags]
+        public enum FlagEnum
+        {
+            None = 0,
+            X = 1,
+            Y = 2,
+            Z = 4
+        }
+
+        public class TestObject
+        {
+            public string? Name;
+            public int Value;
+            public SimpleEnum Mode;
+            public FlagEnum Flags;
+        }
+
+        public class SimpleClass
+        {
+            public int Id;
+            public string? Text;
+        }
+
+        [TestMethod]
+        public void TestJson_Simple_Class_Array_Enums()
+        {
+            // Simple object
+            var simple = new SimpleClass { Id = 42, Text = "hello" };
+            string jsonSimple = simple.ToJson();
+            var simpleBack = jsonSimple.FromJson<SimpleClass>();
+            Assert.IsNotNull(simpleBack);
+            Assert.AreEqual(simple.Id, simpleBack.Id);
+            Assert.AreEqual(simple.Text, simpleBack.Text);
+
+            // Object with enums
+            var obj = new TestObject
+            {
+                Name = "Test",
+                Value = 5,
+                Mode = SimpleEnum.B,
+                Flags = FlagEnum.X | FlagEnum.Z
+            };
+            string jsonObj = obj.ToJson();
+            var objBack = jsonObj.FromJson<TestObject>();
+            Assert.IsNotNull(objBack);
+            Assert.AreEqual(obj.Name, objBack.Name);
+            Assert.AreEqual(obj.Value, objBack.Value);
+            Assert.AreEqual(obj.Mode, objBack.Mode);
+            Assert.AreEqual(obj.Flags, objBack.Flags);
+
+            // Array of objects
+            var array = new[]
+            {
+                new TestObject { Name="A", Value=1, Mode=SimpleEnum.A, Flags=FlagEnum.Y },
+                new TestObject { Name="B", Value=2, Mode=SimpleEnum.B, Flags=FlagEnum.X | FlagEnum.Y },
+            };
+            string jsonArray = array.ToJson();
+            var arrayBack = jsonArray.FromJson<TestObject[]>();
+            Assert.IsNotNull(arrayBack);
+            Assert.AreEqual(array.Length, arrayBack.Length);
+            for (int loop = 0; loop < array.Length; loop++)
+            {
+                Assert.AreEqual(array[loop].Name, arrayBack[loop].Name);
+                Assert.AreEqual(array[loop].Value, arrayBack[loop].Value);
+                Assert.AreEqual(array[loop].Mode, arrayBack[loop].Mode);
+                Assert.AreEqual(array[loop].Flags, arrayBack[loop].Flags);
+            }
+
+            // Invalid enum string - should fallback to default(SimpleEnum)
+            string jsonInvalidEnum = "{\"Name\":\"X\",\"Value\":1,\"Mode\":\"badvalue\",\"Flags\":\"X\"}";
+            var invalidEnumObj = jsonInvalidEnum.FromJson<TestObject>();
+            Assert.IsNotNull(invalidEnumObj);
+            Assert.AreEqual(SimpleEnum.None, invalidEnumObj.Mode); //0
+
+            // Invalid flags element - known flags parsed, unknown ignored
+            string jsonInvalidFlag =
+                "{\"Name\":\"X\",\"Value\":1,\"Mode\":\"A\",\"Flags\":\"X,INVALID_FLAG,Z\"}";
+            var invalidFlagObj = jsonInvalidFlag.FromJson<TestObject>();
+            Assert.IsNotNull(invalidFlagObj);
+            Assert.AreEqual(FlagEnum.X | FlagEnum.Z, invalidFlagObj.Flags);
+
+            // check writer will emit flags enums
+            Assert.AreEqual((FlagEnum.X | FlagEnum.Z).ToString(), "X, Z");
         }
     }
 }
