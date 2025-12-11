@@ -664,20 +664,24 @@ namespace SehensWerte.Controls
 
             if (Filtering)
             {
-                foreach (var l in LogQueue)
+                try
                 {
-                    l.FilterMatchFlag = false;
+                    foreach (var l in LogQueue)
+                    {
+                        l.FilterMatchFlag = false;
+                    }
+                    Parallel.ForEach(LogQueue, entry =>
+                    {
+                        entry.FilterMatchFlag = entry.MatchesFilter(m_FilterType, m_FilterRegex);
+                    });
+                    FilteredQueue = new LinkedList<LogEntryRow>(LogQueue.Where(x => x.FilterMatchFlag));
                 }
-                Parallel.ForEach(LogQueue, entry =>
-                {
-                    entry.FilterMatchFlag = entry.MatchesFilter(m_FilterType, m_FilterRegex);
-                });
-                FilteredQueue = new LinkedList<LogEntryRow>(LogQueue.Where(x => x.FilterMatchFlag));
+                catch { }
             }
 
-            UpdateScrollBars();
-            PaintBox.Invalidate();
-        }
+                UpdateScrollBars();
+                PaintBox.Invalidate();
+            }
 
         private void Log_Resize(object? sender, EventArgs e)
         {
