@@ -1,7 +1,6 @@
-using System.Collections.Concurrent;
-using System.Diagnostics;
-using Microsoft.Win32; // registry
 using SehensWerte.Utils;
+using System.Collections.Concurrent;
+using System.Text.RegularExpressions;
 
 namespace SehensWerte.Controls
 {
@@ -12,10 +11,10 @@ namespace SehensWerte.Controls
         private Button ButtonOK;
         private Button ButtonCancel;
         private Label LabelText;
-        private TextBox EditResult;
+        private EnhancedTextBox EditResult;
 
-        public string Title { set { Text = value; } }
-        public string Prompt { set { LabelText.Text = value; } }
+        public string Title { set => Text = value; }
+        public string Prompt { set => LabelText.Text = value; }
         private bool m_MultiLine = false;
         public bool MultiLine
         {
@@ -34,15 +33,18 @@ namespace SehensWerte.Controls
         public string DefaultResponse { set { EditResult.Text = value; EditResult.SelectAll(); } }
         public bool Password
         {
-            get { return EditResult.UseSystemPasswordChar; }
-            set { EditResult.UseSystemPasswordChar = value; }
+            get => EditResult.UseSystemPasswordChar; 
+            set => EditResult.UseSystemPasswordChar = value;
         }
-        private static ConcurrentDictionary<string, string> Cache = new ConcurrentDictionary<string, string>();
+
+        private Func<string, string>? PasteHook;
+
+        private static ConcurrentDictionary<string, string> Cache = new();
 
         public InputFieldForm()
         {
             ButtonOK = new Button();
-            EditResult = new TextBox();
+            EditResult = new EnhancedTextBox();
             EditResult.MaxLength = 0;
             LabelText = new Label();
             ButtonCancel = new Button();
@@ -63,6 +65,22 @@ namespace SehensWerte.Controls
                     }
                 }
             };
+
+            EditResult.Pasting += (sender, e) =>
+            {
+                try
+                {
+                    string clip = Clipboard.GetText() ?? "";
+                    string processed = PasteHook?.Invoke(clip) ?? clip;
+                    int start = EditResult.SelectionStart;
+                    int len = EditResult.SelectionLength;
+                    EditResult.Text = EditResult.Text.Remove(start, len).Insert(start, processed);
+                    EditResult.SelectionStart = start + processed.Length;
+                    e.Handled = true;
+                }
+                catch { }
+            };
+
             ButtonOK.Click += (sender, e) => { ResultButton = DialogResult.OK; Close(); };
             ButtonCancel.Click += (sender, e) => { ResultButton = DialogResult.Cancel; Close(); };
 
@@ -120,7 +138,7 @@ namespace SehensWerte.Controls
         public static string? Show(string prompt, string title,
                                    object? defaultResponse = null, bool password = false,
                                    bool multiLine = false, bool cache = false, bool save = false,
-                                   string? saveKey = null,
+                                   string? saveKey = null, bool regex = false,
                          [System.Runtime.CompilerServices.CallerFilePath] string cacheFilePath = "",
                          [System.Runtime.CompilerServices.CallerLineNumber] int cacheLineNumber = 0)
         {
@@ -149,6 +167,17 @@ namespace SehensWerte.Controls
             form.DefaultResponse = defaultResponse?.ToString() ?? "";
             form.Password = password;
             form.MultiLine = multiLine;
+            if (regex)
+            {
+                form.PasteHook = (s) =>
+                    ((ModifierKeys & Keys.Shift) == Keys.Shift) ? s :
+                    String.Join("|",
+                       (s?.ToString() ?? "")
+                        .Trim()
+                        .Replace("\r\n", "\r").Replace("\n", "\r")
+                        .Split("\r")
+                        .Select(x => $"^{Regex.Escape(x)}$"));
+            }
             form.ShowDialog();
             form.TopMost = true;
 

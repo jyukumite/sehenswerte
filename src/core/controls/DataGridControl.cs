@@ -96,7 +96,7 @@ namespace SehensWerte.Controls
             base.Dispose(disposing);
         }
 
-        public static implicit operator DataGridView(DataGridControl d) => d.Grid;
+        public static implicit operator DataGridView(DataGridControl d) => d.Grid; // helper, perhaps confusing and undiscoverable
 
         public DataGridControl() : this((s) => { }) { }
 
@@ -531,7 +531,7 @@ namespace SehensWerte.Controls
         {
             if (Grid.SelectedCells.Count != 1) return;
             string header = Convert.ToString(Grid.CurrentCell.OwningColumn.HeaderText);
-            string regex = InputFieldForm.Show($"Hide {header} by regex", "Regex", RegexInput) ?? "";
+            string regex = InputFieldForm.Show($"Hide {header} by regex", "Regex", RegexInput, regex: true) ?? "";
             if (!string.IsNullOrEmpty(regex))
             {
                 RegexInput = regex;
@@ -546,7 +546,7 @@ namespace SehensWerte.Controls
         {
             if (Grid.SelectedCells.Count != 1) return;
             string header = Convert.ToString(Grid.CurrentCell.OwningColumn.HeaderText);
-            string regex = InputFieldForm.Show($"Show {header} by regex", "Regex", RegexInput) ?? "";
+            string regex = InputFieldForm.Show($"Show {header} by regex", "Regex", RegexInput, regex: true) ?? "";
             if (!string.IsNullOrEmpty(regex))
             {
                 RegexInput = regex;
@@ -758,30 +758,42 @@ namespace SehensWerte.Controls
             StatusFilterText.Visible = true;
         }
 
+
+        public void Clear()
+        {
+            DataGridBind?.Unbind();
+            NumericGrid = false;
+            DataGridBind = null;
+            Grid.Columns.Clear();
+        }
+
         public void LoadCsv(string fileName, bool numeric = false)
         {
+            DataGridBind?.Unbind();
             NumericGrid = numeric;
             DataGridBind = new BoundData(fileName, numeric: numeric, CsvLog.ExtendPath(OnLog, "BoundData"));
             DataGridBind.ListChanged += GridData_ListChanged;
-            DataGridBind.Setup(this);
+            DataGridBind.Setup(Grid);
             UpdateStatusStrip();
         }
 
         public void LoadRows(IEnumerable<IEnumerable<string?>> rows, IEnumerable<string> colnames)
         {
+            DataGridBind?.Unbind();
             NumericGrid = false;
             DataGridBind = new BoundData(rows, colnames, CsvLog.ExtendPath(OnLog, "BoundData"));
             DataGridBind.ListChanged += GridData_ListChanged;
-            DataGridBind.Setup(this);
+            DataGridBind.Setup(Grid);
             UpdateStatusStrip();
         }
 
         public void LoadRows(IEnumerable<IEnumerable<double>> rows, IEnumerable<string> colnames)
         {
+            DataGridBind?.Unbind();
             NumericGrid = true;
             DataGridBind = new BoundData(rows, colnames, CsvLog.ExtendPath(OnLog, "BoundData"));
             DataGridBind.ListChanged += GridData_ListChanged;
-            DataGridBind.Setup(this);
+            DataGridBind.Setup(Grid);
             UpdateStatusStrip();
         }
 
@@ -870,8 +882,8 @@ namespace SehensWerte.Controls
 
         public string? GetCell(int colIndex, int rowIndex)
         {
-            bool valid = rowIndex >= 0 
-                && colIndex >= 0 
+            bool valid = rowIndex >= 0
+                && colIndex >= 0
                 && rowIndex < (DataGridBind?.FilteredData.Count ?? 0)
                 && colIndex < (DataGridBind?.ColumnNames.Count ?? 0);
             return valid ? ((DataGridBind?.FilteredData[rowIndex])?.Column(colIndex)) : null;

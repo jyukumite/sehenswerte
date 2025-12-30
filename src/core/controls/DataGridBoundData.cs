@@ -307,6 +307,11 @@ namespace SehensWerte.Controls
                 dataGrid.DataSource = this;
             }
 
+            public void Unbind()
+            {
+                // could release resources, but the GC should clean up anyway
+            }
+
             public void CellColour(int col, int row, Color colour)
             {
                 FilteredData[row].CellColour(col, colour);
