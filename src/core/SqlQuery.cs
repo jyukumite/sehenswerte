@@ -33,7 +33,7 @@ namespace SehensWerte.Utils
             List<string> columnNames = new List<string>();
             if (MainQuery(tokens).ToUpper() == "SELECT")
             {
-                while (tokens.Count() != 0 && peek(tokens).ToUpper() switch { "" => false, "FROM" => false, _ => true })
+                while (tokens.Count != 0 && peek(tokens).ToUpper() switch { "" => false, "FROM" => false, _ => true })
                 {
                     columnNames.Add(ParseName(tokens));
                     if (peek(tokens) == ",")
@@ -59,7 +59,7 @@ namespace SehensWerte.Utils
             string withTable = "";
             string? mainTable = null;
 
-            while (tokens.Count() >= 2 && mainTable == null)
+            while (tokens.Count >= 2 && mainTable == null)
             {
                 if (peek(tokens).ToUpper() == "WITH" && withTokens == null)
                 {
@@ -102,7 +102,7 @@ namespace SehensWerte.Utils
         {
             int? limit = null;
             //fixme: improve, unit test
-            while (tokens.Count() >= 2)
+            while (tokens.Count >= 2)
             {
                 if (peek(tokens) == "(")
                 {
@@ -130,7 +130,7 @@ namespace SehensWerte.Utils
                 if (next(tokens) != ";") return "";
             }
 
-            while (tokens.Count() != 0 && peek(tokens).ToUpper() == "WITH") // temporary tables
+            while (tokens.Count != 0 && peek(tokens).ToUpper() == "WITH") // temporary tables
             {
                 do
                 {
@@ -140,7 +140,7 @@ namespace SehensWerte.Utils
                     if (next(tokens).ToUpper() != "AS") return "";
                     if (next(tokens).ToUpper() != "(") return "";
                     skipPastClosingBracket(tokens);
-                } while (tokens.Count() != 0 && peek(tokens).ToUpper() == ",");
+                } while (tokens.Count != 0 && peek(tokens).ToUpper() == ",");
             }
             return next(tokens);
         }
@@ -150,7 +150,7 @@ namespace SehensWerte.Utils
             string[] hideFunctions = { "to_json" };
             StringBuilder fullClause = new StringBuilder();
             string name = "";
-            while (tokens.Count() != 0 && peek(tokens).ToUpper() switch { "" => false, "," => false, "FROM" => false, _ => true })
+            while (tokens.Count != 0 && peek(tokens).ToUpper() switch { "" => false, "," => false, "FROM" => false, _ => true })
             {
                 name = next(tokens, fullClause);
                 if (hideFunctions.Contains(name) && peek(tokens) == "(")
@@ -171,7 +171,7 @@ namespace SehensWerte.Utils
             string name;
             next(tokens, sum); // skip (
             name = "";
-            while (tokens.Count() != 0 && peek(tokens) != ")")
+            while (tokens.Count != 0 && peek(tokens) != ")")
             {
                 name = name + next(tokens, sum) + " ";
             }
@@ -181,7 +181,7 @@ namespace SehensWerte.Utils
 
         private static void skipPastClosingBracket(Queue<string> tokens, StringBuilder? sum = null)
         {
-            while (tokens.Count() != 0 && peek(tokens) != ")")
+            while (tokens.Count != 0 && peek(tokens) != ")")
             {
                 if (next(tokens, sum) == "(")
                 {

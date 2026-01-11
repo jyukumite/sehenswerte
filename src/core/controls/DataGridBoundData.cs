@@ -319,7 +319,7 @@ namespace SehensWerte.Controls
 
             public void Undo()
             {
-                if (UndoList.Count() > 0)
+                if (UndoList.Count > 0)
                 {
                     var undo = UndoList.Pop();
                     if (undo.VisibleRows != null)
@@ -367,7 +367,7 @@ namespace SehensWerte.Controls
 
             private void PushUndoVisibleRows()
             {
-                if (FilteredData.Count() > 0)
+                if (FilteredData.Count > 0)
                 {
                     UndoList.Push(new UndoEntry() { VisibleRows = FilteredData.ToList() });
                 }

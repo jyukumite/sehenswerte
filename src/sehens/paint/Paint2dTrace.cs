@@ -325,7 +325,7 @@ namespace SehensWerte.Controls.Sehens
             }
 
             bool dots = info.View0.PaintMode == TraceView.PaintModes.Points || info.View0.PaintMode == TraceView.PaintModes.PointsIfChanged;
-            if (DrawnPolygon != null && !dots && DrawnPolygon.Count() > 0)
+            if (DrawnPolygon != null && !dots && DrawnPolygon.Length > 0)
             {
                 using Brush brush = new SolidBrush(InterpolateColour(info.Skin.BackgroundColour, info.View0.Colour, 0, 1));
                 graphics.FillPolygon(brush, DrawnPolygon);

@@ -695,7 +695,7 @@ namespace SehensWerte.Maths
 
         public static double Product(this double[] lhs)
         {
-            double sum = lhs.Count() == 0 ? 0 : 1.0;
+            double sum = lhs.Length == 0 ? 0 : 1.0;
             foreach (var num in lhs)
             {
                 sum *= num;

@@ -2028,7 +2028,7 @@ value=" + string.Format(VerticalUnitFormat, Clicks[0].SampleAtX.ToStringRound(5,
 
                 case CalculatedTypes.Mean:
                     minimum(2);
-                    result = transposedMax.Select(x => x.ToArray()).Select(x => x.Sum() / x.Count()).ToArray();
+                    result = transposedMax.Select(x => x.ToArray()).Select(x => x.Sum() / x.Length).ToArray();
                     break;
 
                 case CalculatedTypes.Product:

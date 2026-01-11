@@ -340,7 +340,7 @@ namespace SehensWerte.Controls.Sehens
         {
             var avcodecAttr = typeof(T).GetField(value?.ToString() ?? "")
                 ?.GetCustomAttributes(typeof(AVCodecExtensionAttribute), inherit: false);
-            return avcodecAttr == null ? false : avcodecAttr.Count() > 0;
+            return avcodecAttr == null ? false : avcodecAttr.Length > 0;
         }
 
         public static void AddContextMenus(List<ScopeContextMenu.MenuItem> contextMenu, List<ScopeContextMenu.EmbeddedMenu> embeddedContextMenu)

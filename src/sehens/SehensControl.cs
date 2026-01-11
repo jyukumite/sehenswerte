@@ -1298,7 +1298,7 @@ namespace SehensWerte.Controls
             PaintBoxMouse.MouseMoveGroupIndex = MouseToGroupIndex(e.Y);
             PaintBoxMouse.MouseMoveGroupDisplay = MouseToGroupDisplayInfo(PaintBoxMouse.MouseMoveGroupIndex);
             PaintBoxMouse.MouseGuiSection = PaintBoxMouseInfo.GuiSection.None;
-            if (PaintBox.PaintedTraces.VisibleTraceGroupList.Count() == 0)
+            if (PaintBox.PaintedTraces.VisibleTraceGroupList.Count == 0)
             {
                 PaintBoxMouse.MouseGuiSection |= PaintBoxMouseInfo.GuiSection.EmptyScope;
             }

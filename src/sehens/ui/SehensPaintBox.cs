@@ -139,7 +139,7 @@ namespace SehensWerte.Controls.Sehens
         internal int MinimumGroupHeight =>
             Math.Max(
                 50,
-                Height / Math.Max(1, PaintedTraces.VisibleTraceGroupList.Count())
+                Height / Math.Max(1, PaintedTraces.VisibleTraceGroupList.Count)
             );
 
         internal int DefaultGroupHeight =>

@@ -752,8 +752,8 @@ namespace SehensWerte.Controls
 
         public void UpdateStatusStrip()
         {
-            int total = DataGridBind?.UnfilteredData.Count() ?? 0;
-            int showing = DataGridBind?.FilteredData.Count() ?? 0;
+            int total = DataGridBind?.UnfilteredData.Count ?? 0;
+            int showing = DataGridBind?.FilteredData.Count ?? 0;
             StatusFilterText.Text = (showing == total) ? $"{total}rows" : $"{showing}/{total}";
             StatusFilterText.Visible = true;
         }

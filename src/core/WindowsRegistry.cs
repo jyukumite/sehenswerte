@@ -14,6 +14,11 @@ namespace SehensWerte.Utils
             return registryKey;
         }
 
+        public static T ReadOrDefault<T>(string key, T def)
+        {
+            return (Read<T>(key, out var value) && value is not null) ? value : def;
+        }
+
         public static bool Read<T>(string key, out T? result)
         {
             string? registryKey = Key();
