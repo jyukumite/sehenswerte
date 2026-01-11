@@ -50,6 +50,45 @@ namespace SehensWerte.Utils
             return wineKey != null;
         }
 
+        public class RunningProcess : IDisposable
+        {
+            public System.Diagnostics.Process Process;
+            public StreamWriter Stdin;
+            public StreamReader Stdout;
+            public StreamReader Stderr;
+
+            internal RunningProcess(System.Diagnostics.Process p)
+            {
+                Process = p;
+                Stdin = p.StandardInput;
+                Stdout = p.StandardOutput;
+                Stderr = p.StandardError;
+            }
+
+            public void Dispose()
+            {
+                Stop();
+                Process.Dispose();
+            }
+
+            public void Stop()
+            {
+                try { Stdin.Close(); } catch { }
+                try { Process.Kill(); } catch { }
+            }
+        }
+
+        public static RunningProcess Start(
+            string executableName,
+            string parameters,
+            string workingFolder,
+            Dictionary<string, string>? environment = null)
+        {
+            ProcessStartInfo info = GetProcessStartInfo(executableName, parameters, workingFolder, environment);
+            var process = new System.Diagnostics.Process { StartInfo = info };
+            process.Start();
+            return new RunningProcess(process);
+        }
 
         public static int Run(string exeName, string parameters, string stdin, MemoryStream stdout)
         {
@@ -92,21 +131,7 @@ namespace SehensWerte.Utils
                     throw new FileNotFoundException();
                 }
             }
-            ProcessStartInfo info = new ProcessStartInfo(executableName, parameters);
-            info.CreateNoWindow = true;
-            info.ErrorDialog = false;
-            info.RedirectStandardError = true;
-            info.RedirectStandardInput = true;
-            info.RedirectStandardOutput = true;
-            info.UseShellExecute = false;
-            info.WorkingDirectory = workingfolder;
-            if (environment != null)
-            {
-                foreach (var item in environment)
-                {
-                    info.EnvironmentVariables[item.Key] = item.Value;
-                }
-            }
+            ProcessStartInfo info = GetProcessStartInfo(executableName, parameters, workingfolder, environment);
             System.Diagnostics.Process process = new System.Diagnostics.Process();
             process.StartInfo = info;
             process.Start();
@@ -127,6 +152,29 @@ namespace SehensWerte.Utils
 
             thread.Join();
             return process.ExitCode;
+        }
+
+        private static ProcessStartInfo GetProcessStartInfo(string executableName, string parameters, string workingfolder, Dictionary<string, string>? environment)
+        {
+            ProcessStartInfo info = new ProcessStartInfo(executableName, parameters)
+            {
+                CreateNoWindow = true,
+                ErrorDialog = false,
+                RedirectStandardError = true,
+                RedirectStandardInput = true,
+                RedirectStandardOutput = true,
+                UseShellExecute = false,
+                WorkingDirectory = workingfolder
+            };
+            if (environment != null)
+            {
+                foreach (var item in environment)
+                {
+                    info.EnvironmentVariables[item.Key] = item.Value;
+                }
+            }
+
+            return info;
         }
 
         public static string FindExeInPath(string exe)
