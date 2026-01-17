@@ -72,7 +72,7 @@ namespace SehensWerte.Utils
                     next(tokens);
                     skipPastClosingBracket(tokens);
                 }
-                else if (next(tokens).ToUpper() == "FROM")
+                else if (new string[] { "FROM", "UPDATE" }.Contains(next(tokens).ToUpper()))
                 {
                     mainTable = next(tokens);
                     if (mainTable.ToLower() == withTable.ToLower())
@@ -681,6 +681,7 @@ newline and "" and ''.'", ",",
                 Assert.AreEqual("bob", SqlQuery.MainTable("SELECT foo FROM bob WHERE foo='something';"));
                 Assert.AreEqual("bob", SqlQuery.MainTable("WITH withtable AS (SELECT something FROM bob) SELECT foo FROM withtable WHERE foo='something';"));
                 Assert.AreEqual("bob", SqlQuery.MainTable("WITH withtable AS (SELECT (nested brackets not real sql) FROM bob) SELECT foo FROM withtable WHERE foo='something';"));
+                Assert.AreEqual("bob", SqlQuery.MainTable("UPDATE bob SET foo=42 WHERE something=true;"));
             }
         }
 
