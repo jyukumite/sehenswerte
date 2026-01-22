@@ -172,9 +172,9 @@ namespace SehensWerte.Files
                 List<StringBuilder>? headings = ReadNextMergedRow();
                 if (headings != null && headings.Count != 0 && (HeaderRowPrefix == "" || (asString?.StartsWith(HeaderRowPrefix) ?? false)))
                 {
-                    if (headings[headings.Count - 1].Length == 0) // dangling ,
+                    while (headings.Count > 0 && headings[headings.Count - 1].Length == 0) // dangling ,
                     {
-                        headings.RemoveAt(ColumnHeadings.Count - 1);
+                        headings.RemoveAt(headings.Count - 1);
                     }
                     ColumnHeadings = headings.Select(x => x.ToString()).ToList();
                     found = true;

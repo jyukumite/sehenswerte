@@ -332,19 +332,25 @@ namespace SehensWerte.Controls
             {
                 string[] formats = new string[] { DataFormats.Html, DataFormats.Text, DataFormats.UnicodeText, DataFormats.CommaSeparatedValue };
 
-
                 if (DataGridBind != null)
                 {
-                    //var temp = Grid.GetClipboardContent();
-                    var data = DataGridBind.SelectedCellsToClipboardFormats(NumericGrid);
-                    var dataObj = new DataObject();
-                    dataObj.SetData(DataFormats.Text, data.tsv);
-                    dataObj.SetData(DataFormats.UnicodeText, data.tsv);
-                    dataObj.SetData(DataFormats.Html, data.wrappedHtml);
-                    dataObj.SetData(DataFormats.CommaSeparatedValue, data.csv);
-                    Clipboard.SetDataObject(dataObj, true);
+                    try
+                    {
+                        //var temp = Grid.GetClipboardContent();
+                        var data = DataGridBind.SelectedCellsToClipboardFormats(NumericGrid);
+                        var dataObj = new DataObject();
+                        dataObj.SetData(DataFormats.Text, data.tsv);
+                        dataObj.SetData(DataFormats.UnicodeText, data.tsv);
+                        dataObj.SetData(DataFormats.Html, data.wrappedHtml);
+                        dataObj.SetData(DataFormats.CommaSeparatedValue, data.csv);
+                        Clipboard.SetDataObject(dataObj, true);
+                    }
+                    catch (Exception ex)
+                    {
+                        MessageBox.Show(ex.ToString());
+                    }
+                    e.Handled = true;
                 }
-                e.Handled = true;
             }
             else if (Grid.CurrentCell != null)
             {
@@ -747,7 +753,8 @@ namespace SehensWerte.Controls
 
         public void SortByColumn(string heading)
         {
-            Grid.Sort(Grid.Columns[heading], ListSortDirection.Ascending);
+            DataGridViewColumn dataGridViewColumn = Grid.Columns[heading];
+            Grid.Sort(dataGridViewColumn, ListSortDirection.Ascending);
         }
 
         public void UpdateStatusStrip()
