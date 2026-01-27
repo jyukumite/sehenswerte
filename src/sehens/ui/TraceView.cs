@@ -1693,7 +1693,6 @@ namespace SehensWerte.Controls.Sehens
                     if (m_PaintMode == PaintModes.PeakHold && !CalculateAfterZoom)
                     {
                         PeakHold(samples, startTrigger, samples.Length - startTrigger);
-                        if (m_PeakHoldAll == null) throw new NullReferenceException();
                         return (m_PeakHoldAll.Min.Copy(), m_PeakHoldAll.Max.Copy());
                     }
                 }
@@ -1710,9 +1709,12 @@ namespace SehensWerte.Controls.Sehens
         {
             if (m_PaintMode == PaintModes.PeakHold && CalculateAfterZoom)
             {
-                PeakHold(drawnSamples, 0, drawnSamples.Length);
-                peakMax = m_PeakHoldAll.Max;
-                peakMin = m_PeakHoldAll.Min;
+                lock (m_Samples.DataLock) //locked again inside PeakHold
+                {
+                    PeakHold(drawnSamples, 0, drawnSamples.Length);
+                    peakMax = m_PeakHoldAll.Max;
+                    peakMin = m_PeakHoldAll.Min;
+                }
             }
         }
 
@@ -2120,16 +2122,13 @@ value=" + string.Format(VerticalUnitFormat, Clicks[0].SampleAtX.ToStringRound(5,
 
         private void PeakHold(double[] samples, int start, int count)
         {
-            lock (m_Samples.DataLock)
+            if (m_PeakHoldAll == null)
             {
-                if (m_PeakHoldAll == null)
-                {
-                    m_PeakHoldAll = new TraceDataPeakHold(samples, start, count);
-                }
-                else
-                {
-                    m_PeakHoldAll.Peak(samples, start, count);
-                }
+                m_PeakHoldAll = new TraceDataPeakHold(samples, start, count);
+            }
+            else
+            {
+                m_PeakHoldAll.Peak(samples, start, count);
             }
         }
 
