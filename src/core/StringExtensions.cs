@@ -157,8 +157,9 @@ namespace SehensWerte
             return sb.ToString();
         }
 
-        public static bool ToBool(this string str)
+        public static bool ToBool(this string? str)
         {
+            if (str == null) return false;
             str = str.Trim();
             if (str.Length == 0) return false;
             if (bool.TryParse(str, out var result)) return result;
