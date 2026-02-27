@@ -629,10 +629,10 @@ namespace SehensWerte.Maths
                     : fftwf_plan_dft_3d_64(nx, ny, nz, input, output, direction, flags);
             }
 
-            [DllImport("libfftw3f-3_32.dll", CallingConvention = CallingConvention.Cdecl, EntryPoint = "fftw_plan_with_nthreads", ExactSpelling = true)]
+            [DllImport("libfftw3f-3_32.dll", CallingConvention = CallingConvention.Cdecl, EntryPoint = "fftwf_plan_with_nthreads", ExactSpelling = true)]
             public static extern IntPtr fftw_plan_with_nthreads_32(int n);
 
-            [DllImport("libfftw3f-3_64.dll", CallingConvention = CallingConvention.Cdecl, EntryPoint = "fftwf_plan_dft_3d", ExactSpelling = true)]
+            [DllImport("libfftw3f-3_64.dll", CallingConvention = CallingConvention.Cdecl, EntryPoint = "fftwf_plan_with_nthreads", ExactSpelling = true)]
             public static extern IntPtr fftw_plan_with_nthreads_64(int n);
 
             public static void fftw_plan_with_nthreads(int n)
