@@ -20,7 +20,7 @@ namespace SehensWerte.Filters
             double num = value - m_Charge;
             if (AdaptiveOutputLimit > 0.0)
             {
-                num = ((num > AdaptiveOutputLimit) ? AdaptiveOutputLimit : ((num < AdaptiveOutputLimit) ? (0.0 - AdaptiveOutputLimit) : num));
+                num = ((num > AdaptiveOutputLimit) ? AdaptiveOutputLimit : ((num < -AdaptiveOutputLimit) ? (0.0 - AdaptiveOutputLimit) : num));
             }
             m_Charge += num * m_Coefficient;
             return m_LastOutput = m_Charge;

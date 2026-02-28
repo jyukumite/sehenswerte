@@ -1,3 +1,4 @@
+using Microsoft.VisualStudio.TestTools.UnitTesting;
 using System.Collections;
 using System.Globalization;
 using System.IO.Compression;
@@ -121,9 +122,26 @@ namespace SehensWerte.Files
                 }
                 builder.Append(separator);
             }
-            builder.Remove(builder.Length - 1, 1);
+            if (builder.Length > 0) builder.Remove(builder.Length - 1, 1);
             var csvTextString = builder.ToString();
             return csvTextString;
+        }
+    }
+
+    [TestClass]
+    public class CSVSaveTests
+    {
+        [TestMethod]
+        public void TestBasic()
+        {
+            Assert.AreEqual("a,b,c", CSVSave.RowToCsvText(new object[] { "a", "b", "c" }));
+            Assert.AreEqual("1,2.5,3", CSVSave.RowToCsvText(new object[] { 1, 2.5, 3 }));
+            Assert.AreEqual("a,null,c", CSVSave.RowToCsvText(new object?[] { "a", null, "c" }));
+            Assert.AreEqual("a,\"hel,lo\",c", CSVSave.RowToCsvText(new object[] { "a", "hel,lo", "c" }));
+            Assert.AreEqual("a,\"say \\\"hi\\\"\",c".Replace("\\\"", "\"\""), CSVSave.RowToCsvText(new object[] { "a", "say \"hi\"", "c" }));
+            Assert.AreEqual("a,\"line1\nline2\",c", CSVSave.RowToCsvText(new object[] { "a", "line1\nline2", "c" }));
+            Assert.AreEqual("", CSVSave.RowToCsvText(new object[0]));
+            Assert.AreEqual("only", CSVSave.RowToCsvText(new object[] { "only" }));
         }
     }
 }

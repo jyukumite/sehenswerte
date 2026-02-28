@@ -588,7 +588,7 @@ namespace SehensWerte.Files
                     throw new Exception($"Could find best stream - {stream_index}");
                 }
 
-                IntPtr avStreamPtr = Marshal.ReadIntPtr(formatContext.streams, stream_index);
+                IntPtr avStreamPtr = Marshal.ReadIntPtr(formatContext.streams, stream_index * IntPtr.Size);
                 var avStream = Marshal.PtrToStructure<AVStream>(avStreamPtr);
 
                 var codecPar = Marshal.PtrToStructure<AVCodecParameters>(avStream.codecpar);
@@ -701,6 +701,10 @@ namespace SehensWerte.Files
                                 7 => frame.data7,
                                 _ => throw new ArgumentOutOfRangeException(nameof(ch), "Invalid channel index")
                             };
+                            if (channelPtr == IntPtr.Zero)
+                            {
+                                continue; // Skip null channel pointers
+                            }
 
                             switch ((AVSampleFormat)codecContext.sample_fmt)
                             {

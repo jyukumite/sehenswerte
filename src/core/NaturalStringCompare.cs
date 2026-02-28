@@ -7,7 +7,10 @@ namespace SehensWerte
     {
         public int Compare(string? x, string? y)
         {
-            return (x == null || y == null) ? -1 : NaturalStringCompare.CompareStrings(x, y);
+            if (x == null && y == null) return 0;
+            if (x == null) return -1; // nulls sort to top
+            if (y == null) return 1;
+            return NaturalStringCompare.CompareStrings(x, y);
         }
 
         //note: only understands invariant culture numbers (period for decimals, numeric comma ignored)

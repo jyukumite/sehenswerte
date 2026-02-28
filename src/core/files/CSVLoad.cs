@@ -1,3 +1,4 @@
+using Microsoft.VisualStudio.TestTools.UnitTesting;
 using System.Collections;
 using System.IO.Compression;
 using System.Text;
@@ -79,8 +80,7 @@ namespace SehensWerte.Files
         public List<string> ColumnHeadings;
         public int ColCount => ColumnHeadings.Count;
         public List<T[]> Rows;
-        public int RowCount { get { return CountedRows; } }
-        private int CountedRows = 0;
+        public int RowCount => Rows.Count;
 
         public T Default;
         public string HeaderRowPrefix;
@@ -268,7 +268,6 @@ namespace SehensWerte.Files
                     }
                     Rows.Add(row.Select(x => OnParse(x.ToString())).Take(ColCount).ToArray());
                 }
-                CountedRows++;
             }
         }
 
@@ -281,10 +280,101 @@ namespace SehensWerte.Files
         {
             return new CSVEnumerator<T>(this);
         }
+    }
 
-        private object ArrayToObject(T[] toConvert)
+    [TestClass]
+    public class CSVLoadTests
+    {
+        private static CSVLoad<string> FromString(string csv)
         {
-            return toConvert;
+            var stream = new MemoryStream(Encoding.UTF8.GetBytes(csv));
+            return new CSVLoad<string>(new StreamReader(stream), s => s, "", ',');
+        }
+
+        [TestMethod]
+        public void TestBasic()
+        {
+            var csv = FromString("a,b,c\n1,2,3\n4,5,6\n");
+            CollectionAssert.AreEqual(new[] { "a", "b", "c" }, csv.ColumnHeadings);
+            Assert.AreEqual(2, csv.RowCount);
+            CollectionAssert.AreEqual(new[] { "1", "2", "3" }, csv.Rows[0]);
+            CollectionAssert.AreEqual(new[] { "4", "5", "6" }, csv.Rows[1]);
+        }
+
+        [TestMethod]
+        public void TestNullFields()
+        {
+            // empty fields between commas parse as empty string
+            var csv = FromString("a,b,c\n1,,3\n,b2,\n");
+            CollectionAssert.AreEqual(new[] { "1", "", "3" }, csv.Rows[0]);
+            CollectionAssert.AreEqual(new[] { "", "b2", "" }, csv.Rows[1]);
+        }
+
+        [TestMethod]
+        public void TestBlankLine()
+        {
+            // blank line in data becomes a row of empty strings
+            var csv = FromString("a,b,c\n1,2,3\n\n4,5,6\n");
+            Assert.AreEqual(3, csv.RowCount);
+            CollectionAssert.AreEqual(new[] { "", "", "" }, csv.Rows[1]);
+            CollectionAssert.AreEqual(new[] { "4", "5", "6" }, csv.Rows[2]);
+        }
+
+        [TestMethod]
+        public void TestQuotedComma()
+        {
+            // comma inside quotes is not a separator
+            var csv = FromString("a,b,c\n\"hello, world\",2,3\n");
+            CollectionAssert.AreEqual(new[] { "hello, world", "2", "3" }, csv.Rows[0]);
+        }
+
+        [TestMethod]
+        public void TestQuotedNewline()
+        {
+            // newline inside quotes merges lines into a single field
+            var csv = FromString("a,b,c\n\"line1\nline2\",2,3\n");
+            Assert.AreEqual(1, csv.RowCount);
+            Assert.AreEqual("line1\nline2", csv.Rows[0][0]);
+            Assert.AreEqual("2", csv.Rows[0][1]);
+            Assert.AreEqual("3", csv.Rows[0][2]);
+        }
+
+        [TestMethod]
+        public void TestFewerHeadersThanColumns()
+        {
+            // data row has more columns than header - extras are dropped
+            var csv = FromString("a,b\n1,2,3,4\n");
+            Assert.AreEqual(2, csv.ColCount);
+            CollectionAssert.AreEqual(new[] { "1", "2" }, csv.Rows[0]);
+        }
+
+        [TestMethod]
+        public void TestMoreHeadersThanColumns()
+        {
+            // data row has fewer commas than header - missing columns padded with empty string
+            var csv = FromString("a,b,c\n1,2\n");
+            Assert.AreEqual(3, csv.ColCount);
+            CollectionAssert.AreEqual(new[] { "1", "2", "" }, csv.Rows[0]);
+        }
+
+        [TestMethod]
+        public void TestTrailingDanglingCommaInHeader()
+        {
+            // trailing comma on header row is stripped
+            var csv = FromString("a,b,c,\n1,2,3\n");
+            Assert.AreEqual(3, csv.ColCount);
+            CollectionAssert.AreEqual(new[] { "a", "b", "c" }, csv.ColumnHeadings);
+        }
+
+        [TestMethod]
+        public void TestColumnIndexer()
+        {
+            var csv = FromString("a,b,c\n1,2,3\n");
+            CSVRow<string> row = csv[0];
+            Assert.AreEqual("1", row["a"]);
+            Assert.AreEqual("2", row["b"]);
+            Assert.AreEqual("3", row["c"]);
+            Assert.AreEqual("", row["missing"]); // returns default
         }
     }
 }

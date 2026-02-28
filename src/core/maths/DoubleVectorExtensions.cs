@@ -459,7 +459,7 @@ namespace SehensWerte.Maths
             for (int loop = 0; loop < result.Length; loop++)
             {
                 double value = lhs[loop] * scale;
-                result[loop] = (int)Math.Round(value, MidpointRounding.AwayFromZero);
+                result[loop] = Math.Round(value, MidpointRounding.AwayFromZero) / scale;
             }
             return result;
         }
@@ -797,7 +797,7 @@ namespace SehensWerte.Maths
                 {
                     x2 + (1.0 - x2) * c,
                     x * y * (1.0 - c) - z * s,
-                    x * y * (1.0 - c) + y * s
+                    x * z * (1.0 - c) + y * s
                 },
                 {
                     x * y * (1.0 - c) + z * s,
@@ -1040,7 +1040,7 @@ namespace SehensWerte.Maths
         public void TestQuantize()
         {
             Assert.IsTrue(new double[] { 1, 2, 3 }.Quantize(1.2, 3.2, 3).IsEqualTo(new double[] { 1.2, 2.2, 3.2 }, 0.001));
-            Assert.IsTrue(new double[] { 1.1, 2.1, 3.3 }.Quantize(3).IsEqualTo(new double[] { 3, 6, 10 }, 0.001));
+            Assert.IsTrue(new double[] { 1.1, 2.1, 3.3 }.Quantize(3).IsEqualTo(new double[] { 1.0, 2.0, 10.0 / 3.0 }, 0.001));
         }
 
         [TestMethod]
@@ -1075,6 +1075,8 @@ namespace SehensWerte.Maths
             test3(rot, new double[,] { { 0.7071, -0.7071, 0 }, { 0.7071, 0.7071, 0 }, { 0, 0, 1 } });
             double[] vec1 = new double[] { 0, 0, 1 }.RotateAroundBy(new double[] { 0, 1, 0 }, Math.PI / 4);
             test2(vec1, new double[] { 0.7071, 0, 0.7071 });
+            double[] vec1b = new double[] { 0, 0, 1 }.RotateAroundBy(new double[] { 1, 0, 1 }, Math.PI / 2);
+            test2(vec1b, new double[] { 0.5, -0.7071, 0.5 });
             double[] vec2 = new double[] { 0, 0, 1 }.RotateAroundBy(new double[] { 0, Math.PI / 4, 0 });
             test2(vec2, new double[] { 0.7071, 0, 0.7071 });
             double[] vec3 = new double[] { 1, 0, 0 }.CrossProduct(new double[] { 0, 1, 0 });

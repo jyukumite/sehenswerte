@@ -14,7 +14,7 @@ namespace SehensWerte
     {
         public static bool CompareConstantTime(this string a, string b)
         {
-            int result = (char)(a.Length ^ b.Length);
+            int result = a.Length ^ b.Length;
             for (int loop = 0; loop < a.Length && loop < b.Length; loop++)
             {
                 result |= (int)(a[loop] ^ b[loop]);

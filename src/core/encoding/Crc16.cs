@@ -27,6 +27,7 @@ namespace SehensWerte.Utils
 
         public ushort Compute(byte[] bytes)
         {
+            // Note: does not call Initialize() first, so successive calls continue accumulating from the previous result.
             HashCore(bytes, 0, bytes.Length);
             return m_Result;
         }

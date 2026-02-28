@@ -129,6 +129,30 @@ namespace SehensWerte.Utils
         [TestMethod]
         public void TestBits()
         {
+            // ReadBits from byte array
+            byte[] data = new byte[] { 0xCA, 0x55 }; // 11001010 01010101
+            Assert.AreEqual(0xCu, FormatBits.ReadBits(data, 0, 4));   // top 4 bits of 0xCA
+            Assert.AreEqual(0xAu, FormatBits.ReadBits(data, 4, 4));   // bottom 4 bits of 0xCA
+            Assert.AreEqual(0xCAu, FormatBits.ReadBits(data, 0, 8));  // full first byte
+            Assert.AreEqual(0xA5u, FormatBits.ReadBits(data, 4, 8));  // 1010_0101 straddling bytes
+
+            // ReadBitsSigned
+            Assert.AreEqual(-1, FormatBits.ReadBitsSigned(new byte[] { 0xF0 }, 0, 4)); // 1111 sign-extended
+            Assert.AreEqual(7, FormatBits.ReadBitsSigned(new byte[] { 0x70 }, 0, 4));  // 0111 positive
+
+            // ReadUInt16 / ReadInt16 (big-endian)
+            Assert.AreEqual((ushort)0x1234, FormatBits.ReadUInt16(new byte[] { 0x12, 0x34 }, 0));
+            Assert.AreEqual((short)-32768, FormatBits.ReadInt16(new byte[] { 0x80, 0x00 }, 0));
+
+            // WriteBits to uint array
+            uint[] words = new uint[1];
+            FormatBits.WriteBits(words, 0xA, 0, 4); // write 1010 at top
+            Assert.AreEqual(0xA0000000u, words[0]);
+
+            // FromBase32: "MY" decodes to [0x66] ('f')
+            CollectionAssert.AreEqual(new byte[] { 0x66 }, FormatBits.FromBase32("MY"));
+            // "MFRA" decodes to [0x61, 0x62] ('a','b')
+            CollectionAssert.AreEqual(new byte[] { 0x61, 0x62 }, FormatBits.FromBase32("MFRA"));
         }
     }
 }
