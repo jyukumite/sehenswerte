@@ -12,7 +12,7 @@ namespace SehensWerte.Maths
 
         public double Range => Max - Min;
         public double Average => Count <= 0 ? 0.0 : Sum / Count;
-        public double Rms => Math.Sqrt(SumSquares / Count);
+        public double Rms => Count <= 0 ? 0.0 : Math.Sqrt(SumSquares / Count);
         public double StdDev => Math.Sqrt(Variance);
 
         public double Variance
@@ -78,7 +78,7 @@ namespace SehensWerte.Maths
             }
             Sum += stat.Sum;
             SumSquares += stat.SumSquares;
-            SumCodeviates = stat.SumCodeviates;
+            SumCodeviates += stat.SumCodeviates;
             Count += stat.Count;
             return LastInput;
         }

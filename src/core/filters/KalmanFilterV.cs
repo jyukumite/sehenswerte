@@ -25,7 +25,7 @@ namespace SehensWerte.Filters
             {
                 throw new Exception("Different lengths");
             }
-            if (velocityFactor.Length < 1 && velocityFactor.Length > 3)
+            if (velocityFactor.Length < 1 || velocityFactor.Length > 3)
             {
                 throw new Exception("1-3 dimensions only");
             }

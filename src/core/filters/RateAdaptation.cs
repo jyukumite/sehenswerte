@@ -15,6 +15,7 @@ namespace SehensWerte.Filters
         public int BufferSize { get => m_OutputBuffer?.Length ?? 0; set { Filter.EnsureBufferSize(ref m_OutputBuffer, value); } }
         public SampleRateChangeFilter(IFilterSource source, double from, double to)
         {
+            if (to == 0) throw new ArgumentException("Target sample rate must be non-0");
             m_Step = from / to;
             Filter.EnsureBufferSize(ref m_OutputBuffer, (int)((source.BufferSize * to / from) + 1));
             m_SourceFilter = source;

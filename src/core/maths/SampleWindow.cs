@@ -32,6 +32,7 @@ namespace SehensWerte.Maths
                 case WindowType.Rectangular: fn = Rectangular; break;
                 default: throw new NotImplementedException();
             }
+            if (length == 1) return new double[] { 1.0 };
             int mid = (length + length % 2) / 2;
             for (int loop = 0; loop <= mid; loop++)
             {

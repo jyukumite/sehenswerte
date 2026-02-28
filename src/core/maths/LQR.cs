@@ -153,6 +153,25 @@ namespace SehensWerte.Maths
         }
     }
 
+    [TestClass]
+    public class LQRTests
+    {
+        [TestMethod]
+        public void TestRiccatiSolution()
+        {
+            // For scalar A=B=Q=R=1 the analytical ARE solution is P=(1+√5)/2 ≈ 1.618, K=(√5-1)/2 ≈ 0.618.
+            var A = new double[,] { { 1.0 } };
+            var B = new double[,] { { 1.0 } };
+            var Q = new double[,] { { 1.0 } };
+            var R = new double[,] { { 1.0 } };
+            var (K, P) = LQR.SolveLQR(A, B, Q, R, maxIterations: 100);
+            double goldenRatio = (1.0 + Math.Sqrt(5.0)) / 2.0; // 1.618
+            double expectedK = (Math.Sqrt(5.0) - 1.0) / 2.0; // 0.618
+            Assert.AreEqual(goldenRatio, P[0, 0], 0.01);
+            Assert.AreEqual(expectedK, K[0, 0], 0.01);
+        }
+    }
+
 
 
     public class LQR
@@ -186,7 +205,9 @@ namespace SehensWerte.Maths
                 K = invTerm.Product(BT_P_A);  // K = (R + B^T P B)^-1 B^T P A
 
                 double[,] A_minus_BK = A.Subtract(B.Product(K));
-                double[,] P_next = A_minus_BK.Transpose().Product(P).Product(A_minus_BK).Add(Q);
+                double[,] P_next = A_minus_BK.Transpose().Product(P).Product(A_minus_BK)
+                       .Add(K.Transpose().Product(R).Product(K))
+                       .Add(Q);
 
                 double diff = MatrixNorm(P_next.Subtract(P));
                 P = P_next;

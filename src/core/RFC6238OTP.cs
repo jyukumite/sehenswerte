@@ -1,4 +1,5 @@
-﻿using SehensWerte.Utils;
+﻿using Microsoft.VisualStudio.TestTools.UnitTesting;
+using SehensWerte.Utils;
 using System.Net;
 using System.Security.Cryptography;
 
@@ -38,7 +39,8 @@ namespace SehensWerte
             ulong index = Index(date);
             byte[] challenge = BitConverter.GetBytes(IPAddress.HostToNetworkOrder((long)index));
             var key = FormatBits.FromBase32(secret);
-            var hash = new HMACSHA1(key).ComputeHash(challenge);
+            using var hmac = new HMACSHA1(key);
+            var hash = hmac.ComputeHash(challenge);
             int offset = hash[hash.Length - 1] & 0xf;
             int code = 0;
             for (int loop = 0; loop < 4; loop++)
@@ -59,6 +61,42 @@ namespace SehensWerte
                 }
             }
             return false;
+        }
+    }
+
+    [TestClass]
+    public class RFC6238OTPTests
+    {
+        // Base32 encoding of ASCII "12345678901234567890" (RFC 6238 Appendix B test secret)
+        private const string RfcSecret = "GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ";
+        private static readonly DateTime Epoch = new(1970, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+
+        [TestMethod]
+        public void TestKnownVectors()
+        {
+            // RFC 6238 Appendix B TOTP-SHA1 test vectors
+            Assert.AreEqual("287082", RFC6238OTP.GetVerificationCode(RfcSecret, Epoch.AddSeconds(59)));
+            Assert.AreEqual("081804", RFC6238OTP.GetVerificationCode(RfcSecret, Epoch.AddSeconds(1111111109)));
+            Assert.AreEqual("005924", RFC6238OTP.GetVerificationCode(RfcSecret, Epoch.AddSeconds(1234567890)));
+        }
+
+        [TestMethod]
+        public void TestCheckAcceptReject()
+        {
+            var now = DateTime.UtcNow;
+            string code = RFC6238OTP.GetVerificationCode(RfcSecret, now);
+            Assert.IsTrue(RFC6238OTP.CheckVerificationCode(RfcSecret, code, now, allowedRange: 0));
+            Assert.IsFalse(RFC6238OTP.CheckVerificationCode("AAAAAAAAAAAAAAAA", code, now, allowedRange: 0));
+            string oldCode = RFC6238OTP.GetVerificationCode(RfcSecret, now.AddSeconds(-300)); // 10 intervals ago
+            Assert.IsFalse(RFC6238OTP.CheckVerificationCode(RfcSecret, oldCode, now, allowedRange: 1));
+        }
+
+        [TestMethod]
+        public void TestGenerateSecretLength()
+        {
+            string secret = RFC6238OTP.GenerateSecret(16);
+            Assert.AreEqual(16, secret.Length);
+            Assert.IsTrue(secret.All(c => "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567".Contains(c)));
         }
     }
 }

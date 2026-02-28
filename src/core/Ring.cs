@@ -1,4 +1,7 @@
-﻿namespace SehensWerte.Maths
+﻿using Microsoft.VisualStudio.TestTools.UnitTesting;
+using SehensWerte.Filters;
+
+namespace SehensWerte.Maths
 {
     public class Ring<T>
     {
@@ -138,6 +141,58 @@
         public int TailCount(int tail) // head-tail
         {
             return (m_Head + m_Array.Length - tail) % m_Array.Length;
+        }
+    }
+
+    [TestClass]
+    public class RingTests
+    {
+        [TestMethod]
+        public void TestInsertReturnWhileFilling()
+        {
+            var ring = new Ring<double>(3);
+            Assert.AreEqual(0.0, ring.Insert(10.0), "t=0: not full, expect 0");
+            Assert.AreEqual(0.0, ring.Insert(20.0), "t=1: not full, expect 0");
+            Assert.AreEqual(0.0, ring.Insert(30.0), "t=2: not full, expect 0");
+        }
+
+        [TestMethod]
+        public void TestInsertReturnWhenFull()
+        {
+            // Once full, Insert displaces the oldest element; the return value should be that displaced element
+            var ring = new Ring<double>(3);
+            ring.Insert(10.0);
+            ring.Insert(20.0);
+            ring.Insert(30.0);
+            Assert.AreEqual(10.0, ring.Insert(40.0), "t=3: displaced 10");
+            Assert.AreEqual(20.0, ring.Insert(50.0), "t=4: displaced 20");
+            Assert.AreEqual(30.0, ring.Insert(60.0), "t=5: displaced 30");
+        }
+
+        [TestMethod]
+        public void TestDelayFilterDelay3()
+        {
+            // DelayFilter(n) wraps Ring<double>(n)
+            var filter = new DelayFilter(3);
+            double[] input    = { 1, 2, 3, 4, 5, 6, 7 };
+            double[] expected = { 0, 0, 0, 1, 2, 3, 4 };
+            for (int i = 0; i < input.Length; i++)
+            {
+                Assert.AreEqual(expected[i], filter.Insert(input[i]), $"t={i}");
+            }
+        }
+
+        [TestMethod]
+        public void TestDelayFilterDelay1()
+        {
+            // Edge case: delay of 1.
+            var filter = new DelayFilter(1);
+            double[] input    = { 5, 10, 15 };
+            double[] expected = { 0,  5, 10 };
+            for (int i = 0; i < input.Length; i++)
+            {
+                Assert.AreEqual(expected[i], filter.Insert(input[i]), $"t={i}");
+            }
         }
     }
 }

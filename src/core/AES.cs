@@ -75,7 +75,7 @@ namespace SehensWerte.Utils
             byte[] iv16B = bytes.Take(16).ToArray();
             byte[] cypher = bytes.Skip(16).ToArray();
             byte[] result = Decrypt(cypher, key32B, iv16B) ?? new byte[0];
-            return Encoding.Default.GetString(result);
+            return Encoding.UTF8.GetString(result);
         }
     }
 
@@ -91,6 +91,15 @@ namespace SehensWerte.Utils
 
             Assert.IsTrue(cyphertext != cleartext);
             Assert.IsTrue(AES.DecryptString(cyphertext, password) == cleartext);
+        }
+
+        [TestMethod]
+        public void TestAESNonAscii()
+        {
+            const string cleartext = "caf\u00e9 \u00f1 \u00e4\u00f6\u00fc"; // café ñ äöü
+            const string password = "password";
+            string cyphertext = AES.EncryptString(cleartext, password);
+            Assert.AreEqual(cleartext, AES.DecryptString(cyphertext, password));
         }
     }
 }
