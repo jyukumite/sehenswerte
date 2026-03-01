@@ -95,14 +95,18 @@ namespace SehensWerte.Controls
             FormBorderStyle = FormBorderStyle.Sizable;
             MaximizeBox = false;
             SizeGripStyle = SizeGripStyle.Show;
+            ClientSize = new Size(400, 8 + 24 + 8 + 20 + 8 + 32 + 8);
 
             Shown += (sender, e) => { ActiveControl = EditResult; };
             Resize += (s, e) => UpdateControls();
             Load += (s, e) =>
             {
-                MinimumSize = GetMinimumSize();
-                Size = MinimumSize;
                 UpdateControls();
+                var neededClientHeight = ButtonOK.Bottom + 8;
+                var nonClientSize = Size - ClientSize;
+                MinimumSize = new Size(400 + nonClientSize.Width, neededClientHeight + nonClientSize.Height);
+                if (!MultiLine) MaximumSize = new Size(Screen.FromControl(this).WorkingArea.Width, MinimumSize.Height);
+                ClientSize = new Size(ClientSize.Width, neededClientHeight);
             };
 
             ResumeLayout(false);
