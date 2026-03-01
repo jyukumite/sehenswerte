@@ -35,7 +35,7 @@ namespace SehensWerte.Controls
         private HScrollBar HorizontalBar;
         private Panel panelUI;
         private ComboBox ComboFilter;
-        public const int LineHeight = 15;
+        public int LineHeight => TextFont.Height + 2;
 
         private ConcurrentQueue<LogEntry> LogInputQueue = new ConcurrentQueue<LogEntry>();
         private LinkedList<LogEntryRow> LogQueue = new LinkedList<LogEntryRow>();

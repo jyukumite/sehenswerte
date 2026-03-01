@@ -144,7 +144,7 @@ namespace SehensWerte.Controls
             this.Grid.Margin = new System.Windows.Forms.Padding(4);
             this.Grid.Name = "DataGrid";
             this.Grid.RowHeadersWidth = 78;
-            this.Grid.RowTemplate.Height = 28;
+            this.Grid.RowTemplate.Height = (int)(28 * DeviceDpi / 96f);
             this.Grid.Size = new System.Drawing.Size(1720, 1037);
             this.Grid.TabIndex = 12;
             this.Grid.CellMouseDown += this.DataGrid_CellMouseDown;
