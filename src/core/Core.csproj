@@ -33,13 +33,13 @@
     <None Update="avutil-59.dll">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </None>
-    <None Update="libfftw3f-3_32.dll">
+    <None Update="libfftw3f-3-3-10-arm64.dll">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </None>
-    <None Update="libfftw3f-3_32.dll.so">
+    <None Update="libfftw3f-3-3-10-x64.dll">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </None>
-    <None Update="libfftw3f-3_64.dll">
+    <None Update="libfftw3f-3-3-10-x86.dll">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </None>
   </ItemGroup>
