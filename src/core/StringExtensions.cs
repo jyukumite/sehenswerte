@@ -1,6 +1,7 @@
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using SehensWerte.Utils;
 using System.Globalization;
+using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
@@ -226,6 +227,12 @@ namespace SehensWerte
         public class Utf8StringWriter : StringWriter
         {
             public override Encoding Encoding => System.Text.Encoding.UTF8;
+        }
+
+        public static Guid Derive(this Guid guid, string salt)
+        {
+            // predictable derivation of a guid from a previous guid + salt
+            return new Guid(MD5.HashData(guid.ToByteArray().Concat(Encoding.UTF8.GetBytes(salt)).ToArray()));
         }
 
         static public Guid? ToGuid(this string uuid, bool uuid4 = true)
