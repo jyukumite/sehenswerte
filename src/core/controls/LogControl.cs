@@ -291,16 +291,14 @@ namespace SehensWerte.Controls
                 }
             };
 
-            PanelView.Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right;
+            PanelView.Dock = DockStyle.Fill;
             PanelView.AutoScroll = true;
             PanelView.BackColor = Color.Transparent;
             PanelView.BorderStyle = BorderStyle.FixedSingle;
             PanelView.Controls.Add(PaintBox);
             PanelView.Controls.Add(HorizontalBar);
             PanelView.Controls.Add(VerticalBar);
-            PanelView.Location = new Point(4, 4);
             PanelView.Margin = new Padding(4, 5, 4, 5);
-            PanelView.Size = new Size(623, 363);
             PanelView.TabIndex = 17;
 
             HorizontalBar.Dock = DockStyle.Bottom;
@@ -353,7 +351,6 @@ namespace SehensWerte.Controls
             Controls.Add(panelUI);
             Margin = new Padding(4, 5, 4, 5);
             Name = "LogViewControl";
-            Size = new Size(632, 403);
             Resize += Log_Resize;
             ((ISupportInitialize)PaintBox).EndInit();
             ContextMenu.ResumeLayout(false);

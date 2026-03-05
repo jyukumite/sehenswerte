@@ -76,14 +76,11 @@ namespace SehensWerte.Controls
             ListBox = new CheckedListBox();
             SuspendLayout();
 
-            ClientSize = new System.Drawing.Size(400, 8 + 64 + 8 + 240 + 8 + 32 + 8);
-
-            LabelText.Location = new System.Drawing.Point(8, 8);
-            LabelText.Size = new System.Drawing.Size(ClientSize.Width - 16, 64);
+            LabelText.AutoSize = true;
+            LabelText.Dock = DockStyle.Fill;
             LabelText.TabIndex = 2;
 
-            ListBox.Location = new System.Drawing.Point(8, LabelText.Bottom + 8);
-            ListBox.Size = new System.Drawing.Size(ClientSize.Width - 16, 240);
+            ListBox.Dock = DockStyle.Fill;
             ListBox.DisplayMember = "Key";
             ListBox.ValueMember = "Value";
             ListBox.FormattingEnabled = true;
@@ -91,15 +88,13 @@ namespace SehensWerte.Controls
             ListBox.TabIndex = 4;
             ListBox.CheckOnClick = true;
 
-            ButtonOK.Location = new System.Drawing.Point(8, ListBox.Bottom + 8);
-            ButtonOK.Size = new System.Drawing.Size((ClientSize.Width - 24) / 2, 32);
+            ButtonOK.Dock = DockStyle.Fill;
             ButtonOK.TabIndex = 0;
             ButtonOK.Text = "OK";
             ButtonOK.Click += (sender, e) => { ResultButton = DialogResult.OK; Close(); };
 
             ButtonCancel.DialogResult = System.Windows.Forms.DialogResult.Cancel;
-            ButtonCancel.Location = new System.Drawing.Point(ButtonOK.Right + 8, ListBox.Bottom + 8);
-            ButtonCancel.Size = new System.Drawing.Size((ClientSize.Width - 24) / 2, 32);
+            ButtonCancel.Dock = DockStyle.Fill;
             ButtonCancel.TabIndex = 3;
             ButtonCancel.Text = "Cancel";
             ButtonCancel.Click += (sender, e) => { ResultButton = DialogResult.Cancel; Close(); };
@@ -107,14 +102,46 @@ namespace SehensWerte.Controls
             AcceptButton = this.ButtonOK;
             CancelButton = this.ButtonCancel;
 
-            Controls.Add(this.ListBox);
-            Controls.Add(this.ButtonCancel);
-            Controls.Add(this.LabelText);
-            Controls.Add(this.ButtonOK);
-            FormBorderStyle = System.Windows.Forms.FormBorderStyle.FixedDialog;
-            MaximizeBox = false;
+            var buttonLayout = new TableLayoutPanel
+            {
+                Dock = DockStyle.Fill,
+                CellBorderStyle = TableLayoutPanelCellBorderStyle.None,
+                ColumnCount = 2,
+                RowCount = 1,
+                Padding = Padding.Empty,
+            };
+            buttonLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50f));
+            buttonLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50f));
+            buttonLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 100f));
+            buttonLayout.Controls.Add(ButtonOK, 0, 0);
+            buttonLayout.Controls.Add(ButtonCancel, 1, 0);
 
-            SizeGripStyle = System.Windows.Forms.SizeGripStyle.Hide;
+            var layout = new TableLayoutPanel
+            {
+                Dock = DockStyle.Fill,
+                CellBorderStyle = TableLayoutPanelCellBorderStyle.None,
+                ColumnCount = 1,
+                RowCount = 3,
+                Padding = new Padding(8),
+            };
+            layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100f));
+            layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+            layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100f));
+            layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 40f));
+            layout.Controls.Add(LabelText, 0, 0);
+            layout.Controls.Add(ListBox, 0, 1);
+            layout.Controls.Add(buttonLayout, 0, 2);
+            Controls.Add(layout);
+
+            ClientSize = new Size(400, 370);
+            FormBorderStyle = FormBorderStyle.Sizable;
+            MaximizeBox = false;
+            SizeGripStyle = SizeGripStyle.Show;
+            Load += (s, e) =>
+            {
+                var nc = Size - ClientSize;
+                MinimumSize = new Size(300 + nc.Width, 200 + nc.Height);
+            };
             Shown += (sender, e) => { ActiveControl = ListBox; };
             ResumeLayout(false);
             PerformLayout();

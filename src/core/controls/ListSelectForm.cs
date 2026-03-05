@@ -51,16 +51,13 @@ namespace SehensWerte.Controls
         public ListSelectForm()
         {
             SuspendLayout();
-            base.ClientSize = new Size(400, 8 + 64 + 8 + 240 + 8 + 32 + 8);
 
-            LabelPrompt.Location = new Point(8, 8);
-            LabelPrompt.Size = new Size(base.ClientSize.Width - 16, 64);
+            LabelPrompt.AutoSize = true;
+            LabelPrompt.Dock = DockStyle.Fill;
 
+            ListBox.Dock = DockStyle.Fill;
             ListBox.DisplayMember = "Key";
             ListBox.FormattingEnabled = true;
-            ListBox.ItemHeight = 20;
-            ListBox.Location = new Point(8, LabelPrompt.Bottom + 8);
-            ListBox.Size = new Size(base.ClientSize.Width - 16, 240);
             ListBox.TabIndex = 0;
             ListBox.ValueMember = "Value";
             ListBox.DrawMode = DrawMode.OwnerDrawFixed;
@@ -72,8 +69,7 @@ namespace SehensWerte.Controls
                 Close();
             };
 
-            ButtonOK.Location = new Point(8, ListBox.Bottom + 8);
-            ButtonOK.Size = new Size((base.ClientSize.Width - 24) / 2, 32);
+            ButtonOK.Dock = DockStyle.Fill;
             ButtonOK.TabIndex = 0;
             ButtonOK.Text = "OK";
             ButtonOK.Click += delegate
@@ -82,9 +78,8 @@ namespace SehensWerte.Controls
                 Close();
             };
 
+            ButtonCancel.Dock = DockStyle.Fill;
             ButtonCancel.DialogResult = DialogResult.Cancel;
-            ButtonCancel.Location = new Point(ButtonOK.Right + 8, ListBox.Bottom + 8);
-            ButtonCancel.Size = new Size((base.ClientSize.Width - 24) / 2, 32);
             ButtonCancel.TabIndex = 3;
             ButtonCancel.Text = "Cancel";
             ButtonCancel.Click += delegate
@@ -94,16 +89,48 @@ namespace SehensWerte.Controls
             };
 
             base.CancelButton = ButtonCancel;
-            base.Controls.Add(ListBox);
-            base.Controls.Add(ButtonCancel);
-            base.Controls.Add(LabelPrompt);
-            base.Controls.Add(ButtonOK);
-            base.FormBorderStyle = FormBorderStyle.FixedDialog;
-            base.MaximizeBox = false;
-            base.SizeGripStyle = SizeGripStyle.Hide;
-            base.Shown += delegate
+
+            var buttonLayout = new TableLayoutPanel
             {
-                base.ActiveControl = ListBox;
+                Dock = DockStyle.Fill,
+                CellBorderStyle = TableLayoutPanelCellBorderStyle.None,
+                ColumnCount = 2,
+                RowCount = 1,
+                Padding = Padding.Empty,
+            };
+            buttonLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50f));
+            buttonLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50f));
+            buttonLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 100f));
+            buttonLayout.Controls.Add(ButtonOK, 0, 0);
+            buttonLayout.Controls.Add(ButtonCancel, 1, 0);
+
+            var layout = new TableLayoutPanel
+            {
+                Dock = DockStyle.Fill,
+                CellBorderStyle = TableLayoutPanelCellBorderStyle.None,
+                ColumnCount = 1,
+                RowCount = 3,
+                Padding = new Padding(8),
+            };
+            layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100f));
+            layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+            layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100f));
+            layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 40f));
+            layout.Controls.Add(LabelPrompt, 0, 0);
+            layout.Controls.Add(ListBox, 0, 1);
+            layout.Controls.Add(buttonLayout, 0, 2);
+            base.Controls.Add(layout);
+
+            base.ClientSize = new Size(400, 370);
+            base.FormBorderStyle = FormBorderStyle.Sizable;
+            base.MaximizeBox = false;
+            base.SizeGripStyle = SizeGripStyle.Show;
+            base.Shown += delegate { base.ActiveControl = ListBox; };
+            base.Load += delegate
+            {
+                ListBox.ItemHeight = Font.Height + 4;
+                var nc = Size - ClientSize;
+                MinimumSize = new Size(300 + nc.Width, 8 + LabelPrompt.PreferredHeight + 8 + ListBox.ItemHeight * 4 + 8 + 40 + nc.Height);
             };
             ResumeLayout(performLayout: false);
         }
@@ -233,6 +260,7 @@ namespace SehensWerte.Controls
 
         public static string? Show(string prompt, string title, Dictionary<string, string> selection)
         {
+            // key is shown, value is returned
             return Show(prompt, title, selection, "");
         }
 

@@ -22,9 +22,13 @@ namespace SehensWerte.Controls
             set
             {
                 m_MultiLine = value;
+                m_Layout.RowStyles[1] = value
+                    ? new RowStyle(SizeType.Percent, 100f)
+                    : new RowStyle(SizeType.AutoSize);
+                EditResult.Multiline = value;
+                EditResult.ScrollBars = value ? ScrollBars.Vertical : ScrollBars.None;
                 MinimumSize = GetMinimumSize();
                 MaximumSize = MultiLine ? Screen.FromControl(this).WorkingArea.Size : new Size(Screen.FromControl(this).WorkingArea.Width, MinimumSize.Height);
-                UpdateControls();
             }
         }
         public DialogResult Result => ResultButton;
@@ -38,6 +42,7 @@ namespace SehensWerte.Controls
         }
 
         private Func<string, string>? PasteHook;
+        private TableLayoutPanel m_Layout = null!;
 
         private static ConcurrentDictionary<string, string> Cache = new();
 
@@ -45,7 +50,6 @@ namespace SehensWerte.Controls
         {
             ButtonOK = new Button();
             EditResult = new EnhancedTextBox();
-            EditResult.MaxLength = 0;
             LabelText = new Label();
             ButtonCancel = new Button();
             SuspendLayout();
@@ -81,63 +85,78 @@ namespace SehensWerte.Controls
                 catch { }
             };
 
+            LabelText.AutoSize = true;
+            LabelText.Dock = DockStyle.Fill;
+
+            EditResult.Dock = DockStyle.Fill;
+            EditResult.MaxLength = 0;
+            EditResult.TabIndex = 1;
+
+            ButtonOK.Dock = DockStyle.Fill;
+            ButtonOK.TabIndex = 0;
+            ButtonOK.Text = "OK";
             ButtonOK.Click += (sender, e) => { ResultButton = DialogResult.OK; Close(); };
+
+            ButtonCancel.Dock = DockStyle.Fill;
+            ButtonCancel.DialogResult = DialogResult.Cancel;
+            ButtonCancel.TabIndex = 3;
+            ButtonCancel.Text = "Cancel";
             ButtonCancel.Click += (sender, e) => { ResultButton = DialogResult.Cancel; Close(); };
 
             AcceptButton = this.ButtonOK;
             CancelButton = this.ButtonCancel;
 
-            Controls.Add(this.ButtonCancel);
-            Controls.Add(this.LabelText);
-            Controls.Add(this.EditResult);
-            Controls.Add(this.ButtonOK);
+            var buttonLayout = new TableLayoutPanel
+            {
+                Dock = DockStyle.Fill,
+                CellBorderStyle = TableLayoutPanelCellBorderStyle.None,
+                ColumnCount = 2,
+                RowCount = 1,
+                Padding = Padding.Empty,
+            };
+            buttonLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50f));
+            buttonLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50f));
+            buttonLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 100f));
+            buttonLayout.Controls.Add(ButtonOK, 0, 0);
+            buttonLayout.Controls.Add(ButtonCancel, 1, 0);
+
+            m_Layout = new TableLayoutPanel
+            {
+                Dock = DockStyle.Fill,
+                CellBorderStyle = TableLayoutPanelCellBorderStyle.None,
+                ColumnCount = 1,
+                RowCount = 3,
+                Padding = new Padding(8),
+            };
+            m_Layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100f));
+            m_Layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+            m_Layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+            m_Layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 40f));
+            m_Layout.Controls.Add(LabelText, 0, 0);
+            m_Layout.Controls.Add(EditResult, 0, 1);
+            m_Layout.Controls.Add(buttonLayout, 0, 2);
+            Controls.Add(m_Layout);
 
             FormBorderStyle = FormBorderStyle.Sizable;
             MaximizeBox = false;
             SizeGripStyle = SizeGripStyle.Show;
-            ClientSize = new Size(400, 8 + 24 + 8 + 20 + 8 + 32 + 8);
+            ClientSize = new Size(400, 150);
 
             Shown += (sender, e) => { ActiveControl = EditResult; };
-            Resize += (s, e) => UpdateControls();
             Load += (s, e) =>
             {
-                UpdateControls();
-                var neededClientHeight = ButtonOK.Bottom + 8;
-                var nonClientSize = Size - ClientSize;
-                MinimumSize = new Size(400 + nonClientSize.Width, neededClientHeight + nonClientSize.Height);
+                var nc = Size - ClientSize;
+                int minClientH = LabelText.Height + 16 + EditResult.PreferredHeight + 8 + 40;
+                MinimumSize = new Size(400 + nc.Width, minClientH + nc.Height);
                 if (!MultiLine) MaximumSize = new Size(Screen.FromControl(this).WorkingArea.Width, MinimumSize.Height);
-                ClientSize = new Size(ClientSize.Width, neededClientHeight);
+                ClientSize = new Size(ClientSize.Width, MultiLine ? LabelText.Height + 16 + EditResult.PreferredHeight * 8 + 8 + 40 : minClientH);
             };
 
             ResumeLayout(false);
         }
 
-        private Size GetMinimumSize() => new System.Drawing.Size(400, 8 + 24 + 8 + (MultiLine ? 200 : 20) + 8 + 32 + 8) + Size - ClientSize;
+        private Size GetMinimumSize() => new System.Drawing.Size(400, 8 + 24 + 8 + (MultiLine ? 200 : EditResult.PreferredHeight) + 8 + 32 + 8) + Size - ClientSize;
 
-        private void UpdateControls()
-        {
-            LabelText.AutoSize = true;
-            LabelText.MaximumSize = new Size(ClientSize.Width - 16, 0);
-            LabelText.Location = new System.Drawing.Point(8, 8);
-
-            EditResult.Location = new System.Drawing.Point(8, LabelText.Bottom + 16);
-            EditResult.Multiline = MultiLine;
-            EditResult.MaxLength = 0;
-            EditResult.Size = new System.Drawing.Size(ClientSize.Width - 16, (MultiLine ? 200 : 20) + Size.Height - MinimumSize.Height);
-            EditResult.TabIndex = 1;
-            EditResult.ScrollBars = MultiLine ? ScrollBars.Vertical : ScrollBars.None;
-
-            ButtonOK.Location = new System.Drawing.Point(8, EditResult.Bottom + 8);
-            ButtonOK.Size = new System.Drawing.Size((ClientSize.Width - 24) / 2, 32);
-            ButtonOK.TabIndex = 0;
-            ButtonOK.Text = "OK";
-
-            ButtonCancel.DialogResult = System.Windows.Forms.DialogResult.Cancel;
-            ButtonCancel.Location = new System.Drawing.Point(ButtonOK.Right + 8, EditResult.Bottom + 8);
-            ButtonCancel.Size = new System.Drawing.Size((ClientSize.Width - 24) / 2, 32);
-            ButtonCancel.TabIndex = 3;
-            ButtonCancel.Text = "Cancel";
-        }
 
         public static string? Show(string prompt, string title,
                                    object? defaultResponse = null, bool password = false,
