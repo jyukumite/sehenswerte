@@ -11,6 +11,26 @@ using Microsoft.VisualStudio.TestPlatform.Utilities;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using SehensWerte.Maths;
 
+/***
+
+FFmpeg DLLs built via vcpkg (see ..\vcpkg\ for vcpkg.json and vcpkg-configuration.json):
+git clone https://github.com/microsoft/vcpkg
+cd vcpkg
+.\bootstrap-vcpkg.bat
+vcpkg install ffmpeg:x64-windows --classic
+vcpkg install ffmpeg:arm64-windows --classic
+copy vcpkg\installed\x64-windows\bin\av*.dll   sehenswerte\src\core\x64\
+copy vcpkg\installed\x64-windows\bin\sw*.dll   sehenswerte\src\core\x64\
+copy vcpkg\installed\arm64-windows\bin\av*.dll sehenswerte\src\core\arm64\
+copy vcpkg\installed\arm64-windows\bin\sw*.dll sehenswerte\src\core\arm64\
+del sehenswerte\src\core\x64\avdevice*.dll
+del sehenswerte\src\core\arm64\avdevice*.dll
+
+vcpkg.json: { "dependencies": [ "ffmpeg" ], "overrides": [ { "name": "ffmpeg", "version": "7.1", "port-version": 3 } ] }
+vcpkg-configuration.json: { "default-registry": { "kind": "git", "baseline": "abe1b74480b6a1591447ff720eedf632e893c08b", "repository": "https://github.com/microsoft/vcpkg" } }
+
+*/
+
 namespace SehensWerte.Files
 {
     public class AudioReader
@@ -58,11 +78,26 @@ namespace SehensWerte.Files
 
 
 
-        // 2025-01-01-git-d3aa99a4f4-_build-www.gyan.dev
-        private const string AV_CODEC_LIB = "avcodec-61.dll";
-        private const string AV_FORMAT_LIB = "avformat-61.dll";
-        private const string AV_UTIL_LIB = "avutil-59.dll";
-        private const string AV_FILTER_LIB = "avfilter-10.dll";
+        private const string AV_CODEC_LIB = "avcodec-61";
+        private const string AV_FORMAT_LIB = "avformat-61";
+        private const string AV_UTIL_LIB = "avutil-59";
+        private const string AV_FILTER_LIB = "avfilter-10";
+        private const string AV_RESAMPLE_LIB = "swresample-5";
+        private const string AV_SCALE_LIB = "swscale-8";
+
+        static AudioReader()
+        {
+            string arch = RuntimeInformation.ProcessArchitecture == Architecture.Arm64 ? "arm64" : "x64";
+            string assemblyDir = Path.GetDirectoryName(typeof(AudioReader).Assembly.Location)!;
+            string archDir = Path.Combine(assemblyDir, arch);
+            // Pre-load in dependency order so cross-DLL imports resolve correctly
+            NativeLibrary.Load(Path.Combine(archDir, AV_UTIL_LIB + ".dll"));
+            NativeLibrary.Load(Path.Combine(archDir, AV_RESAMPLE_LIB + ".dll"));
+            NativeLibrary.Load(Path.Combine(archDir, AV_SCALE_LIB + ".dll"));
+            NativeLibrary.Load(Path.Combine(archDir, AV_CODEC_LIB + ".dll"));
+            NativeLibrary.Load(Path.Combine(archDir, AV_FILTER_LIB + ".dll"));
+            NativeLibrary.Load(Path.Combine(archDir, AV_FORMAT_LIB + ".dll"));
+        }
 
 
         private enum AVCodecID : int

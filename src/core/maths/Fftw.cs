@@ -516,13 +516,14 @@ namespace SehensWerte.Maths
                 NativeLibrary.SetDllImportResolver(typeof(Import).Assembly, (libraryName, assembly, searchPath) =>
                 {
                     if (libraryName != FftwLib) return IntPtr.Zero;
-                    string dllName = RuntimeInformation.ProcessArchitecture switch
+                    string arch = RuntimeInformation.ProcessArchitecture switch
                     {
-                        Architecture.Arm64 => "libfftw3f-3-3-10-arm64.dll",
-                        Architecture.X86 => "libfftw3f-3-3-10-x86.dll",
-                        _ => "libfftw3f-3-3-10-x64.dll",
+                        Architecture.Arm64 => "arm64",
+                        Architecture.X86 => "x86",
+                        _ => "x64",
                     };
-                    return NativeLibrary.Load(dllName, assembly, searchPath);
+                    string assemblyDir = Path.GetDirectoryName(typeof(Import).Assembly.Location)!;
+                    return NativeLibrary.Load(Path.Combine(assemblyDir, arch, "libfftw3f-3-3-10.dll"));
                 });
             }
 
