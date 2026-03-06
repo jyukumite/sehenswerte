@@ -153,6 +153,24 @@ namespace SehensWerte.Controls
             ZoomToFit();
         }
 
+        public void RelayoutForceDirected()
+        {
+            var visible = Nodes.Where(n => !n.Hide).ToList();
+            if (visible.Count == 0) return;
+            EnsureSizes();
+            ArrangeForceDirected(visible);
+            ZoomToFit();
+        }
+
+        public void RelayoutHierarchical()
+        {
+            var visible = Nodes.Where(n => !n.Hide).ToList();
+            if (visible.Count == 0) return;
+            EnsureSizes();
+            ArrangeHierarchical(visible);
+            ZoomToFit();
+        }
+
         public void ZoomToFit(float padding = 40f)
         {
             var visible = Nodes.Where(n => !n.Hide).ToList();
@@ -226,6 +244,179 @@ namespace SehensWerte.Controls
                     maxH = 0;
                 }
             }
+        }
+
+        private void ArrangeForceDirected(List<DiagramNode> nodes)
+        {
+            int n = nodes.Count;
+            float avgW = nodes.Sum(nd => nd.Size.Width) / n;
+            float avgH = nodes.Sum(nd => nd.Size.Height) / n;
+            // Canvas sized to total node area x 5 - keeps nodes packed rather than spread
+            float canvasArea = n * avgW * avgH * 5f;
+            float W = (float)Math.Sqrt(canvasArea * 4.0 / 3.0);
+            float H = W * 3f / 4f;
+            float k = (float)Math.Sqrt(W * H / n);
+            // Per-pair minimum distance avoids overlap; gravity prevents drift to edges
+            float gravity = k * 0.012f;
+
+            var rng = new Random(42);
+            float[] px = new float[n], py = new float[n];
+            for (int i = 0; i < n; i++)
+            {
+                px[i] = W / 2 + (float)(rng.NextDouble() - 0.5) * W * 0.4f;
+                py[i] = H / 2 + (float)(rng.NextDouble() - 0.5) * H * 0.4f;
+            }
+
+            float[] ddx = new float[n], ddy = new float[n];
+            var idToIdx = new Dictionary<string, int>();
+            for (int i = 0; i < n; i++) idToIdx[nodes[i].Id] = i;
+            var edgePairs = Edges
+                .Where(e => idToIdx.ContainsKey(e.FromId) && idToIdx.ContainsKey(e.ToId))
+                .Select(e => (idToIdx[e.FromId], idToIdx[e.ToId]))
+                .ToList();
+
+            float temp = W / 5f;
+            float cooling = temp / 350f;
+            for (int iter = 0; iter < 350; iter++)
+            {
+                Array.Clear(ddx, 0, n);
+                Array.Clear(ddy, 0, n);
+
+                for (int i = 0; i < n; i++)
+                {
+                    for (int j = i + 1; j < n; j++)
+                    {
+                        float ex = px[i] - px[j], ey = py[i] - py[j];
+                        float minD = (nodes[i].Size.Width + nodes[j].Size.Width + nodes[i].Size.Height + nodes[j].Size.Height) / 4f + 20f;
+                        float dist = Math.Max(minD, (float)Math.Sqrt(ex * ex + ey * ey));
+                        float f = k * k / dist;
+                        float fx = ex / dist * f, fy = ey / dist * f;
+                        ddx[i] += fx; ddy[i] += fy;
+                        ddx[j] -= fx; ddy[j] -= fy;
+                    }
+                }
+
+                foreach (var (a, b) in edgePairs)
+                {
+                    float ex = px[b] - px[a], ey = py[b] - py[a];
+                    float dist = Math.Max(1f, (float)Math.Sqrt(ex * ex + ey * ey));
+                    float f = dist * dist / k;
+                    float fx = ex / dist * f, fy = ey / dist * f;
+                    ddx[a] += fx; ddy[a] += fy;
+                    ddx[b] -= fx; ddy[b] -= fy;
+                }
+
+                // Gravity toward centre prevents isolated nodes drifting to edges
+                for (int i = 0; i < n; i++)
+                {
+                    ddx[i] += gravity * (W / 2 - px[i]);
+                    ddy[i] += gravity * (H / 2 - py[i]);
+                }
+
+                for (int i = 0; i < n; i++)
+                {
+                    float dispLen = Math.Max(1f, (float)Math.Sqrt(ddx[i] * ddx[i] + ddy[i] * ddy[i]));
+                    float move = Math.Min(dispLen, temp);
+                    px[i] = Math.Max(0, Math.Min(W, px[i] + ddx[i] / dispLen * move));
+                    py[i] = Math.Max(0, Math.Min(H, py[i] + ddy[i] / dispLen * move));
+                }
+
+                temp = Math.Max(1f, temp - cooling);
+            }
+
+            // Overlap removal: iteratively push overlapping pairs apart
+            const float overlapGap = 35f;
+            for (int opass = 0; opass < 60; opass++)
+            {
+                bool anyOverlap = false;
+                for (int i = 0; i < n; i++)
+                {
+                    for (int j = i + 1; j < n; j++)
+                    {
+                        float ex = px[j] - px[i], ey = py[j] - py[i];
+                        float needX = (nodes[i].Size.Width + nodes[j].Size.Width) / 2 + overlapGap;
+                        float needY = (nodes[i].Size.Height + nodes[j].Size.Height) / 2 + overlapGap;
+                        float ox = needX - Math.Abs(ex);
+                        float oy = needY - Math.Abs(ey);
+                        if (ox <= 0 || oy <= 0) continue;
+                        anyOverlap = true;
+                        // Push along the axis with smaller overlap
+                        if (ox < oy)
+                        {
+                            float push = ox / 2 + 1;
+                            float sign = ex >= 0 ? 1 : -1;
+                            px[i] -= sign * push;
+                            px[j] += sign * push;
+                        }
+                        else
+                        {
+                            float push = oy / 2 + 1;
+                            float sign = ey >= 0 ? 1 : -1;
+                            py[i] -= sign * push;
+                            py[j] += sign * push;
+                        }
+                    }
+                }
+                if (!anyOverlap) break;
+            }
+
+            for (int i = 0; i < n; i++)
+                nodes[i].Position = new PointF(px[i] - nodes[i].Size.Width / 2, py[i] - nodes[i].Size.Height / 2);
+        }
+
+        private void ArrangeHierarchical(List<DiagramNode> nodes)
+        {
+            var idSet = new HashSet<string>(nodes.Select(n => n.Id));
+            var outgoing = nodes.ToDictionary(n => n.Id, _ => new HashSet<string>());
+            var incoming = nodes.ToDictionary(n => n.Id, _ => new HashSet<string>());
+            foreach (var e in Edges)
+            {
+                if (!idSet.Contains(e.FromId) || !idSet.Contains(e.ToId) || e.FromId == e.ToId) continue;
+                outgoing[e.FromId].Add(e.ToId);
+                incoming[e.ToId].Add(e.FromId);
+            }
+
+            // Layer = max layer of referenced tables + 1; tables referencing nobody = layer 0 (top)
+            int maxDepth = Math.Max(6, (int)Math.Ceiling(Math.Log(nodes.Count + 1, 2)) + 2);
+            var layer = nodes.ToDictionary(n => n.Id, _ => 0);
+            for (int iter = 0; iter < nodes.Count; iter++)
+            {
+                bool changed = false;
+                foreach (var nd in nodes)
+                {
+                    if (outgoing[nd.Id].Count == 0) continue;
+                    int want = Math.Min(maxDepth, outgoing[nd.Id].Max(nb => layer[nb]) + 1);
+                    if (want > layer[nd.Id]) { layer[nd.Id] = want; changed = true; }
+                }
+                if (!changed) break;
+            }
+
+            var byLayer = nodes.GroupBy(n => layer[n.Id]).OrderBy(g => g.Key).ToList();
+
+            // Barycenter sweep to reduce crossings
+            var xCtr = nodes.ToDictionary(n => n.Id, n => n.Position.X + n.Size.Width / 2);
+            for (int pass = 0; pass < 6; pass++)
+            {
+                var sweep = pass % 2 == 0 ? (IEnumerable<IGrouping<int, DiagramNode>>)byLayer : byLayer.AsEnumerable().Reverse();
+                foreach (var lg in sweep)
+                {
+                    var sorted = lg.OrderBy(nd =>
+                    {
+                        var nbrs = outgoing[nd.Id].Union(incoming[nd.Id]).Where(nb => layer[nb] != layer[nd.Id]);
+                        var xs = nbrs.Select(nb => xCtr[nb]).ToList();
+                        return xs.Count > 0 ? xs.Average() : xCtr[nd.Id];
+                    }).ToList();
+                    float x = 40f;
+                    foreach (var nd in sorted) { xCtr[nd.Id] = x + nd.Size.Width / 2f; x += nd.Size.Width + 60f; }
+                }
+            }
+
+            float y = 40f;
+            var layerY = new Dictionary<int, float>();
+            foreach (var lg in byLayer) { layerY[lg.Key] = y; y += lg.Max(nd => nd.Size.Height) + 80f; }
+
+            foreach (var nd in nodes)
+                nd.Position = new PointF(Math.Max(0, xCtr[nd.Id] - nd.Size.Width / 2), layerY[layer[nd.Id]]);
         }
 
         private void EnsureSizes()
@@ -352,6 +543,46 @@ namespace SehensWerte.Controls
             }
         }
 
+        private void ShovePushApart(DiagramNode pinned)
+        {
+            var visible = Nodes.Where(n => !n.Hide).ToList();
+            const float gap = 35f;
+            for (int pass = 0; pass < 5; pass++)
+            {
+                bool any = false;
+                for (int i = 0; i < visible.Count; i++)
+                {
+                    for (int j = i + 1; j < visible.Count; j++)
+                    {
+                        var a = visible[i]; var b = visible[j];
+                        bool aPin = a == pinned, bPin = b == pinned;
+                        float ex = (a.Position.X + a.Size.Width / 2) - (b.Position.X + b.Size.Width / 2);
+                        float ey = (a.Position.Y + a.Size.Height / 2) - (b.Position.Y + b.Size.Height / 2);
+                        float ox = (a.Size.Width + b.Size.Width) / 2 + gap - Math.Abs(ex);
+                        float oy = (a.Size.Height + b.Size.Height) / 2 + gap - Math.Abs(ey);
+                        if (ox <= 0 || oy <= 0) continue;
+                        any = true;
+                        float scale = (aPin || bPin) ? 1f : 0.5f;
+                        if (ox < oy)
+                        {
+                            float push = (ox + 1) * scale;
+                            float sign = ex >= 0 ? 1 : -1;
+                            if (!aPin) a.Position = new PointF(a.Position.X + sign * push, a.Position.Y);
+                            if (!bPin) b.Position = new PointF(b.Position.X - sign * push, b.Position.Y);
+                        }
+                        else
+                        {
+                            float push = (oy + 1) * scale;
+                            float sign = ey >= 0 ? 1 : -1;
+                            if (!aPin) a.Position = new PointF(a.Position.X, a.Position.Y + sign * push);
+                            if (!bPin) b.Position = new PointF(b.Position.X, b.Position.Y - sign * push);
+                        }
+                    }
+                }
+                if (!any) break;
+            }
+        }
+
         private void BringToTop(DiagramNode node)
         {
             Nodes.Remove(node);
@@ -366,6 +597,7 @@ namespace SehensWerte.Controls
             {
                 var diag = ScreenToDiagram(e.Location);
                 m_DragNode.Position = new PointF(diag.X - m_DragOffset.X, diag.Y - m_DragOffset.Y);
+                ShovePushApart(m_DragNode);
                 Invalidate();
             }
             else if (m_Panning)
@@ -550,6 +782,17 @@ namespace SehensWerte.Controls
             var showAll = new ToolStripMenuItem("Show all");
             showAll.Click += (_, __) => { foreach (var n in Nodes) n.Hide = false; Invalidate(); };
             menu.Items.Add(showAll);
+
+            if (node == null)
+            {
+                menu.Items.Add(new ToolStripSeparator());
+                var relayout = new ToolStripMenuItem("Relayout");
+                relayout.DropDownItems.Add(new ToolStripMenuItem("Grid", null, (_, __) => Relayout()));
+                relayout.DropDownItems.Add(new ToolStripMenuItem("Force-directed", null, (_, __) => RelayoutForceDirected()));
+                relayout.DropDownItems.Add(new ToolStripMenuItem("Hierarchical", null, (_, __) => RelayoutHierarchical()));
+                menu.Items.Add(relayout);
+            }
+
             menu.Show(this, screenPt);
         }
 
