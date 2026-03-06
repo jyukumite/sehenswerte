@@ -270,9 +270,11 @@ namespace SehensWerte.Controls
             for (int loop = Nodes.Count - 1; loop >= 0; loop--)
             {
                 var node = Nodes[loop];
-                if (node.Hide) continue;
                 var rect = new RectangleF(node.Position, node.Size);
-                if (rect.Contains(diagPt)) return node;
+                if (rect.Contains(diagPt) && !node.Hide)
+                {
+                    return node;
+                }
             }
             return null;
         }
@@ -283,10 +285,9 @@ namespace SehensWerte.Controls
             for (int loop = Nodes.Count - 1; loop >= 0; loop--)
             {
                 var node = Nodes[loop];
-                if (node.Hide) continue;
                 var r = NodeScreenRect(node);
                 var headerRect = new RectangleF(r.X, r.Y, r.Width, headerScreenH);
-                if (headerRect.Contains(screenPt))
+                if (headerRect.Contains(screenPt) && !node.Hide)
                 {
                     return node;
                 }
@@ -300,13 +301,15 @@ namespace SehensWerte.Controls
             {
                 var node = Nodes[loop];
                 var rect = NodeScreenRect(node);
-                if (!rect.Contains(screenPt)) continue;
-                float headerH = HeaderHeight * m_Zoom;
-                float rowH = RowHeight * m_Zoom;
-                if (screenPt.Y < rect.Y + headerH) return (node, -1); // header
-                int lineIdx = (int)((screenPt.Y - rect.Y - headerH) / rowH);
-                if (lineIdx >= 0 && lineIdx < node.LineLeftLabels.Length) return (node, lineIdx);
-                return (node, -1);
+                if (rect.Contains(screenPt) && !node.Hide)
+                {
+                    float headerH = HeaderHeight * m_Zoom;
+                    float rowH = RowHeight * m_Zoom;
+                    if (screenPt.Y < rect.Y + headerH) return (node, -1); // header
+                    int lineIdx = (int)((screenPt.Y - rect.Y - headerH) / rowH);
+                    if (lineIdx >= 0 && lineIdx < node.LineLeftLabels.Length) return (node, lineIdx);
+                    return (node, -1);
+                }
             }
             return (null, -1);
         }
@@ -529,8 +532,8 @@ namespace SehensWerte.Controls
 
             if (node != null)
             {
-                var hideItem = new ToolStripMenuItem(node.Hide ? "Show" : "Hide");
-                hideItem.Click += (_, __) => { node.Hide = !node.Hide; Invalidate(); };
+                var hideItem = new ToolStripMenuItem("Hide");
+                hideItem.Click += (_, __) => { node.Hide = true; Invalidate(); };
                 menu.Items.Add(hideItem);
 
                 var isolateDirect = new ToolStripMenuItem("Isolate to directly connected nodes");
@@ -594,6 +597,32 @@ namespace SehensWerte.Controls
                     Invalidate();
                 }
             }
+        }
+
+        protected override bool ProcessCmdKey(ref Message msg, Keys keyData)
+        {
+            if (keyData == (Keys.C | Keys.Control))
+            {
+                using var bmp = RenderToBitmap();
+                Clipboard.SetImage(bmp);
+                return true;
+            }
+            if (keyData == (Keys.S | Keys.Control))
+            {
+                using var dlg = new SaveFileDialog
+                {
+                    Title = "Save diagram as PNG",
+                    Filter = "PNG image|*.png",
+                    FileName = "diagram.png",
+                };
+                if (dlg.ShowDialog(FindForm()) == DialogResult.OK)
+                {
+                    using var bmp = RenderToBitmap();
+                    bmp.Save(dlg.FileName, System.Drawing.Imaging.ImageFormat.Png);
+                }
+                return true;
+            }
+            return base.ProcessCmdKey(ref msg, keyData);
         }
 
         protected override void OnMouseWheel(MouseEventArgs e)
@@ -741,9 +770,9 @@ namespace SehensWerte.Controls
 
         private void DrawNodes(Graphics g)
         {
-            foreach (var node in Nodes)
+            foreach (var node in Nodes.Where(x => !x.Hide))
             {
-                if (!node.Hide) DrawNode(g, node);
+                DrawNode(g, node);
             }
         }
 
