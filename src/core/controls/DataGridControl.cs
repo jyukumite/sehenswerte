@@ -670,7 +670,7 @@ namespace SehensWerte.Controls
             if (e.RowIndex < 0 || e.ColumnIndex < 0) return;
 
             bool selected = e.State.HasFlag(DataGridViewElementStates.Selected);
-            e.PaintBackground(e.ClipBounds, selected);
+            e.PaintBackground(e.CellBounds, selected);
             e.Paint(e.ClipBounds, DataGridViewPaintParts.Border);
 
             if (!selected && DataGridBind?.FilteredData.Count > e.RowIndex)
@@ -721,7 +721,7 @@ namespace SehensWerte.Controls
             );
 
             Region originalClip = e.Graphics.Clip.Clone();
-            e.Graphics.SetClip(e.CellBounds);
+            e.Graphics.SetClip(e.CellBounds, System.Drawing.Drawing2D.CombineMode.Intersect);
             using (SolidBrush textBrush = new SolidBrush(textColor))
             {
                 e.Graphics.DrawString(displayText, cellFont, textBrush, textBounds, stringFormat);

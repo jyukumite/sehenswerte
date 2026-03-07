@@ -22,7 +22,6 @@ namespace SehensWerte.Controls
     //   });
     //   panel.Edges.Add(new DiagramEdge { FromId = "foo", ToId = "bar", FromLineIndex = 0, ToLineIndex = 1 });
     //   panel.ArrangeGrid();
-    //   panel.Invalidate();
     public class DiagramPanel : Control
     {
         public class DiagramNode
@@ -36,7 +35,7 @@ namespace SehensWerte.Controls
             public Color HeaderColor = Color.SteelBlue;
             public PointF Position;
             internal SizeF Size;
-            public bool Hide;
+            public bool Visible = true;
         }
 
         public class DiagramEdge
@@ -125,6 +124,8 @@ namespace SehensWerte.Controls
             m_CachedFontZoom = m_Zoom;
         }
 
+
+
         public void ArrangeGrid(int columns = 0)
         {
             if (Nodes.Count == 0) return;
@@ -132,48 +133,49 @@ namespace SehensWerte.Controls
             PlaceInGrid(Nodes, columns);
         }
 
-        // Arrange nodes so FK-connected ones end up adjacent in the grid, minimising edge lengths.
+        // Arrange all nodes so FK-connected ones end up adjacent in the grid, minimising edge lengths.
         // Uses a greedy nearest-neighbour ordering: start from the highest-degree node, then
         // always pick the unplaced node with the most connections to already-placed nodes.
         public void ArrangeByConnectivity(int columns = 0)
         {
             if (Nodes.Count == 0) return;
             EnsureSizes();
-            PlaceInGrid(ConnectivityOrder(Nodes), columns);
+            PlaceInGrid(OrderByConnectivity(Nodes), columns);
         }
 
-        // Re-run connectivity layout on visible nodes only, compacting them together.
-        public void Relayout(int columns = 0)
+        // Re-arrange visible nodes by connectivity grid layout, then zoom to fit.
+        public void ArrangeByConnectivityGrid()
         {
-            var visible = Nodes.Where(n => !n.Hide).ToList();
+            var visible = Nodes.Where(n => n.Visible).ToList();
             if (visible.Count == 0) return;
             EnsureSizes();
-            int cols = columns > 0 ? columns : Math.Max(1, (int)Math.Ceiling(Math.Sqrt(visible.Count * 0.6)));
-            PlaceInGrid(ConnectivityOrder(visible), cols);
+            PlaceInGrid(OrderByConnectivity(visible), Math.Max(1, (int)Math.Ceiling(Math.Sqrt(visible.Count * 0.6))));
             ZoomToFit();
         }
 
-        public void RelayoutForceDirected()
+        // Re-arrange visible nodes using force-directed layout, then zoom to fit.
+        public void ArrangeForceDirected()
         {
-            var visible = Nodes.Where(n => !n.Hide).ToList();
+            var visible = Nodes.Where(n => n.Visible).ToList();
             if (visible.Count == 0) return;
             EnsureSizes();
-            ArrangeForceDirected(visible);
+            ForceDirectedLayout(visible);
             ZoomToFit();
         }
 
-        public void RelayoutHierarchical()
+        // Re-arrange visible nodes using hierarchical layout, then zoom to fit.
+        public void ArrangeHierarchical()
         {
-            var visible = Nodes.Where(n => !n.Hide).ToList();
+            var visible = Nodes.Where(n => n.Visible).ToList();
             if (visible.Count == 0) return;
             EnsureSizes();
-            ArrangeHierarchical(visible);
+            HierarchicalLayout(visible);
             ZoomToFit();
         }
 
         public void ZoomToFit(float padding = 40f)
         {
-            var visible = Nodes.Where(n => !n.Hide).ToList();
+            var visible = Nodes.Where(n => n.Visible).ToList();
             if (visible.Count == 0 || ClientSize.Width <= 0 || ClientSize.Height <= 0) return;
             EnsureSizes();
             float minX = visible.Min(n => n.Position.X);
@@ -191,7 +193,7 @@ namespace SehensWerte.Controls
             Invalidate();
         }
 
-        private List<DiagramNode> ConnectivityOrder(List<DiagramNode> subset)
+        private List<DiagramNode> OrderByConnectivity(List<DiagramNode> subset)
         {
             var degree = subset.ToDictionary(n => n.Id, _ => 0);
             var neighbours = subset.ToDictionary(n => n.Id, _ => new HashSet<string>());
@@ -225,8 +227,11 @@ namespace SehensWerte.Controls
             return ordered;
         }
 
-        private static void PlaceInGrid(List<DiagramNode> ordered, int columns)
+        private void PlaceInGrid(List<DiagramNode> ordered, int columns)
         {
+            EnsureSizes();
+            if (ordered.Count == 0) return;
+
             int gridCols = columns > 0 ? columns : Math.Max(1, (int)Math.Ceiling(Math.Sqrt(ordered.Count)));
             float x = 40, y = 40;
             float maxH = 0;
@@ -244,14 +249,15 @@ namespace SehensWerte.Controls
                     maxH = 0;
                 }
             }
+            Invalidate();
         }
 
-        private void ArrangeForceDirected(List<DiagramNode> nodes)
+        private void ForceDirectedLayout(List<DiagramNode> nodes)
         {
             int n = nodes.Count;
             float avgW = nodes.Sum(nd => nd.Size.Width) / n;
             float avgH = nodes.Sum(nd => nd.Size.Height) / n;
-            // Canvas sized to total node area x 5 - keeps nodes packed rather than spread
+            // Canvas sized to total node area x 5 keeps nodes packed rather than spread
             float canvasArea = n * avgW * avgH * 5f;
             float W = (float)Math.Sqrt(canvasArea * 4.0 / 3.0);
             float H = W * 3f / 4f;
@@ -320,51 +326,57 @@ namespace SehensWerte.Controls
                     px[i] = Math.Max(0, Math.Min(W, px[i] + ddx[i] / dispLen * move));
                     py[i] = Math.Max(0, Math.Min(H, py[i] + ddy[i] / dispLen * move));
                 }
-
                 temp = Math.Max(1f, temp - cooling);
             }
 
-            // Overlap removal: iteratively push overlapping pairs apart
-            const float overlapGap = 35f;
-            for (int opass = 0; opass < 60; opass++)
+            for (int i = 0; i < n; i++)
             {
-                bool anyOverlap = false;
-                for (int i = 0; i < n; i++)
+                nodes[i].Position = new PointF(px[i] - nodes[i].Size.Width / 2, py[i] - nodes[i].Size.Height / 2);
+            }
+
+            RemoveOverlaps(nodes, 60);
+        }
+
+        private void RemoveOverlaps(List<DiagramNode> nodes, int passes, DiagramNode? pinned = null)
+        {
+            const float gap = 35f;
+            for (int pass = 0; pass < passes; pass++)
+            {
+                bool any = false;
+                for (int i = 0; i < nodes.Count; i++)
                 {
-                    for (int j = i + 1; j < n; j++)
+                    for (int j = i + 1; j < nodes.Count; j++)
                     {
-                        float ex = px[j] - px[i], ey = py[j] - py[i];
-                        float needX = (nodes[i].Size.Width + nodes[j].Size.Width) / 2 + overlapGap;
-                        float needY = (nodes[i].Size.Height + nodes[j].Size.Height) / 2 + overlapGap;
-                        float ox = needX - Math.Abs(ex);
-                        float oy = needY - Math.Abs(ey);
+                        var a = nodes[i]; var b = nodes[j];
+                        bool aPin = a == pinned, bPin = b == pinned;
+                        float ex = (a.Position.X + a.Size.Width / 2) - (b.Position.X + b.Size.Width / 2);
+                        float ey = (a.Position.Y + a.Size.Height / 2) - (b.Position.Y + b.Size.Height / 2);
+                        float ox = (a.Size.Width + b.Size.Width) / 2 + gap - Math.Abs(ex);
+                        float oy = (a.Size.Height + b.Size.Height) / 2 + gap - Math.Abs(ey);
                         if (ox <= 0 || oy <= 0) continue;
-                        anyOverlap = true;
-                        // Push along the axis with smaller overlap
+                        any = true;
+                        float scale = (aPin || bPin) ? 1f : 0.5f;
                         if (ox < oy)
                         {
-                            float push = ox / 2 + 1;
+                            float push = (ox + 1) * scale;
                             float sign = ex >= 0 ? 1 : -1;
-                            px[i] -= sign * push;
-                            px[j] += sign * push;
+                            if (!aPin) a.Position = new PointF(a.Position.X + sign * push, a.Position.Y);
+                            if (!bPin) b.Position = new PointF(b.Position.X - sign * push, b.Position.Y);
                         }
                         else
                         {
-                            float push = oy / 2 + 1;
+                            float push = (oy + 1) * scale;
                             float sign = ey >= 0 ? 1 : -1;
-                            py[i] -= sign * push;
-                            py[j] += sign * push;
+                            if (!aPin) a.Position = new PointF(a.Position.X, a.Position.Y + sign * push);
+                            if (!bPin) b.Position = new PointF(b.Position.X, b.Position.Y - sign * push);
                         }
                     }
                 }
-                if (!anyOverlap) break;
+                if (!any) break;
             }
-
-            for (int i = 0; i < n; i++)
-                nodes[i].Position = new PointF(px[i] - nodes[i].Size.Width / 2, py[i] - nodes[i].Size.Height / 2);
         }
 
-        private void ArrangeHierarchical(List<DiagramNode> nodes)
+        private void HierarchicalLayout(List<DiagramNode> nodes)
         {
             var idSet = new HashSet<string>(nodes.Select(n => n.Id));
             var outgoing = nodes.ToDictionary(n => n.Id, _ => new HashSet<string>());
@@ -423,8 +435,12 @@ namespace SehensWerte.Controls
         {
             using var g = Graphics.FromHwnd(IntPtr.Zero);
             foreach (var node in Nodes)
+            {
                 if (node.Size.IsEmpty)
+                {
                     node.Size = MeasureNode(g, node);
+                }
+            }
         }
 
         private static SizeF MeasureNode(Graphics g, DiagramNode node)
@@ -462,7 +478,7 @@ namespace SehensWerte.Controls
             {
                 var node = Nodes[loop];
                 var rect = new RectangleF(node.Position, node.Size);
-                if (rect.Contains(diagPt) && !node.Hide)
+                if (rect.Contains(diagPt) && node.Visible)
                 {
                     return node;
                 }
@@ -478,7 +494,7 @@ namespace SehensWerte.Controls
                 var node = Nodes[loop];
                 var r = NodeScreenRect(node);
                 var headerRect = new RectangleF(r.X, r.Y, r.Width, headerScreenH);
-                if (headerRect.Contains(screenPt) && !node.Hide)
+                if (headerRect.Contains(screenPt) && node.Visible)
                 {
                     return node;
                 }
@@ -492,7 +508,7 @@ namespace SehensWerte.Controls
             {
                 var node = Nodes[loop];
                 var rect = NodeScreenRect(node);
-                if (rect.Contains(screenPt) && !node.Hide)
+                if (rect.Contains(screenPt) && node.Visible)
                 {
                     float headerH = HeaderHeight * m_Zoom;
                     float rowH = RowHeight * m_Zoom;
@@ -543,45 +559,8 @@ namespace SehensWerte.Controls
             }
         }
 
-        private void ShovePushApart(DiagramNode pinned)
-        {
-            var visible = Nodes.Where(n => !n.Hide).ToList();
-            const float gap = 35f;
-            for (int pass = 0; pass < 5; pass++)
-            {
-                bool any = false;
-                for (int i = 0; i < visible.Count; i++)
-                {
-                    for (int j = i + 1; j < visible.Count; j++)
-                    {
-                        var a = visible[i]; var b = visible[j];
-                        bool aPin = a == pinned, bPin = b == pinned;
-                        float ex = (a.Position.X + a.Size.Width / 2) - (b.Position.X + b.Size.Width / 2);
-                        float ey = (a.Position.Y + a.Size.Height / 2) - (b.Position.Y + b.Size.Height / 2);
-                        float ox = (a.Size.Width + b.Size.Width) / 2 + gap - Math.Abs(ex);
-                        float oy = (a.Size.Height + b.Size.Height) / 2 + gap - Math.Abs(ey);
-                        if (ox <= 0 || oy <= 0) continue;
-                        any = true;
-                        float scale = (aPin || bPin) ? 1f : 0.5f;
-                        if (ox < oy)
-                        {
-                            float push = (ox + 1) * scale;
-                            float sign = ex >= 0 ? 1 : -1;
-                            if (!aPin) a.Position = new PointF(a.Position.X + sign * push, a.Position.Y);
-                            if (!bPin) b.Position = new PointF(b.Position.X - sign * push, b.Position.Y);
-                        }
-                        else
-                        {
-                            float push = (oy + 1) * scale;
-                            float sign = ey >= 0 ? 1 : -1;
-                            if (!aPin) a.Position = new PointF(a.Position.X, a.Position.Y + sign * push);
-                            if (!bPin) b.Position = new PointF(b.Position.X, b.Position.Y - sign * push);
-                        }
-                    }
-                }
-                if (!any) break;
-            }
-        }
+        private void ShovePushApart(DiagramNode pinned) =>
+            RemoveOverlaps(Nodes.Where(n => n.Visible).ToList(), 5, pinned);
 
         private void BringToTop(DiagramNode node)
         {
@@ -658,7 +637,7 @@ namespace SehensWerte.Controls
 
         public Bitmap RenderToBitmap()
         {
-            var visible = Nodes.Where(n => !n.Hide).ToList();
+            var visible = Nodes.Where(n => n.Visible).ToList();
             if (visible.Count == 0) return new Bitmap(1, 1);
             EnsureSizes();
 
@@ -695,30 +674,49 @@ namespace SehensWerte.Controls
             return bmp;
         }
 
-        public void HideAllExceptConnectedTo(DiagramNode focus)
+        public void ShowDirectlyConnected(DiagramNode focus)
         {
-            var connected = new HashSet<string> { focus.Id };
             foreach (var edge in Edges)
             {
                 if (edge.FromId == focus.Id)
                 {
-                    connected.Add(edge.ToId);
+                    var n = Nodes.FirstOrDefault(n => n.Id == edge.ToId);
+                    if (n != null) { n.Visible = true; }
                 }
                 if (edge.ToId == focus.Id)
+                {
+                    var n = Nodes.FirstOrDefault(n => n.Id == edge.FromId);
+                    if (n != null) { n.Visible = true; }
+                }
+            }
+            Invalidate();
+        }
+
+        public void HideAllExceptConnectedTo(DiagramNode focus)
+        {
+            var visible = new HashSet<string>(Nodes.Where(n => n.Visible).Select(n => n.Id));
+            var connected = new HashSet<string> { focus.Id };
+            foreach (var edge in Edges)
+            {
+                if (edge.FromId == focus.Id && visible.Contains(edge.ToId))
+                {
+                    connected.Add(edge.ToId);
+                }
+                if (edge.ToId == focus.Id && visible.Contains(edge.FromId))
                 {
                     connected.Add(edge.FromId);
                 }
             }
             foreach (var node in Nodes)
             {
-                node.Hide = !connected.Contains(node.Id);
+                node.Visible = connected.Contains(node.Id);
             }
-
             Invalidate();
         }
 
         public void HideAllExceptConnectedToTransitive(DiagramNode focus)
         {
+            var visible = new HashSet<string>(Nodes.Where(n => n.Visible).Select(n => n.Id));
             var connected = new HashSet<string>();
             var queue = new Queue<string>();
             queue.Enqueue(focus.Id);
@@ -729,11 +727,11 @@ namespace SehensWerte.Controls
                 {
                     foreach (var edge in Edges)
                     {
-                        if (edge.FromId == id && !connected.Contains(edge.ToId))
+                        if (edge.FromId == id && !connected.Contains(edge.ToId) && visible.Contains(edge.ToId))
                         {
                             queue.Enqueue(edge.ToId);
                         }
-                        if (edge.ToId == id && !connected.Contains(edge.FromId))
+                        if (edge.ToId == id && !connected.Contains(edge.FromId) && visible.Contains(edge.FromId))
                         {
                             queue.Enqueue(edge.FromId);
                         }
@@ -742,7 +740,7 @@ namespace SehensWerte.Controls
             }
             foreach (var node in Nodes)
             {
-                node.Hide = !connected.Contains(node.Id);
+                node.Visible = connected.Contains(node.Id);
             }
             Invalidate();
         }
@@ -765,8 +763,12 @@ namespace SehensWerte.Controls
             if (node != null)
             {
                 var hideItem = new ToolStripMenuItem("Hide");
-                hideItem.Click += (_, __) => { node.Hide = true; Invalidate(); };
+                hideItem.Click += (_, __) => { node.Visible = false; Invalidate(); };
                 menu.Items.Add(hideItem);
+
+                var showConnected = new ToolStripMenuItem("Show directly connected nodes");
+                showConnected.Click += (_, __) => ShowDirectlyConnected(node);
+                menu.Items.Add(showConnected);
 
                 var isolateDirect = new ToolStripMenuItem("Isolate to directly connected nodes");
                 isolateDirect.Click += (_, __) => HideAllExceptConnectedTo(node);
@@ -780,16 +782,16 @@ namespace SehensWerte.Controls
             }
 
             var showAll = new ToolStripMenuItem("Show all");
-            showAll.Click += (_, __) => { foreach (var n in Nodes) n.Hide = false; Invalidate(); };
+            showAll.Click += (_, __) => { foreach (var n in Nodes) n.Visible = true; Invalidate(); };
             menu.Items.Add(showAll);
 
             if (node == null)
             {
                 menu.Items.Add(new ToolStripSeparator());
                 var relayout = new ToolStripMenuItem("Relayout");
-                relayout.DropDownItems.Add(new ToolStripMenuItem("Grid", null, (_, __) => Relayout()));
-                relayout.DropDownItems.Add(new ToolStripMenuItem("Force-directed", null, (_, __) => RelayoutForceDirected()));
-                relayout.DropDownItems.Add(new ToolStripMenuItem("Hierarchical", null, (_, __) => RelayoutHierarchical()));
+                relayout.DropDownItems.Add(new ToolStripMenuItem("Grid", null, (_, __) => ArrangeByConnectivityGrid()));
+                relayout.DropDownItems.Add(new ToolStripMenuItem("Force-directed", null, (_, __) => ArrangeForceDirected()));
+                relayout.DropDownItems.Add(new ToolStripMenuItem("Hierarchical", null, (_, __) => ArrangeHierarchical()));
                 menu.Items.Add(relayout);
             }
 
@@ -812,7 +814,7 @@ namespace SehensWerte.Controls
                 var hit = HitTestAnyNode(m_MousePosition);
                 if (hit != null)
                 {
-                    hit.Hide = !hit.Hide;
+                    hit.Visible = !hit.Visible;
                 }
             }
             else if (!char.IsControl(c))
@@ -826,7 +828,7 @@ namespace SehensWerte.Controls
             {
                 // Pan to best matching node: exact > starts-with > contains, then shortest title wins
                 var match = Nodes
-                    .Where(n => !n.Hide && n.Title.Contains(m_SearchText, StringComparison.OrdinalIgnoreCase))
+                    .Where(n => n.Visible && n.Title.Contains(m_SearchText, StringComparison.OrdinalIgnoreCase))
                     .OrderBy(n => n.Title.Equals(m_SearchText, StringComparison.OrdinalIgnoreCase) ? 0
                                 : n.Title.StartsWith(m_SearchText, StringComparison.OrdinalIgnoreCase) ? 1 : 2)
                     .ThenBy(n => n.Title.Length)
@@ -836,36 +838,67 @@ namespace SehensWerte.Controls
                     EnsureSizes();
                     float panX = ClientSize.Width / 2f - (match.Position.X + match.Size.Width / 2f) * m_Zoom;
                     float panY = ClientSize.Height / 2f - (match.Position.Y + match.Size.Height / 2f) * m_Zoom;
+                    // Don't let the top of a tall node scroll off screen
+                    panY = Math.Max(panY, 20f - match.Position.Y * m_Zoom);
                     m_Pan = new PointF(panX, panY);
                     Invalidate();
                 }
             }
         }
 
+        // NOTE: when adding shortcuts here, also add them to DrawSnackbar so they appear in the hint bar
         protected override bool ProcessCmdKey(ref Message msg, Keys keyData)
         {
-            if (keyData == (Keys.C | Keys.Control))
+            switch (keyData)
             {
-                using var bmp = RenderToBitmap();
-                Clipboard.SetImage(bmp);
-                return true;
+                case Keys.H | Keys.Control:
+                    {
+                        var node = NodeUnderMouse();
+                        if (node != null) { node.Visible = false; Invalidate(); }
+                        return true;
+                    }
+                case Keys.I | Keys.Control:
+                    {
+                        var node = NodeUnderMouse();
+                        if (node != null) { HideAllExceptConnectedToTransitive(node); }
+                        return true;
+                    }
+                case Keys.F | Keys.Control:
+                    {
+                        ArrangeForceDirected();
+                        return true;
+                    }
+                case Keys.C | Keys.Control:
+                    {
+                        using var bmp = RenderToBitmap();
+                        Clipboard.SetImage(bmp);
+                        return true;
+                    }
+                case Keys.S | Keys.Control:
+                    {
+                        using var dlg = new SaveFileDialog
+                        {
+                            Title = "Save diagram as PNG",
+                            Filter = "PNG image|*.png",
+                            FileName = "diagram.png",
+                        };
+                        if (dlg.ShowDialog(FindForm()) == DialogResult.OK)
+                        {
+                            using var bmp = RenderToBitmap();
+                            bmp.Save(dlg.FileName, System.Drawing.Imaging.ImageFormat.Png);
+                        }
+                        return true;
+                    }
+                default:
+                    return base.ProcessCmdKey(ref msg, keyData);
             }
-            if (keyData == (Keys.S | Keys.Control))
-            {
-                using var dlg = new SaveFileDialog
-                {
-                    Title = "Save diagram as PNG",
-                    Filter = "PNG image|*.png",
-                    FileName = "diagram.png",
-                };
-                if (dlg.ShowDialog(FindForm()) == DialogResult.OK)
-                {
-                    using var bmp = RenderToBitmap();
-                    bmp.Save(dlg.FileName, System.Drawing.Imaging.ImageFormat.Png);
-                }
-                return true;
-            }
-            return base.ProcessCmdKey(ref msg, keyData);
+        }
+
+        protected override void OnKeyPress(KeyPressEventArgs e)
+        {
+            base.OnKeyPress(e);
+            ApplySearchKey(e.KeyChar);
+            e.Handled = true;
         }
 
         protected override void OnMouseWheel(MouseEventArgs e)
@@ -904,6 +937,9 @@ namespace SehensWerte.Controls
                 ("   Drag", SnackbarKeyBrush), ("=pan", SnackbarTextBrush),
                 ("   Scroll", SnackbarKeyBrush), ("=zoom", SnackbarTextBrush),
                 ("   Right-click", SnackbarKeyBrush), ("=menu", SnackbarTextBrush),
+                ("   Ctrl+H", SnackbarKeyBrush), ("=hide", SnackbarTextBrush),
+                ("   Ctrl+I", SnackbarKeyBrush), ("=isolate", SnackbarTextBrush),
+                ("   Ctrl+F", SnackbarKeyBrush), ("=force layout", SnackbarTextBrush),
                 ("   Ctrl+C", SnackbarKeyBrush), ("=copy", SnackbarTextBrush),
                 ("   Ctrl+S", SnackbarKeyBrush), ("=save png", SnackbarTextBrush),
                 ("   Esc", SnackbarKeyBrush), ("=clear", SnackbarTextBrush),
@@ -944,7 +980,7 @@ namespace SehensWerte.Controls
             {
                 if (!nodeMap.TryGetValue(edge.FromId, out var from)) continue;
                 if (!nodeMap.TryGetValue(edge.ToId, out var to)) continue;
-                if (from == to || from.Hide || to.Hide) continue;
+                if (from == to || !from.Visible || !to.Visible) continue;
 
                 var (fromPt, toPt, fromRight, toRight) = GetPortPoints(from, to, edge.FromLineIndex, edge.ToLineIndex);
                 float tension = BezierTension * m_Zoom;
@@ -1013,7 +1049,7 @@ namespace SehensWerte.Controls
 
         private void DrawNodes(Graphics g)
         {
-            foreach (var node in Nodes.Where(x => !x.Hide))
+            foreach (var node in Nodes.Where(x => x.Visible))
             {
                 DrawNode(g, node);
             }
