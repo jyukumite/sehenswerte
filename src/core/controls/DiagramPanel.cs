@@ -110,7 +110,8 @@ namespace SehensWerte.Controls
             SetStyle(ControlStyles.AllPaintingInWmPaint |
                      ControlStyles.UserPaint |
                      ControlStyles.DoubleBuffer |
-                     ControlStyles.ResizeRedraw, true);
+                     ControlStyles.ResizeRedraw |
+                     ControlStyles.Selectable, true);
             BackColor = Color.FromArgb(238, 241, 246);
         }
 
@@ -524,6 +525,7 @@ namespace SehensWerte.Controls
         protected override void OnMouseDown(MouseEventArgs e)
         {
             base.OnMouseDown(e);
+            Focus();
             if (e.Button == MouseButtons.Left)
             {
                 var hit = HitTestHeader(e.Location);
