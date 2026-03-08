@@ -15,7 +15,7 @@ namespace SehensWerte.Controls.Sehens
         protected double LastTraceLowestValue = -1.0;
         protected double LastTraceHighestValue = 1.0;
 
-        public TraceView View;
+        public TraceView? View;
         public double[] PaintSamples = new double[0];
         public TraceView.PaintModes PaintMode;
         public RectangleF PaintProjectionArea;
@@ -165,7 +165,7 @@ namespace SehensWerte.Controls.Sehens
                 PaintHighestY = y;
             }
             float num;
-            if (View.LogVertical)
+            if (View?.LogVertical == true)
             {
                 ProjectLog(View.HighestValue, y, out var newMax, out var output);
                 num = (float)(PaintProjectionArea.Top + (newMax - output) * PaintProjectionArea.Height / newMax);
@@ -634,7 +634,7 @@ namespace SehensWerte.Controls.Sehens
                 LastTraceLowestValue = PaintLowestY;
                 if (dots)
                 {
-                    DotDrawPoints = ProjectionDots(View.PaintMode == TraceView.PaintModes.PointsIfChanged);
+                    DotDrawPoints = ProjectionDots(View?.PaintMode == TraceView.PaintModes.PointsIfChanged);
                 }
             }
         }

@@ -1690,7 +1690,7 @@ namespace SehensWerte.Controls.Sehens
             {
                 try
                 {
-                    if (m_PaintMode == PaintModes.PeakHold && !CalculateAfterZoom)
+                    if (m_PaintMode == PaintModes.PeakHold && !CalculateAfterZoom && m_PeakHoldAll != null)
                     {
                         PeakHold(samples, startTrigger, samples.Length - startTrigger);
                         return (m_PeakHoldAll.Min.Copy(), m_PeakHoldAll.Max.Copy());
@@ -1707,7 +1707,7 @@ namespace SehensWerte.Controls.Sehens
 
         private void PeakHoldAfterZoom(double[] drawnSamples, ref double[] peakMin, ref double[] peakMax)
         {
-            if (m_PaintMode == PaintModes.PeakHold && CalculateAfterZoom)
+            if (m_PaintMode == PaintModes.PeakHold && CalculateAfterZoom && m_PeakHoldAll != null)
             {
                 lock (m_Samples.DataLock) //locked again inside PeakHold
                 {

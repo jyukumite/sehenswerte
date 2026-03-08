@@ -327,7 +327,7 @@ namespace SehensWerte.Controls.Sehens
             else
             {
                 object[] customAttributes = typeof(T).GetField(value?.ToString() ?? "")?.GetCustomAttributes(typeof(ExtensionAttribute), inherit: false) ?? new object[0];
-                return customAttributes.Select(x => ((ExtensionAttribute)x).Extension).FirstOrDefault();
+                return customAttributes.Select(x => ((ExtensionAttribute)x).Extension).FirstOrDefault() ?? "";
             }
         }
 
@@ -642,12 +642,12 @@ namespace SehensWerte.Controls.Sehens
             {
                 switch (type)
                 {
-                    case ExportType.CsvVertical: SaveCSV((ExportDataForm)edit, waveforms); break;
-                    case ExportType.TsvVertical: SaveCSV((ExportDataForm)edit, waveforms, "\t"); break;
-                    case ExportType.Wav: SaveWAV((ExportDataForm)edit, waveforms); break;
-                    case ExportType.SpaceSeparatedValues: SaveSpaceSeparated(a, (ExportDataForm)edit, waveforms); break;
-                    case ExportType.SinglePng: SaveImage((ExportImageForm)edit, a.Scope, filename); break;
-                    case ExportType.MultiplePng: SaveImages((ExportImageForm)edit, a.Scope, filename); break;
+                    case ExportType.CsvVertical: SaveCSV((ExportDataForm)(edit ?? new ExportDataForm()), waveforms); break;
+                    case ExportType.TsvVertical: SaveCSV((ExportDataForm)(edit ?? new ExportDataForm()), waveforms, "\t"); break;
+                    case ExportType.Wav: SaveWAV((ExportDataForm)(edit ?? new ExportDataForm()), waveforms); break;
+                    case ExportType.SpaceSeparatedValues: SaveSpaceSeparated(a, (ExportDataForm)(edit ?? new ExportDataForm()), waveforms); break;
+                    case ExportType.SinglePng: SaveImage((ExportImageForm)(edit ?? new ExportImageForm()), a.Scope, filename); break;
+                    case ExportType.MultiplePng: SaveImages((ExportImageForm)(edit ?? new ExportImageForm()), a.Scope, filename); break;
                     case ExportType.TraceNames: SaveNames(filename, a); break;
                     case ExportType.SehensXML: SehensSave.SaveStateXml(filename, a.Scope); break;
                     case ExportType.SehensBinary: SehensSave.SaveStateBinary(filename, a.Scope); break;
@@ -860,7 +860,7 @@ namespace SehensWerte.Controls.Sehens
                 else
                 {
                     obj = type == null ? null : Activator.CreateInstance(type);
-                    if (obj != null)
+                    if (obj != null && value != null)
                     {
                         ImportExportForms.Add(value, obj);
                     }

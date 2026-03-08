@@ -167,7 +167,7 @@ namespace SehensWerte
             public List<XmlElement> OtherElements = new List<XmlElement>();
             public Data InputData = new Data();
             public Data? ViewedData = new Data(); // never deserialises as null
-            public string Name;
+            public string? Name;
 
             public Trace() { }
 
@@ -230,8 +230,8 @@ namespace SehensWerte
         internal class BinarySave
         {
             public string Version = "1";
-            public string Xml;
-            public Dictionary<string, BinaryTrace> Traces;
+            public string Xml = "";
+            public Dictionary<string, BinaryTrace> Traces = new();
         }
 
         internal static void SaveStateBinary(string filename, SehensControl scope)

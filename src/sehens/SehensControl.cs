@@ -1373,20 +1373,23 @@ namespace SehensWerte.Controls
                     case PaintBoxMouseInfo.Type.TraceHeight:
                         {
                             int mouseDownDivision = PaintBoxMouse.MouseDownVisibleGroupIndex;
-                            double y = e.Y - PaintBoxMouse.MouseDownGroupDisplay.ProjectionArea.Top;
-                            if (modifierKeys.HasFlag(Keys.Shift)) // just this trace
+                            if (PaintBoxMouse.MouseDownGroupDisplay != null)
                             {
-                                TraceView view = PaintBox.PaintedTraces.VisibleTraceGroupList[mouseDownDivision][0];
-                                double sum = view.Painted.HeightAdjustSum;
-                                double val = y * sum / (PaintBox.PaintedTraces.VisibleTraceGroupList.Count * PaintBox.DefaultGroupHeight);
-                                view.HeightFactor = Math.Max(1.0, Math.Min(2.5, val));
-                                PaintBox.InvalidateDelayed();
-                            }
-                            else // all traces
-                            {
-                                double ratio = (y - PaintBox.MinimumGroupHeight) / (PaintBox.Height - PaintBox.MinimumGroupHeight);
-                                OnLog?.Invoke(new CsvLog.Entry($"new ratio {ratio} y={y} pbh={PaintBox.Height} mgh={PaintBox.MinimumGroupHeight}", CsvLog.Priority.Info));
-                                SetVerticalZoom(mouseDownDivision, ratio);
+                                double y = e.Y - PaintBoxMouse.MouseDownGroupDisplay.ProjectionArea.Top;
+                                if (modifierKeys.HasFlag(Keys.Shift)) // just this trace
+                                {
+                                    TraceView view = PaintBox.PaintedTraces.VisibleTraceGroupList[mouseDownDivision][0];
+                                    double sum = view.Painted.HeightAdjustSum;
+                                    double val = y * sum / (PaintBox.PaintedTraces.VisibleTraceGroupList.Count * PaintBox.DefaultGroupHeight);
+                                    view.HeightFactor = Math.Max(1.0, Math.Min(2.5, val));
+                                    PaintBox.InvalidateDelayed();
+                                }
+                                else // all traces
+                                {
+                                    double ratio = (y - PaintBox.MinimumGroupHeight) / (PaintBox.Height - PaintBox.MinimumGroupHeight);
+                                    OnLog?.Invoke(new CsvLog.Entry($"new ratio {ratio} y={y} pbh={PaintBox.Height} mgh={PaintBox.MinimumGroupHeight}", CsvLog.Priority.Info));
+                                    SetVerticalZoom(mouseDownDivision, ratio);
+                                }
                             }
                             break;
                         }
@@ -1468,7 +1471,7 @@ namespace SehensWerte.Controls
             m_HoldZoomPan = false;
         }
 
-        private void HorizontalScrollPanBar_ValueChanged(object sender, EventArgs e)
+        private void HorizontalScrollPanBar_ValueChanged(object? sender, EventArgs e)
         {
             if (m_HoldZoomPan) return;
 
@@ -1480,7 +1483,7 @@ namespace SehensWerte.Controls
             OnPanZoomChanged?.Invoke(this);
         }
 
-        private void HorizontalScrollZoomBar_ValueChanged(object sender, EventArgs e)
+        private void HorizontalScrollZoomBar_ValueChanged(object? sender, EventArgs e)
         {
             if (m_HoldZoomPan) return;
 
@@ -1672,7 +1675,7 @@ namespace SehensWerte.Controls
                 PaintBox.PaintedTraces.VisibleTraceGroupList);
         }
 
-        private void ContextMenu_PreviewKeyDown(object sender, PreviewKeyDownEventArgs e)
+        private void ContextMenu_PreviewKeyDown(object? sender, PreviewKeyDownEventArgs e)
         {
             PaintBoxMouse.RightClickGroup = null;
             ContextMenu.ContextMenuList

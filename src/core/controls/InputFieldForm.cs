@@ -42,7 +42,7 @@ namespace SehensWerte.Controls
         }
 
         private Func<string, string>? PasteHook;
-        private TableLayoutPanel m_Layout = null!;
+        private TableLayoutPanel m_Layout;
 
         private static ConcurrentDictionary<string, string> Cache = new();
 

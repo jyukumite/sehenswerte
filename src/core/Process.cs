@@ -2,30 +2,20 @@ using System.Diagnostics;
 using System.Management;
 using System.Reflection;
 using System.Runtime.InteropServices;
+using System.IO.Pipes;
 using System.Text;
 
 namespace SehensWerte.Utils
 {
     public class Process
     {
-        public static string AssemblyPath
-        {
-            get
-            {
-                return Path.GetDirectoryName(
+        public static string AssemblyPath =>
+                Path.GetDirectoryName(
                     Uri.UnescapeDataString(
                         new UriBuilder(Assembly.GetExecutingAssembly()?.Location ?? "")
                         .Path)) ?? "";
-            }
-        }
 
-        public static string ExePath
-        {
-            get
-            {
-                return System.Diagnostics.Process.GetCurrentProcess().MainModule?.FileName ?? "";
-            }
-        }
+        public static string ExePath => System.Diagnostics.Process.GetCurrentProcess().MainModule?.FileName ?? "";
 
         public static string Platform
         {
@@ -37,6 +27,8 @@ namespace SehensWerte.Utils
                 return (isMono ? "Mono/" : isWine ? "Wine/" : "Windows/") + $"{Environment.OSVersion.VersionString}/{cpu}";
             }
         }
+
+        private static string[] CommandLineArgs => Environment.GetCommandLineArgs()[1..];
 
         private static bool RunningOnWine()
         {
@@ -374,24 +366,22 @@ namespace SehensWerte.Utils
 
         public static bool RunAsWorker()
         {
-            var args = Environment.GetCommandLineArgs();
-            if (!args.Contains("--worker"))
+            var (args, _) = ParseCommandLine(new Dictionary<string, CommandLineEntry>
             {
-                return false;
-            }
-
-            string? getArgValue(string[] args, string key)
-            {
-                int idx = Array.IndexOf(args, key);
-                return (idx >= 0 && idx + 1 < args.Length) ? args[idx + 1] : null;
-            }
+                { "worker", new(HasValue: false) },
+                { "class", new(HasValue: true) },
+                { "method", new(HasValue: true) },
+                { "in", new(HasValue: true) },
+                { "out", new(HasValue: true) },
+            });
+            if (!args.ContainsKey("worker")) return false;
 
             try
             {
-                string? className = getArgValue(args, "--class");
-                string? methodName = getArgValue(args, "--method");
-                string? inTypeName = getArgValue(args, "--in");
-                string? outTypeName = getArgValue(args, "--out");
+                args.TryGetValue("class", out string? className);
+                args.TryGetValue("method", out string? methodName);
+                args.TryGetValue("in", out string? inTypeName);
+                args.TryGetValue("out", out string? outTypeName);
 
                 if (className == null || methodName == null || inTypeName == null || outTypeName == null)
                 {
@@ -480,6 +470,103 @@ namespace SehensWerte.Utils
 
             string xmlOut = Encoding.UTF8.GetString(stdout.ToArray());
             return xmlOut.FromXml<TOut>();
+        }
+
+        public static string PipeName => ExePath + "-" + Guid.NewGuid().ToString("N");
+
+        public static string ReadPipe(string pipeName, int timeoutMs = 10000)
+        {
+            using var pipe = new NamedPipeClientStream(".", pipeName, PipeDirection.In);
+            pipe.Connect(timeoutMs);
+            return new StreamReader(pipe, Encoding.UTF8).ReadToEnd();
+        }
+
+        public static void WritePipe(string pipeName, string value)
+        {
+            using var pipe = new NamedPipeServerStream(pipeName, PipeDirection.Out, 1,
+                PipeTransmissionMode.Byte, PipeOptions.None);
+            pipe.WaitForConnection();
+            var bytes = Encoding.UTF8.GetBytes(value);
+            pipe.Write(bytes, 0, bytes.Length);
+        }
+
+        // Fork the current exe as a child process, passing args
+        // as XML via a named pipe (--argpipe <name>). Blocks until the child exits.
+        // pair with ReadForkArgs at startup
+        public static void ForkSelf<TArgs>(TArgs args)
+        {
+            string pipeName = PipeName;
+            string exePath = ExePath;
+            var startInfo = new ProcessStartInfo
+            {
+                FileName = exePath,
+                Arguments = $"--argpipe \"{pipeName}\"",
+                UseShellExecute = false
+            };
+            var process = System.Diagnostics.Process.Start(startInfo);
+            WritePipe(pipeName, args.ToXml());
+            process?.WaitForExit();
+        }
+
+        // Read typed fork args from the process command line (--argpipe <name>).
+        // Returns null if --argpipe is not present.
+        public static TArgs? ReadForkArgs<TArgs>() where TArgs : new()
+        {
+            var (parsed, _) = ParseCommandLine(CommandLineArgs, new Dictionary<string, CommandLineEntry> { { "argpipe", new(HasValue: true) } });
+            if (!parsed.TryGetValue("argpipe", out var pipeArg) || pipeArg == null)
+            {
+                return default;
+            }
+            try { return ReadPipe(pipeArg).FromXml<TArgs>(); }
+            catch { return default; }
+        }
+
+        public record CommandLineEntry(bool HasValue, string? Default = null);
+
+        // Parse command line arguments.
+        // settings: maps arg name (without "--") to (HasValue, Default)
+        //   HasValue: if true, the next token is consumed as the arg's value
+        //   Default: used when the arg is absent (null = no default)
+        // Returns: named args mapped to their value (or null for flags), and remainder (non-flag) args separately.
+        public static (Dictionary<string, string?> Named, string[] Remainder) ParseCommandLine(Dictionary<string, CommandLineEntry> settings)
+        {
+            return ParseCommandLine(CommandLineArgs, settings);
+        }
+
+        public static (Dictionary<string, string?> Named, string[] Remainder) ParseCommandLine(
+            string[] argv,
+            Dictionary<string, CommandLineEntry> settings)
+        {
+            var named = new Dictionary<string, string?>();
+            var remainder = new List<string>();
+
+            foreach (var kvp in settings)
+            {
+                if (kvp.Value.Default != null)
+                {
+                    named[kvp.Key] = kvp.Value.Default;
+                }
+            }
+
+            for (int loop = 0; loop < argv.Length;)
+            {
+                if (argv[loop].StartsWith("--"))
+                {
+                    string name = argv[loop].Substring(2);
+                    loop++;
+                    if (settings.TryGetValue(name, out var setting))
+                    {
+                        named[name] = setting.HasValue && loop < argv.Length ? argv[loop++] : null;
+                    }
+                }
+                else
+                {
+                    remainder.Add(argv[loop]);
+                    loop++;
+                }
+            }
+
+            return (named, remainder.ToArray());
         }
     }
 }

@@ -18,7 +18,7 @@ namespace SehensWerte.Controls.Sehens
 
             public override void Click(TraceView trace, List<TraceView> groupList, MouseEventArgs e)
             {
-                menu?.Clicked(new MenuArgs()
+                menu?.Clicked?.Invoke(new MenuArgs()
                 {
                     Menu = menu,
                     View = trace,
@@ -28,13 +28,13 @@ namespace SehensWerte.Controls.Sehens
 
         public class MenuArgs
         {
-            public EmbeddedMenu Menu;
-            public TraceView View;
+            public EmbeddedMenu? Menu;
+            public TraceView? View;
         }
 
         public class DropDownArgs
         {
-            public SehensControl Scope;
+            public SehensControl? Scope;
             public MenuItem Menu = new MenuItem();
             public List<TraceView> Views = new List<TraceView>();
             public PaintBoxMouseInfo Mouse = new PaintBoxMouseInfo();
@@ -96,8 +96,8 @@ namespace SehensWerte.Controls.Sehens
             public CallWhen Call;
             public HotKeyModifierState HotKeyModifier = ScopeContextMenu.MenuItem.HotKeyModifierState.None;
             public Keys HotKeyCode = Keys.None;
-            public ToolStripMenuItem Menu;
-            public ToolStripMenuItem Parent;
+            public ToolStripMenuItem? Menu;
+            public ToolStripMenuItem? Parent;
             public PaintBoxMouseInfo.GuiSection ShownWhenMouse;
 
             public bool HotKey(PreviewKeyDownEventArgs e) =>
