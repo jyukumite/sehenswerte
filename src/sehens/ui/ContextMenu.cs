@@ -18,26 +18,25 @@ namespace SehensWerte.Controls.Sehens
 
             public override void Click(TraceView trace, List<TraceView> groupList, MouseEventArgs e)
             {
-                menu?.Clicked?.Invoke(new MenuArgs()
-                {
-                    Menu = menu,
-                    View = trace,
-                });
+                menu.Clicked?.Invoke(new MenuArgs(menu, trace));
             }
         }
 
         public class MenuArgs
         {
-            public EmbeddedMenu? Menu;
-            public TraceView? View;
+            public EmbeddedMenu Menu;
+            public TraceView View;
+            public MenuArgs(EmbeddedMenu menu, TraceView view) { Menu = menu; View = view; }
         }
 
         public class DropDownArgs
         {
-            public SehensControl? Scope;
+            public SehensControl Scope;
             public MenuItem Menu = new MenuItem();
             public List<TraceView> Views = new List<TraceView>();
             public PaintBoxMouseInfo Mouse = new PaintBoxMouseInfo();
+            public bool Checked { set { if (Menu.Menu is { } m) m.Checked = value; } }
+            public DropDownArgs(SehensControl scope) { Scope = scope; }
         }
 
         public class EmbeddedMenu
@@ -152,25 +151,22 @@ namespace SehensWerte.Controls.Sehens
 
             foreach (MenuItem contextMenu in ContextMenuList)
             {
-                if (contextMenu.Menu != null)
-                {
-                    contextMenu.Menu.Visible = false;
-                }
+                if (contextMenu.Menu is { } m) m.Visible = false;
             }
-            foreach (MenuItem menuitem in ContextMenuList.Where(x => x.Menu != null))
+            foreach (MenuItem menuitem in ContextMenuList)
             {
+                if (menuitem.Menu is not { } toolStripItem) continue;
                 bool valid = menuitem.Valid(traces, selectedViews, paintBoxMouse.MouseGuiSection, rightTwoPlus, wipeSelect);
-                menuitem.Menu.Visible = valid;
+                toolStripItem.Visible = valid;
                 if (valid)
                 {
                     if (menuitem.Parent != null)
                     {
                         menuitem.Parent.Visible = true;
                     }
-                    menuitem.Menu.Text = menuitem.DisplayText(selected);
-                    menuitem.GetStyle?.Invoke(new DropDownArgs()
+                    toolStripItem.Text = menuitem.DisplayText(selected);
+                    menuitem.GetStyle?.Invoke(new DropDownArgs(scope)
                     {
-                        Scope = scope,
                         Views = selectedViews,
                         Menu = menuitem,
                     });

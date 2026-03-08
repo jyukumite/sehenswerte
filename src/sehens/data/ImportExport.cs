@@ -642,10 +642,10 @@ namespace SehensWerte.Controls.Sehens
             {
                 switch (type)
                 {
-                    case ExportType.CsvVertical: SaveCSV((ExportDataForm)(edit ?? new ExportDataForm()), waveforms); break;
-                    case ExportType.TsvVertical: SaveCSV((ExportDataForm)(edit ?? new ExportDataForm()), waveforms, "\t"); break;
-                    case ExportType.Wav: SaveWAV((ExportDataForm)(edit ?? new ExportDataForm()), waveforms); break;
-                    case ExportType.SpaceSeparatedValues: SaveSpaceSeparated(a, (ExportDataForm)(edit ?? new ExportDataForm()), waveforms); break;
+                    case ExportType.CsvVertical: SaveCSV((ExportDataForm)(edit ?? new ExportDataForm()), waveforms ?? new Traces()); break;
+                    case ExportType.TsvVertical: SaveCSV((ExportDataForm)(edit ?? new ExportDataForm()), waveforms ?? new Traces(), "\t"); break;
+                    case ExportType.Wav: SaveWAV((ExportDataForm)(edit ?? new ExportDataForm()), waveforms ?? new Traces()); break;
+                    case ExportType.SpaceSeparatedValues: SaveSpaceSeparated(a, (ExportDataForm)(edit ?? new ExportDataForm()), waveforms ?? new Traces()); break;
                     case ExportType.SinglePng: SaveImage((ExportImageForm)(edit ?? new ExportImageForm()), a.Scope, filename); break;
                     case ExportType.MultiplePng: SaveImages((ExportImageForm)(edit ?? new ExportImageForm()), a.Scope, filename); break;
                     case ExportType.TraceNames: SaveNames(filename, a); break;
@@ -1133,10 +1133,9 @@ namespace SehensWerte.Controls.Sehens
 
         public static void SaveWav(SehensControl scope, string filename, string[] viewNames)
         {
-            var a = new ScopeContextMenu.DropDownArgs()
+            var a = new ScopeContextMenu.DropDownArgs(scope)
             {
                 Views = new List<TraceView>(),
-                Scope = scope
             };
 
             foreach (string view in viewNames)
@@ -1158,7 +1157,7 @@ namespace SehensWerte.Controls.Sehens
 
         public static void SaveStateDialog(SehensControl scope)
         {
-            var a = new ScopeContextMenu.DropDownArgs() { Scope = scope };
+            var a = new ScopeContextMenu.DropDownArgs(scope);
             ExportDialog(scope, a, ExportType.SehensBinary);
         }
 

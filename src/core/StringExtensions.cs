@@ -413,8 +413,7 @@ namespace SehensWerte
             // Simple object
             var simple = new SimpleClass { Id = 42, Text = "hello" };
             string jsonSimple = simple.ToJson();
-            var simpleBack = jsonSimple.FromJson<SimpleClass>();
-            Assert.IsNotNull(simpleBack);
+            var simpleBack = jsonSimple.FromJson<SimpleClass>() ?? throw new AssertFailedException("simpleBack was null");
             Assert.AreEqual(simple.Id, simpleBack.Id);
             Assert.AreEqual(simple.Text, simpleBack.Text);
 
@@ -427,8 +426,7 @@ namespace SehensWerte
                 Flags = FlagEnum.X | FlagEnum.Z
             };
             string jsonObj = obj.ToJson();
-            var objBack = jsonObj.FromJson<TestObject>();
-            Assert.IsNotNull(objBack);
+            var objBack = jsonObj.FromJson<TestObject>() ?? throw new AssertFailedException("objBack was null");
             Assert.AreEqual(obj.Name, objBack.Name);
             Assert.AreEqual(obj.Value, objBack.Value);
             Assert.AreEqual(obj.Mode, objBack.Mode);
@@ -441,8 +439,7 @@ namespace SehensWerte
                 new TestObject { Name="B", Value=2, Mode=SimpleEnum.B, Flags=FlagEnum.X | FlagEnum.Y },
             };
             string jsonArray = array.ToJson();
-            var arrayBack = jsonArray.FromJson<TestObject[]>();
-            Assert.IsNotNull(arrayBack);
+            var arrayBack = jsonArray.FromJson<TestObject[]>() ?? throw new AssertFailedException("arrayBack was null");
             Assert.AreEqual(array.Length, arrayBack.Length);
             for (int loop = 0; loop < array.Length; loop++)
             {
@@ -454,15 +451,13 @@ namespace SehensWerte
 
             // Invalid enum string - should fallback to default(SimpleEnum)
             string jsonInvalidEnum = "{\"Name\":\"X\",\"Value\":1,\"Mode\":\"badvalue\",\"Flags\":\"X\"}";
-            var invalidEnumObj = jsonInvalidEnum.FromJson<TestObject>();
-            Assert.IsNotNull(invalidEnumObj);
+            var invalidEnumObj = jsonInvalidEnum.FromJson<TestObject>() ?? throw new AssertFailedException("invalidEnumObj was null");
             Assert.AreEqual(SimpleEnum.None, invalidEnumObj.Mode); //0
 
             // Invalid flags element - known flags parsed, unknown ignored
             string jsonInvalidFlag =
                 "{\"Name\":\"X\",\"Value\":1,\"Mode\":\"A\",\"Flags\":\"X,INVALID_FLAG,Z\"}";
-            var invalidFlagObj = jsonInvalidFlag.FromJson<TestObject>();
-            Assert.IsNotNull(invalidFlagObj);
+            var invalidFlagObj = jsonInvalidFlag.FromJson<TestObject>() ?? throw new AssertFailedException("invalidFlagObj was null");
             Assert.AreEqual(FlagEnum.X | FlagEnum.Z, invalidFlagObj.Flags);
 
             // check writer will emit flags enums

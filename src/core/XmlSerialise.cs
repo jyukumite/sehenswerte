@@ -187,7 +187,7 @@ namespace SehensWerte
                     if (element.InnerXml != "")
                     {
                         // change the root type to the derived type, work around XmlSerializer.Deserialize not finding derived types
-                        var newType = types.FirstOrDefault(t => t.Name == GetXmlFirstElement(element.InnerXml), (Type?)null);
+                        var newType = types.FirstOrDefault(t => t.Name == GetXmlFirstElement(element.InnerXml));
                         using (StringReader sr = new StringReader(element.InnerXml))
                         {
                             result = new XmlSerializer(newType ?? fieldType, types.ToArray()).Deserialize((TextReader)sr);
@@ -280,20 +280,20 @@ namespace SehensWerte
 
         public class XmlNestTest
         {
-            public string a;
+            public string a = "";
             [XmlAttribute]
-            public string b;
+            public string b = "";
         }
 
         public class XmlTest
         {
             public double a;
             public double b;
-            public string c;
+            public string c = "";
 
-            public XmlSerialisableDictionary<string, double> d;
+            public XmlSerialisableDictionary<string, double> d = new();
 
-            public XmlNestTest e;
+            public XmlNestTest e = new();
             private double f = 2;
             public double fget => f; // getter only
             public void fset(double to) { f = to; } // not a property
@@ -308,7 +308,7 @@ namespace SehensWerte
             {
                 a = 1,
                 b = 2,
-                c = "ง",
+                c = "ยง",
                 d = new XmlSerialisableDictionary<string, double>() { { "a", 1 }, { "b", 2 } },
                 e = new XmlNestTest() { a = "5", b = "6" },
                 g = new string[] { "hello", "world" },
@@ -323,7 +323,7 @@ namespace SehensWerte
 <XmlTest xmlns:xsi=""http://www.w3.org/2001/XMLSchema-instance"" xmlns:xsd=""http://www.w3.org/2001/XMLSchema"">
   <a>1</a>
   <b>2</b>
-  <c>ง</c>
+  <c>ยง</c>
   <d>
     <item>
       <string>a</string>

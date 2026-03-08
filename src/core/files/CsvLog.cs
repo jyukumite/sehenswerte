@@ -15,9 +15,9 @@ namespace SehensWerte.Files
         private Stream? m_StreamFile = null;
         public bool LogTimestamp = true;
 
-        static public Action<Entry> ExtendPath(Action<Entry> prev, string callPath)
+        static public Action<Entry> ExtendPath(Action<Entry>? prev, string callPath)
         {
-            return new Entry.CallPathProxy(prev, callPath).Add;
+            return new Entry.CallPathProxy(prev ?? (_ => { }), callPath).Add;
         }
 
         public class Entry : ICloneable

@@ -66,7 +66,7 @@ namespace SehensWerte.Controls
         private class ValueList
         {
             // invoke the internal ValueList editor
-            public List<AutoEditor.ValueListEntry> Values = null; 
+            public List<AutoEditor.ValueListEntry>? Values;
         }
 
         public static bool Show(string prompt, string title, List<AutoEditor.ValueListEntry> values)
@@ -85,10 +85,11 @@ namespace SehensWerte.Controls
             Prompt = prompt;
             Panel.Generate(sourceData);
 
-            base.Height = Math.Min(Screen.PrimaryScreen.WorkingArea.Height - 100, Panel.LayoutPanel.GetRowHeights().Sum() + 140);
-            if (base.Bottom > Screen.PrimaryScreen.WorkingArea.Height)
+            Rectangle workingArea = Screen.PrimaryScreen?.WorkingArea ?? Screen.GetWorkingArea(this);
+            base.Height = Math.Min(workingArea.Height - 100, (Panel.LayoutPanel?.GetRowHeights().Sum() ?? 0) + 140);
+            if (base.Bottom > workingArea.Height)
             {
-                base.Top = Math.Max(20, base.Top - (base.Bottom - Screen.PrimaryScreen.WorkingArea.Height) - 20);
+                base.Top = Math.Max(20, base.Top - (base.Bottom - workingArea.Height) - 20);
             }
 
             this.MoveOnScreen();

@@ -70,6 +70,12 @@ namespace SehensWerte.Controls
             public double DisplayOrder;
             public string? GroupName;
             public Type Type;
+
+            public EditRow(MemberInfo memberInfo, Type type)
+            {
+                MemberInfo = memberInfo;
+                Type = type;
+            }
         }
 
         [AttributeUsage(AttributeTargets.Property | AttributeTargets.Field)]
@@ -479,7 +485,7 @@ namespace SehensWerte.Controls
                     {
                         autoEditorForm.Visible = false;
                     }
-                    new AutoEditorForm().ShowDialog(control.Text, ((EditRow)control.Tag).DisplayText, value);
+                    new AutoEditorForm().ShowDialog(control.Text, (control.Tag as EditRow)?.DisplayText ?? "", value);
                     if (closeOnClick)
                     {
                         autoEditorForm?.ButtonOK_Click(autoEditorForm, new EventArgs());

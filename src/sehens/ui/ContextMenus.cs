@@ -390,7 +390,7 @@ namespace SehensWerte.Controls.Sehens
                 ShownWhenMouse = (PaintBoxMouseInfo.GuiSection.TraceArea | PaintBoxMouseInfo.GuiSection.EmptyScope),
                 Call = ScopeContextMenu.MenuItem.CallWhen.Once,
                 Clicked = (a) => a.Scope.TraceAutoRange = !a.Scope.TraceAutoRange,
-                GetStyle = (a) => a.Menu.Menu.Checked = a.Scope.TraceAutoRange,
+                GetStyle = (a) => a.Checked = a.Scope.TraceAutoRange,
             });
 
             contextMenu.Add(new ScopeContextMenu.MenuItem
@@ -440,7 +440,7 @@ namespace SehensWerte.Controls.Sehens
                 ShownWhenMouse = PaintBoxMouseInfo.GuiSection.Anywhere,
                 Call = ScopeContextMenu.MenuItem.CallWhen.Once,
                 Clicked = (a) => a.Scope.TraceListVisible = !a.Scope.TraceListVisible,
-                GetStyle = (a) => a.Menu.Menu.Checked = !a.Scope.TraceListVisible,
+                GetStyle = (a) => a.Checked = !a.Scope.TraceListVisible,
                 HotKeyModifier = ScopeContextMenu.MenuItem.HotKeyModifierState.AltCtrl,
                 HotKeyCode = Keys.X
             });
@@ -452,7 +452,7 @@ namespace SehensWerte.Controls.Sehens
                 ShownWhenMouse = PaintBoxMouseInfo.GuiSection.Anywhere,
                 Call = ScopeContextMenu.MenuItem.CallWhen.Once,
                 Clicked = (a) => a.Scope.StopUpdates = !a.Scope.StopUpdates,
-                GetStyle = (a) => a.Menu.Menu.Checked = a.Scope.StopUpdates,
+                GetStyle = (a) => a.Checked = a.Scope.StopUpdates,
                 HotKeyModifier = ScopeContextMenu.MenuItem.HotKeyModifierState.None,
                 HotKeyCode = Keys.Space
             });
@@ -832,7 +832,7 @@ namespace SehensWerte.Controls.Sehens
                 ShownWhenMouse = PaintBoxMouseInfo.GuiSection.Anywhere,
                 Call = ScopeContextMenu.MenuItem.CallWhen.Once,
                 Clicked = (a) => a.Scope.PaintBoxRateLimitedRefresh = !a.Scope.PaintBoxRateLimitedRefresh,
-                GetStyle = (a) => a.Menu.Menu.Checked = a.Scope.PaintBoxRateLimitedRefresh,
+                GetStyle = (a) => a.Checked = a.Scope.PaintBoxRateLimitedRefresh,
             });
 
             contextMenu.Add(new ScopeContextMenu.MenuItem
@@ -843,7 +843,7 @@ namespace SehensWerte.Controls.Sehens
                 ShownWhenMouse = PaintBoxMouseInfo.GuiSection.Anywhere,
                 Call = ScopeContextMenu.MenuItem.CallWhen.Once,
                 Clicked = (a) => a.Scope.PaintBoxShowStats = !a.Scope.PaintBoxShowStats,
-                GetStyle = (a) => a.Menu.Menu.Checked = a.Scope.PaintBoxShowStats,
+                GetStyle = (a) => a.Checked = a.Scope.PaintBoxShowStats,
             });
 
             contextMenu.Add(new ScopeContextMenu.MenuItem
@@ -876,7 +876,7 @@ namespace SehensWerte.Controls.Sehens
                 Call = ScopeContextMenu.MenuItem.CallWhen.Once,
                 ShownText = ScopeContextMenu.MenuItem.TextDisplay.NoChange,
                 Clicked = (a) => a.Scope.CursorMode = a.Scope.CursorMode == Skin.Cursors.CrossHair ? Skin.Cursors.Pointer : Skin.Cursors.CrossHair,
-                GetStyle = (a) => a.Menu.Menu.Checked = a.Scope.CursorMode == Skin.Cursors.CrossHair,
+                GetStyle = (a) => a.Checked = a.Scope.CursorMode == Skin.Cursors.CrossHair,
             });
 
             contextMenu.Add(new ScopeContextMenu.MenuItem
@@ -888,7 +888,7 @@ namespace SehensWerte.Controls.Sehens
                 Call = ScopeContextMenu.MenuItem.CallWhen.Once,
                 ShownText = ScopeContextMenu.MenuItem.TextDisplay.NoChange,
                 Clicked = (a) => a.Scope.CursorMode = a.Scope.CursorMode == Skin.Cursors.VerticalLine ? Skin.Cursors.Pointer : Skin.Cursors.VerticalLine,
-                GetStyle = (a) => a.Menu.Menu.Checked = a.Scope.CursorMode == Skin.Cursors.VerticalLine,
+                GetStyle = (a) => a.Checked = a.Scope.CursorMode == Skin.Cursors.VerticalLine,
             });
 
             contextMenu.Add(new ScopeContextMenu.MenuItem
@@ -900,7 +900,7 @@ namespace SehensWerte.Controls.Sehens
                 Call = ScopeContextMenu.MenuItem.CallWhen.Once,
                 ShownText = ScopeContextMenu.MenuItem.TextDisplay.NoChange,
                 Clicked = (a) => a.Scope.ShowTraceStatistics = (Skin.TraceStatistics)a.Scope.ShowTraceStatistics.NextEnumValue(),
-                GetStyle = (a) => a.Menu.Menu.Checked = a.Scope.ShowTraceStatistics != Skin.TraceStatistics.None,
+                GetStyle = (a) => a.Checked = a.Scope.ShowTraceStatistics != Skin.TraceStatistics.None,
             });
 
             contextMenu.Add(new ScopeContextMenu.MenuItem
@@ -912,7 +912,7 @@ namespace SehensWerte.Controls.Sehens
                 Call = ScopeContextMenu.MenuItem.CallWhen.Once,
                 ShownText = ScopeContextMenu.MenuItem.TextDisplay.NoChange,
                 Clicked = (a) => a.Scope.ShowTraceLabels = (Skin.TraceLabels)a.Scope.ShowTraceLabels.NextEnumValue(),
-                GetStyle = (a) => a.Menu.Menu.Checked = a.Scope.ShowTraceLabels != Skin.TraceLabels.None,
+                GetStyle = (a) => a.Checked = a.Scope.ShowTraceLabels != Skin.TraceLabels.None,
             });
 
             contextMenu.Add(new ScopeContextMenu.MenuItem
@@ -924,7 +924,7 @@ namespace SehensWerte.Controls.Sehens
                 Call = ScopeContextMenu.MenuItem.CallWhen.Once,
                 ShownText = ScopeContextMenu.MenuItem.TextDisplay.NoChange,
                 Clicked = (a) => a.Scope.ShowHoverInfo = !a.Scope.ShowHoverInfo,
-                GetStyle = (a) => a.Menu.Menu.Checked = a.Scope.ShowHoverInfo,
+                GetStyle = (a) => a.Checked = a.Scope.ShowHoverInfo,
             });
 
             contextMenu.Add(new ScopeContextMenu.MenuItem
@@ -936,7 +936,7 @@ namespace SehensWerte.Controls.Sehens
                 Call = ScopeContextMenu.MenuItem.CallWhen.Once,
                 ShownText = ScopeContextMenu.MenuItem.TextDisplay.NoChange,
                 Clicked = (a) => a.Scope.ShowHoverValue = !a.Scope.ShowHoverValue,
-                GetStyle = (a) => a.Menu.Menu.Checked = a.Scope.ShowHoverValue,
+                GetStyle = (a) => a.Checked = a.Scope.ShowHoverValue,
             });
         }
 
@@ -1561,7 +1561,7 @@ namespace SehensWerte.Controls.Sehens
                     a.Views[0].PaintMode = a.Views[0].PaintMode == TraceView.PaintModes.XYLine ? TraceView.PaintModes.PolygonDigital : TraceView.PaintModes.XYLine;
                     a.Views[0].AutoRange();
                 },
-                GetStyle = (a) => a.Menu.Menu.Checked = a.Views[0].PaintMode == TraceView.PaintModes.XYLine ? true : false,
+                GetStyle = (a) => a.Checked = a.Views[0].PaintMode == TraceView.PaintModes.XYLine ? true : false,
             });
 
             contextMenu.Add(new ScopeContextMenu.MenuItem
@@ -1578,7 +1578,7 @@ namespace SehensWerte.Controls.Sehens
                     a.Views[0].MathPhase = TraceView.CalculatePhases.BeforeZoom;
                     a.Views[0].AutoRange();
                 },
-                GetStyle = (a) => a.Menu.Menu.Checked = a.Views[0].MathType != TraceView.MathTypes.Normal,
+                GetStyle = (a) => a.Checked = a.Views[0].MathType != TraceView.MathTypes.Normal,
             });
 
             contextMenu.Add(new ScopeContextMenu.MenuItem
@@ -1594,7 +1594,7 @@ namespace SehensWerte.Controls.Sehens
                     a.Views[0].PaintMode = a.Views[0].PaintMode == TraceView.PaintModes.FFT2D ? TraceView.PaintModes.PolygonDigital : TraceView.PaintModes.FFT2D;
                     a.Views[0].AutoRange();
                 },
-                GetStyle = (a) => a.Menu.Menu.Checked = a.Views[0].PaintMode == TraceView.PaintModes.FFT2D,
+                GetStyle = (a) => a.Checked = a.Views[0].PaintMode == TraceView.PaintModes.FFT2D,
             });
 
             contextMenu.Add(new ScopeContextMenu.MenuItem
@@ -1610,7 +1610,7 @@ namespace SehensWerte.Controls.Sehens
                     a.Views[0].AutoReduceRange = !a.Views[0].AutoReduceRange;
                     a.Views[0].AutoRange();
                 },
-                GetStyle = (a) => a.Menu.Menu.Checked = a.Views[0].AutoReduceRange,
+                GetStyle = (a) => a.Checked = a.Views[0].AutoReduceRange,
             });
 
             contextMenu.Add(new ScopeContextMenu.MenuItem
@@ -1622,7 +1622,7 @@ namespace SehensWerte.Controls.Sehens
                 Call = ScopeContextMenu.MenuItem.CallWhen.PerTrace,
                 ShownText = ScopeContextMenu.MenuItem.TextDisplay.NoChange,
                 Clicked = (a) => a.Views[0].HoldPanZoom = !a.Views[0].HoldPanZoom,
-                GetStyle = (a) => a.Menu.Menu.Checked = a.Views[0].HoldPanZoom,
+                GetStyle = (a) => a.Checked = a.Views[0].HoldPanZoom,
             });
 
             contextMenu.Add(new ScopeContextMenu.MenuItem
@@ -1634,7 +1634,7 @@ namespace SehensWerte.Controls.Sehens
                 Call = ScopeContextMenu.MenuItem.CallWhen.PerTrace,
                 ShownText = ScopeContextMenu.MenuItem.TextDisplay.NoChange,
                 Clicked = (a) => a.Views[0].ShowPictureInPicture = !a.Views[0].ShowPictureInPicture,
-                GetStyle = (a) => a.Menu.Menu.Checked = a.Views[0].ShowPictureInPicture,
+                GetStyle = (a) => a.Checked = a.Views[0].ShowPictureInPicture,
             });
         }
 
@@ -1837,7 +1837,7 @@ namespace SehensWerte.Controls.Sehens
                 Call = ScopeContextMenu.MenuItem.CallWhen.Once,
                 ShownText = ScopeContextMenu.MenuItem.TextDisplay.NoChange,
                 Clicked = (a) => a.Scope.ShowTraceFeatures = !a.Scope.ShowTraceFeatures,
-                GetStyle = (a) => a.Menu.Menu.Checked = a.Scope.ShowTraceFeatures,
+                GetStyle = (a) => a.Checked = a.Scope.ShowTraceFeatures,
             });
 
             contextMenu.Add(new ScopeContextMenu.MenuItem

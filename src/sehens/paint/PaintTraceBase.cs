@@ -602,25 +602,17 @@ namespace SehensWerte.Controls.Sehens
             if (!info.View0.Scope.ShowTraceContextLabels) return;
 
             TraceView view = info.View0;
-            ScopeContextMenu.MenuArgs a = new ScopeContextMenu.MenuArgs()
-            {
-                View = view,
-            };
             int x = info.ProjectionArea.Right;
             int y = info.ProjectionArea.Bottom;
             foreach (var embeddedContextMenu in scopeContextMenu.EmbeddedContextMenuList)
             {
-                a.Menu = embeddedContextMenu;
-                if (a.Menu.GetStyle != null)
+                embeddedContextMenu.GetStyle?.Invoke(new ScopeContextMenu.MenuArgs(embeddedContextMenu, view));
+                if (embeddedContextMenu.Style != 0)
                 {
-                    a.Menu.GetStyle(a);
-                }
-                if (a.Menu.Style != 0)
-                {
-                    var embed = new ScopeContextMenu.Embed(x, y, info, PaintBoxMouseInfo.GuiSection.ContextOverlay, TraceViewClickZone.Flags.Group, a.Menu);
+                    var embed = new ScopeContextMenu.Embed(x, y, info, PaintBoxMouseInfo.GuiSection.ContextOverlay, TraceViewClickZone.Flags.Group, embeddedContextMenu);
                     using (Font font = info.Skin.HotPointTextFont.Font)
                     {
-                        embed.Paint(view.Colour, a.Menu.Text, font, info, graphics, TraceViewEmbedText.Align.BottomRight, a.Menu.Style);
+                        embed.Paint(view.Colour, embeddedContextMenu.Text, font, info, graphics, TraceViewEmbedText.Align.BottomRight, embeddedContextMenu.Style);
                     }
                     x -= embed.Rect.Width + 5;
                     view.Painted.ClickZones.Add(embed);

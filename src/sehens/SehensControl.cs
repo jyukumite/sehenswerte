@@ -1705,9 +1705,8 @@ namespace SehensWerte.Controls
             switch (menu.Call)
             {
                 case ScopeContextMenu.MenuItem.CallWhen.Once:
-                    click(new ScopeContextMenu.DropDownArgs()
+                    click(new ScopeContextMenu.DropDownArgs(this)
                     {
-                        Scope = this,
                         Menu = menu,
                         Views = traces,
                         Mouse = PaintBoxMouse,
@@ -1716,9 +1715,8 @@ namespace SehensWerte.Controls
 
                 case ScopeContextMenu.MenuItem.CallWhen.PerTrace:
                     traces.ForEach(view =>
-                        click(new ScopeContextMenu.DropDownArgs()
+                        click(new ScopeContextMenu.DropDownArgs(this)
                         {
-                            Scope = this,
                             Menu = menu,
                             Views = new List<TraceView> { view },
                             Mouse = PaintBoxMouse,
@@ -1727,9 +1725,8 @@ namespace SehensWerte.Controls
 
                 case ScopeContextMenu.MenuItem.CallWhen.PerTraceGroup:
                     traces.GroupBy(s => s.Group).ForEach(group =>
-                        click(new ScopeContextMenu.DropDownArgs()
+                        click(new ScopeContextMenu.DropDownArgs(this)
                         {
-                            Scope = this,
                             Menu = menu,
                             Views = group.ToList(),
                             Mouse = PaintBoxMouse,

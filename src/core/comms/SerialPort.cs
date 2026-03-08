@@ -7,8 +7,8 @@ namespace SehensWerte.Comms
     {
         public int ReadBufferSize = 16384;
         public int ThreadPollRate_ms = 50;
-        public Action<byte[]> Receive;
-        public Action OnPoll;
+        public Action<byte[]> Receive = _ => { };
+        public Action OnPoll = () => { };
 
         protected Action<CsvLog.Entry> OnLog;
 

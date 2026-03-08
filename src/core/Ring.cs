@@ -23,8 +23,8 @@ namespace SehensWerte.Maths
         public T this[int index] => m_Array[(m_Tail + index) % m_Array.Length];
         public int Count => TailCount(m_Tail);
         public int Length => m_Array.Length - 1;
-        public T[] ValidSamples() => Copy(m_Tail, Count);
-        public T[] AllSamples() => Copy(m_Head + 1, m_Array.Length - 1);
+        public T[] ValidSamples() => Copy(m_Tail, Count) ?? new T[0];
+        public T[] AllSamples() => Copy(m_Head + 1, m_Array.Length - 1) ?? new T[0];
 
         public void Clear()
         {

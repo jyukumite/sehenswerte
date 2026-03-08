@@ -49,7 +49,7 @@ namespace SehensWerte.Utils
             string? registryKey = Key();
             if (registryKey != null)
             {
-                Registry.SetValue(registryKey, key, value.ToString());
+                Registry.SetValue(registryKey, key, value?.ToString() ?? "");
             }
         }
     }

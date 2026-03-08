@@ -3,6 +3,7 @@ using SehensWerte.Maths;
 using System.Collections;
 using System.ComponentModel;
 using System.Data;
+using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using System.Text;
 using System.Text.RegularExpressions;
@@ -169,7 +170,7 @@ namespace SehensWerte.Controls
 
         public class BoundData : IBindingList
         {
-            private DataGridView DataGrid;
+            private DataGridView? DataGrid;
 
             private Action<CsvLog.Entry> OnLog;
             private CodeProfile Profile = new CodeProfile();
@@ -267,6 +268,7 @@ namespace SehensWerte.Controls
                 InitializeData(source, columnNames, (index, row) => new BoundDataRowDouble(index, row.ToArray()));
             }
 
+            [MemberNotNull(nameof(CsvFileName), nameof(ColumnNames), nameof(UnfilteredData), nameof(FilteredData))]
             private void InitializeData<T>(IEnumerable<IEnumerable<T>> source, IEnumerable<string> columnNames, Func<int, IEnumerable<T>, BoundDataRow> createRowFunc)
             {
                 CsvFileName = "";
@@ -384,6 +386,7 @@ namespace SehensWerte.Controls
 
             public IEnumerable<int> RowsWithSelection()
             {
+                if (DataGrid == null) return Array.Empty<int>();
                 var rows = DataGrid.SelectedRows.Cast<DataGridViewRow>().Select(x => ((BoundDataRow?)(x.DataBoundItem))?.Index);
                 var cells = DataGrid.SelectedCells.Cast<DataGridViewCell>().Select(x => ((BoundDataRow?)(x.OwningRow.DataBoundItem))?.Index);
                 var union = rows.Union(cells).Where(x => x != null).Select(y => (int)(y ?? 0));
@@ -392,6 +395,7 @@ namespace SehensWerte.Controls
 
             public IEnumerable<int> ColsWithSelection()
             {
+                if (DataGrid == null) return Array.Empty<int>();
                 var cols = DataGrid.SelectedColumns.Cast<DataGridViewColumn>().Select(x => x.Index);
                 var cells = DataGrid.SelectedCells.Cast<DataGridViewCell>().Select(x => x.OwningColumn.Index);
                 return cols.Union(cells).ToArray();
@@ -595,11 +599,14 @@ namespace SehensWerte.Controls
 
                         ReshowFiltered();
 
-                        foreach (DataGridViewColumn column in DataGrid.Columns)
+                        if (DataGrid != null)
                         {
-                            column.HeaderCell.SortGlyphDirection = SortOrder.None;
+                            foreach (DataGridViewColumn column in DataGrid.Columns)
+                            {
+                                column.HeaderCell.SortGlyphDirection = SortOrder.None;
+                            }
+                            DataGrid.Columns[colIndex].HeaderCell.SortGlyphDirection = CurrentSortDirection == ListSortDirection.Ascending ? SortOrder.Ascending : SortOrder.Descending;
                         }
-                        DataGrid.Columns[colIndex].HeaderCell.SortGlyphDirection = CurrentSortDirection == ListSortDirection.Ascending ? SortOrder.Ascending : SortOrder.Descending;
                     }
                     catch
                     {
@@ -623,6 +630,7 @@ namespace SehensWerte.Controls
 
             internal SelectedCellsData SelectedCellsToClipboardFormats(bool numericGrid)
             {
+                if (DataGrid == null) return default;
                 var cells = DataGrid.SelectedCells.Cast<DataGridViewCell>().ToArray();
 
                 var colFlags = new bool[DataGrid.ColumnCount];

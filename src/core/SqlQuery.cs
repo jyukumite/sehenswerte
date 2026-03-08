@@ -78,7 +78,8 @@ namespace SehensWerte.Utils
                     if (mainTable.ToLower() == withTable.ToLower())
                     {
                         // mainTable is actually a WITH table, find the innermost from (not exhaustive)
-                        if (next(withTokens).ToUpper() == "AS"
+                        if (withTokens != null
+                            && next(withTokens).ToUpper() == "AS"
                             && next(withTokens) == "(")
                         {
                             // find a FROM in the outermost bracket
@@ -580,7 +581,7 @@ namespace SehensWerte.Utils
                 try
                 {
                     result = SqlQuery.Parameterise(testCase.Query, testCase.Parameters);
-                    Assert.AreEqual(testCase.Expected, result, $"Query: {testCase.Query}, Parameters: [{string.Join(", ", testCase.Parameters?.Select(x => x.Key + ":" + x.Value))}]");
+                    Assert.AreEqual(testCase.Expected, result, $"Query: {testCase.Query}, Parameters: [{string.Join(", ", testCase.Parameters?.Select(x => x.Key + ":" + x.Value) ?? Enumerable.Empty<string>())}]");
                 }
                 catch (ArgumentException)
                 {

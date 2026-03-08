@@ -85,11 +85,9 @@ namespace SehensWerte.Controls
                         {
                             for (int loop = 0; loop < va.Count; loop++)
                             {
-                                rows.Add(new AutoEditor.EditRow()
+                                rows.Add(new AutoEditor.EditRow(memberInfo, typeof(string))
                                 {
-                                    MemberInfo = memberInfo,
                                     DisplayText = va[loop].Name,
-                                    Type = typeof(string),
                                     ObjectIndex = loop,
                                     DisplayOrder = va[loop].Order,
                                 });
@@ -99,11 +97,9 @@ namespace SehensWerte.Controls
                     else if (memberInfo is FieldInfo || memberInfo is PropertyInfo)
                     {
                         var order = AutoEditor.DisplayOrder(memberInfo);
-                        rows.Add(new AutoEditor.EditRow()
+                        rows.Add(new AutoEditor.EditRow(memberInfo, memberInfo is FieldInfo ? ((FieldInfo)memberInfo).FieldType : ((PropertyInfo)memberInfo).PropertyType)
                         {
-                            MemberInfo = memberInfo,
                             DisplayText = AutoEditor.DisplayName(memberInfo),
-                            Type = memberInfo is FieldInfo ? ((FieldInfo)memberInfo).FieldType : ((PropertyInfo)memberInfo).PropertyType,
                             ObjectIndex = null,
                             DisplayOrder = order.order,
                             GroupName = order.name,
@@ -119,8 +115,8 @@ namespace SehensWerte.Controls
                         {
                             string? groupName = rows
                                 .Where(x => (int)x.DisplayOrder == (int)row.DisplayOrder)
-                                .FirstOrDefault(x => x.GroupName != null, new AutoEditor.EditRow())
-                                .GroupName;
+                                .FirstOrDefault(x => x.GroupName != null)
+                                ?.GroupName;
                             if (groupName != null && groupName.Length > 0)
                             {
                                 AddGroupNameRow(groupName);
