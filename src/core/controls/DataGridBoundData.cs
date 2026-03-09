@@ -268,6 +268,23 @@ namespace SehensWerte.Controls
                 InitializeData(source, columnNames, (index, row) => new BoundDataRowDouble(index, row.ToArray()));
             }
 
+            public void AppendRows(IEnumerable<IEnumerable<string?>> newRows)
+            {
+                foreach (var row in newRows)
+                {
+                    int index = UnfilteredData.Count;
+                    var item = new BoundDataRowString(index, row.ToArray());
+                    IndexToRow.Add(item);
+                    UnfilteredData.Add(item);
+                    // FilteredData may be a separate list after ShowAll()/Refilter(); only add visible rows
+                    if (item.Visible)
+                    {
+                        FilteredData.Add(item);
+                    }
+                }
+                ListChanged?.Invoke(this, new ListChangedEventArgs(ListChangedType.Reset, 0));
+            }
+
             [MemberNotNull(nameof(CsvFileName), nameof(ColumnNames), nameof(UnfilteredData), nameof(FilteredData))]
             private void InitializeData<T>(IEnumerable<IEnumerable<T>> source, IEnumerable<string> columnNames, Func<int, IEnumerable<T>, BoundDataRow> createRowFunc)
             {

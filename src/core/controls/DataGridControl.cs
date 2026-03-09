@@ -772,6 +772,7 @@ namespace SehensWerte.Controls
             NumericGrid = false;
             DataGridBind = null;
             Grid.Columns.Clear();
+            UpdateStatusStrip();
         }
 
         public void LoadCsv(string fileName, bool numeric = false)
@@ -801,6 +802,12 @@ namespace SehensWerte.Controls
             DataGridBind = new BoundData(rows, colnames, CsvLog.ExtendPath(OnLog, "BoundData"));
             DataGridBind.ListChanged += GridData_ListChanged;
             DataGridBind.Setup(Grid);
+            UpdateStatusStrip();
+        }
+
+        public void AppendRows(IEnumerable<IEnumerable<string?>> rows)
+        {
+            DataGridBind?.AppendRows(rows);
             UpdateStatusStrip();
         }
 
