@@ -705,7 +705,10 @@ namespace SehensWerte.Controls
                 _ => StringAlignment.Near
             };
 
-            stringFormat.LineAlignment = e.CellStyle.Alignment switch
+            float cellTextWidth = e.CellBounds.Width - e.CellStyle.Padding.Left - e.CellStyle.Padding.Right;
+            bool overflows = displayText.Contains('\n')
+                || (!NumericGrid && e.Graphics.MeasureString(displayText, cellFont).Width > cellTextWidth);
+            stringFormat.LineAlignment = overflows ? StringAlignment.Near : e.CellStyle.Alignment switch
             {
                 DataGridViewContentAlignment.MiddleCenter or DataGridViewContentAlignment.MiddleLeft or DataGridViewContentAlignment.MiddleRight => StringAlignment.Center,
                 DataGridViewContentAlignment.TopCenter or DataGridViewContentAlignment.TopLeft or DataGridViewContentAlignment.TopRight => StringAlignment.Near,
@@ -772,6 +775,7 @@ namespace SehensWerte.Controls
             NumericGrid = false;
             DataGridBind = null;
             Grid.Columns.Clear();
+            UpdateStatusStrip();
         }
 
         public void LoadCsv(string fileName, bool numeric = false)
@@ -801,6 +805,12 @@ namespace SehensWerte.Controls
             DataGridBind = new BoundData(rows, colnames, CsvLog.ExtendPath(OnLog, "BoundData"));
             DataGridBind.ListChanged += GridData_ListChanged;
             DataGridBind.Setup(Grid);
+            UpdateStatusStrip();
+        }
+
+        public void AppendRows(IEnumerable<IEnumerable<string?>> rows)
+        {
+            DataGridBind?.AppendRows(rows);
             UpdateStatusStrip();
         }
 
