@@ -493,10 +493,10 @@ namespace SehensWerte.Utils
         // Fork the current exe as a child process, passing args
         // as XML via a named pipe (--argpipe <name>). Blocks until the child exits.
         // pair with ReadForkArgs at startup
-        public static void ForkSelf<TArgs>(TArgs args)
+        public static void ForkWithPipe<TArgs>(TArgs args, string? exeName = null)
         {
             string pipeName = PipeName;
-            string exePath = ExePath;
+            string exePath = exeName ?? ExePath;
             var startInfo = new ProcessStartInfo
             {
                 FileName = exePath,
