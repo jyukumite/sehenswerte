@@ -227,6 +227,7 @@ namespace SehensWerte.Controls
                         AutoSize = true,
                         Tag = row,
                     };
+                    if (AutoEditor.IsPassword(row.MemberInfo)) { textBox.PasswordChar = '*'; }
                     tableLayout.Controls.Add(control, 0, ++tableLayout.RowCount);
                     tableLayout.Controls.Add(textBox, 1, tableLayout.RowCount);
                     textBox.Enabled = AutoEditor.IsEnabled(row.MemberInfo);

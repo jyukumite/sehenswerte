@@ -723,11 +723,27 @@ namespace SehensWerte.Controls
                 e.CellBounds.Height - e.CellStyle.Padding.Top - e.CellStyle.Padding.Bottom
             );
 
+            if (textBounds.Width <= 0 || textBounds.Height <= 0 || e.CellBounds.Width <= 0 || e.CellBounds.Height <= 0)
+            {
+                e.Handled = true;
+                return;
+            }
             Region originalClip = e.Graphics.Clip.Clone();
             e.Graphics.SetClip(e.CellBounds, System.Drawing.Drawing2D.CombineMode.Intersect);
             using (SolidBrush textBrush = new SolidBrush(textColor))
             {
-                e.Graphics.DrawString(displayText, cellFont, textBrush, textBounds, stringFormat);
+                try
+                {
+                    e.Graphics.DrawString(displayText, cellFont, textBrush, textBounds, stringFormat);
+                }
+                catch
+                {
+                    try
+                    {
+                        e.Graphics.DrawString("???", new Font(e.CellStyle.Font, FontStyle.Italic), textBrush, textBounds, stringFormat);
+                    }
+                    catch { }
+                }
             }
             e.Graphics.Clip = originalClip;
             e.Handled = true;

@@ -169,6 +169,11 @@ namespace SehensWerte.Controls
         }
 
         [AttributeUsage(AttributeTargets.Property | AttributeTargets.Field)]
+        public class PasswordAttribute : Attribute
+        {
+        }
+
+        [AttributeUsage(AttributeTargets.Property | AttributeTargets.Field)]
         public class PushButtonAttribute : Attribute
         {
             public string Caption;
@@ -276,6 +281,11 @@ namespace SehensWerte.Controls
         internal static bool IsEnabled(MemberInfo info)
         {
             return info.GetCustomAttributes(typeof(DisabledAttribute), inherit: false).Length == 0;
+        }
+
+        internal static bool IsPassword(MemberInfo info)
+        {
+            return info.GetCustomAttributes(typeof(PasswordAttribute), inherit: false).Length != 0;
         }
 
         private void WalkControls()
