@@ -5,6 +5,7 @@ using System.ComponentModel;
 using System.Data;
 using System.Data.Common;
 using System.Drawing;
+using System.Text.Json;
 using System.Threading;
 using System.Windows.Forms;
 
@@ -823,6 +824,82 @@ namespace SehensWerte.Controls
             DataGridBind.Setup(Grid);
             UpdateStatusStrip();
         }
+
+        public void LoadJson(string json)
+        {
+            using var doc = JsonDocument.Parse(json);
+            var root = doc.RootElement;
+            List<string> cols;
+            List<List<string?>> rows;
+
+            if (root.ValueKind == JsonValueKind.Array)
+            {
+                cols = new List<string>();
+                var elements = root.EnumerateArray().ToList();
+                foreach (var el in elements)
+                {
+                    if (el.ValueKind == JsonValueKind.Object)
+                    {
+                        foreach (var prop in el.EnumerateObject())
+                        {
+                            if (!cols.Contains(prop.Name))
+                            {
+                                cols.Add(prop.Name);
+                            }
+                        }
+                    }
+                }
+                if (cols.Count == 0)
+                {
+                    cols.Add("value");
+                }
+
+                rows = new List<List<string?>>();
+                foreach (var el in elements)
+                {
+                    var row = new List<string?>();
+                    if (el.ValueKind == JsonValueKind.Object)
+                    {
+                        foreach (var col in cols)
+                        {
+                            row.Add(el.TryGetProperty(col, out var val) ? JsonElementToString(val) : null);
+                        }
+                    }
+                    else
+                    {
+                        row.Add(JsonElementToString(el));
+                        for (int loop = 1; loop < cols.Count; loop++)
+                        {
+                            row.Add(null);
+                        }
+                    }
+                    rows.Add(row);
+                }
+            }
+            else if (root.ValueKind == JsonValueKind.Object)
+            {
+                cols = new List<string> { "Key", "Value" };
+                rows = root.EnumerateObject()
+                    .Select(p => new List<string?> { p.Name, JsonElementToString(p.Value) })
+                    .ToList();
+            }
+            else
+            {
+                cols = new List<string> { "Value" };
+                rows = new List<List<string?>> { new List<string?> { root.ToString() } };
+            }
+
+            LoadRows(rows, cols);
+        }
+
+        public static string JsonElementToString(JsonElement el) => el.ValueKind switch
+        {
+            JsonValueKind.String => el.GetString() ?? "",
+            JsonValueKind.Null => "",
+            JsonValueKind.True => "true",
+            JsonValueKind.False => "false",
+            _ => el.GetRawText(),
+        };
 
         public void AppendRows(IEnumerable<IEnumerable<string?>> rows)
         {
