@@ -58,8 +58,9 @@ namespace SehensWerte.Controls
         private DataGridControlToolTipArgs? HoverArgs;
 
         public int ToolTipShowMilliseconds { get; set; } = 10000;
-        public int ToolTipPauseMilliseconds { get; set; } = 500;
+        public int ToolTipPauseMilliseconds { get; set; } = 1500;
         public int ToolTipMaxLength { get; set; } = 1000;
+        public bool ShowCellHints { get; set; } = true;
 
         public string[]? MaskColumns { get; set; }
         public string MaskString { get; set; } = new string('\u2022', 5); // small dot
@@ -110,6 +111,7 @@ namespace SehensWerte.Controls
             this.HoverTip = new System.Windows.Forms.ToolTip();
             ShowTooltipWindow += (s, e) =>
             {
+                if (!ShowCellHints) return;
                 int safetyTimer = ToolTipShowMilliseconds + 1000;
                 HoverTip.Show(e.DisplayText, Grid, Grid.PointToClient(e.MouseLocation), safetyTimer);
             };

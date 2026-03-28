@@ -1,11 +1,6 @@
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using SehensWerte.Utils;
-using System;
 using System.Collections.Concurrent;
-using System.Collections.Generic;
-using System.Linq;
-using System.Runtime.CompilerServices;
-using System.Security.Policy;
 
 namespace SehensWerte.Maths
 {
@@ -59,6 +54,19 @@ namespace SehensWerte.Maths
                 }
             }
 
+            public void Count(string sourceFilePath, string memberName, int sourceLineNumber, string key)
+            {
+                SourceFilePath = sourceFilePath;
+                MemberName = memberName;
+                SourceLineNumber = sourceLineNumber;
+                Key = key;
+
+                lock (Stats)
+                {
+                    Stats.Insert(0);
+                }
+            }
+
             public new string ToString()
             {
                 Statistics stats = Stats;
@@ -104,6 +112,15 @@ namespace SehensWerte.Maths
         {
             string key_ = key == "" ? "" : "_";
             Ensure($"{sourceFilePath}_{memberName}{key_}{key}").Out();
+        }
+
+        public void Count(string key = "",
+                        [System.Runtime.CompilerServices.CallerFilePath] string sourceFilePath = "",
+                        [System.Runtime.CompilerServices.CallerMemberName] string memberName = "",
+                        [System.Runtime.CompilerServices.CallerLineNumber] int sourceLineNumber = 0)
+        {
+            string key_ = key == "" ? "" : "_";
+            Ensure($"{sourceFilePath}_{memberName}{key_}{key}").Count(sourceFilePath, memberName, sourceLineNumber, key);
         }
 
         public static void GlobalRun(Action run, string key = "",
@@ -180,9 +197,9 @@ namespace SehensWerte.Maths
 
             double a = HighResTimer.StaticSeconds;
             int count = 0;
-            for (int loop=0; loop<1000000; loop++)
+            for (int loop = 0; loop < 1000000; loop++)
             {
-                profile.Run(() => { count++;  }, "function3");
+                profile.Run(() => { count++; }, "function3");
             }
             double b = HighResTimer.StaticSeconds - a;
 

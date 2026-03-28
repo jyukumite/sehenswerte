@@ -16,8 +16,6 @@ namespace SehensWerte.Filters
         private double[,] m_H;
         private double[,] m_Ht;
 
-        private double m_FauxTime;
-
         public KalmanFilter(double[] velocityFactor, double[] positionFactor)
         {
             m_PosFactor = positionFactor;

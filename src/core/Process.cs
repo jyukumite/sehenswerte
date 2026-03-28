@@ -283,7 +283,7 @@ namespace SehensWerte.Utils
                 }
                 return totalCapacity;
             }
-            catch (Exception ex)
+            catch (Exception)
             {
                 return 0;
             }

@@ -118,7 +118,6 @@ namespace SehensWerte.Maths
 
             double sensor = 0.0;
             double target = 1.0;
-            double dt = 0.1;
             double throttle = 0.0;
 
             for (int loop = 0; loop < 100; loop++)
