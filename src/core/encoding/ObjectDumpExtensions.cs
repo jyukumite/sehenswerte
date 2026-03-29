@@ -241,9 +241,27 @@ namespace SehensWerte.Utils
     [TestClass]
     public class ObjectDumperTest
     {
+        class SimpleObj
+        {
+            public string Name = "hello";
+            public int Value = 42;
+        }
+
         [TestMethod]
         public void TestObjectDumper()
         {
+            var obj = new SimpleObj();
+            string verbose = obj.DumpObject(ObjectDumpExtension.DumpMode.Verbose);
+            Assert.IsTrue(verbose.Contains("Name"));
+            Assert.IsTrue(verbose.Contains("hello"));
+            Assert.IsTrue(verbose.Contains("42"));
+
+            string csharp = obj.DumpObject(ObjectDumpExtension.DumpMode.CSharp);
+            Assert.IsTrue(csharp.Contains("\"hello\""));
+            Assert.IsTrue(csharp.Contains("42"));
+
+            string nullResult = ((object)null!).DumpObject();
+            Assert.AreEqual("(null)", nullResult);
         }
     }
 }

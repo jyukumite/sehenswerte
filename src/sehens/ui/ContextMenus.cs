@@ -37,11 +37,11 @@ namespace SehensWerte.Controls.Sehens
             [AutoEditor.DisplayName("Amplitude")]
             public double Amplitude = 1.0;
             [AutoEditor.DisplayName("Phase (0-1)")]
-            public double Phase;
+            public double Phase = 0;
             [AutoEditor.DisplayName("Waveform")]
-            public WaveformGenerator.Waveforms Waveform;
+            public WaveformGenerator.Waveforms Waveform = WaveformGenerator.Waveforms.Sine;
             [AutoEditor.DisplayName("Use Sin function")]
-            public bool UseSin;
+            public bool UseSin = true;
             [AutoEditor.DisplayName("Window")]
             public SampleWindow.WindowType Window = SampleWindow.WindowType.Rectangular;
         }
@@ -54,9 +54,9 @@ namespace SehensWerte.Controls.Sehens
             [AutoEditor.DisplayName("Amplitude")]
             public double Amplitude = 1.0;
             [AutoEditor.DisplayName("Delay")]
-            public double Delay;
+            public double Delay = 0;
             [AutoEditor.DisplayName("Offset")]
-            public double Offset;
+            public double Offset = 0;
             [AutoEditor.DisplayName("Samples")]
             public int Count
             {
@@ -184,7 +184,7 @@ namespace SehensWerte.Controls.Sehens
 
             [AutoEditor.DisplayOrder(4)]
             [AutoEditor.DisplayName("Offset")]
-            public double Offset;
+            public double Offset = 0;
         }
 
         private class SweepTraceInput
@@ -219,11 +219,11 @@ namespace SehensWerte.Controls.Sehens
 
             [AutoEditor.DisplayOrder(6)]
             [AutoEditor.DisplayName("Waveform")]
-            public WaveformGenerator.Waveforms Waveform;
+            public WaveformGenerator.Waveforms Waveform = WaveformGenerator.Waveforms.Sine;
 
             [AutoEditor.DisplayOrder(7)]
             [AutoEditor.DisplayName("Use Sin function")]
-            public bool UseSinFunction;
+            public bool UseSinFunction = true;
         }
 
         private class FilterForm
@@ -1690,6 +1690,7 @@ namespace SehensWerte.Controls.Sehens
                     TraceView.CalculatedTypes.Mean => Create("Mean", math, ScopeContextMenu.MenuItem.ShowWhen.TwoPlusSelected, ScopeContextMenu.MenuItem.CallWhen.Once),
 
                     TraceView.CalculatedTypes.PythonScript => null,
+                    _ => null,
                 };
                 if (menuItem != null)
                 {

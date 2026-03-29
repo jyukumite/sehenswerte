@@ -77,14 +77,14 @@ namespace SehensWerte.Utils
         {
             public int IntField;
             public string StringField { get; set; } = "";
-            public int Other1;
+            public int Other1 = 0;
         }
 
         class TargetClass
         {
-            public int IntField;
+            public int IntField = 0;
             public string StringField { get; set; } = "";
-            public int Other2;
+            public int Other2 = 0;
         }
 
         [TestMethod]

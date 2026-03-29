@@ -42,6 +42,7 @@ namespace SehensWerte.Controls
         public event DataGridViewCellEventHandler CellDoubleClick = (s, e) => { };
         public event DataGridViewCellEventHandler CellClick = (s, e) => { };
         public event DataGridControlCellKeyDownEventHandler CellKeyDown = (s, e) => { };
+        public event EventHandler SelectionChanged = (s, e) => { };
 
         public event EventHandler<DataGridControlToolTipArgs> ShowTooltipWindow = (s, e) => { };
         public event EventHandler<DataGridControlToolTipArgs> HideTooltipWindow = (s, e) => { };
@@ -486,6 +487,7 @@ namespace SehensWerte.Controls
 
         private void Grid_SelectionChanged(object? sender, EventArgs e)
         {
+            SelectionChanged.Invoke(this, e);
         }
 
         private void ShowAllStatus_Click(object? sender, EventArgs e)
@@ -905,7 +907,12 @@ namespace SehensWerte.Controls
 
         public void AppendRows(IEnumerable<IEnumerable<string?>> rows)
         {
+            int scrollRow = Grid.FirstDisplayedScrollingRowIndex;
             DataGridBind?.AppendRows(rows);
+            if (scrollRow >= 0)
+            {
+                Grid.FirstDisplayedScrollingRowIndex = scrollRow;
+            }
             UpdateStatusStrip();
         }
 
@@ -937,6 +944,8 @@ namespace SehensWerte.Controls
         {
             return DataGridBind?.GetSelectedRow();
         }
+
+        public CodeProfile? Profile => DataGridBind?.Profile;
 
         public string?[] GetColumn(string header)
         {

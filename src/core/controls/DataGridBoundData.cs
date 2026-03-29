@@ -173,7 +173,8 @@ namespace SehensWerte.Controls
             private DataGridView? DataGrid;
 
             private Action<CsvLog.Entry> OnLog;
-            private CodeProfile Profile = new CodeProfile();
+            public CodeProfile Profile => m_Profile;
+            private CodeProfile m_Profile = new CodeProfile();
 
             public string CsvFileName { get; private set; }
             public List<BoundDataRow> UnfilteredData;
@@ -428,8 +429,16 @@ namespace SehensWerte.Controls
 
             public string?[]? GetColumn(string v)
             {
-                int colIndex = ColumnNames.IndexOf(v);
-                return colIndex == -1 ? null : FilteredData.Select(x => x.Column(colIndex)).ToArray();
+                m_Profile.Enter(v);
+                try
+                {
+                    int colIndex = ColumnNames.IndexOf(v);
+                    return colIndex == -1 ? null : FilteredData.Select(x => x.Column(colIndex)).ToArray();
+                }
+                finally
+                {
+                    m_Profile.Exit(v);
+                }
             }
 
             public Dictionary<string, string?>? GetSelectedRow()
