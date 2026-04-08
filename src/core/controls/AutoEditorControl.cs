@@ -9,6 +9,7 @@ namespace SehensWerte.Controls
         public Action<AutoEditor>? OnChange;
         private Dictionary<AutoEditor.EditRow, object> m_StartValues = new Dictionary<AutoEditor.EditRow, object>();
         internal TableLayoutPanel? LayoutPanel;
+        public int PreferredHeight => LayoutPanel?.GetRowHeights().Sum() ?? 0;
 
         public AutoEditorControl()
         {

@@ -86,7 +86,7 @@ namespace SehensWerte.Controls
             Panel.Generate(sourceData);
 
             Rectangle workingArea = Screen.PrimaryScreen?.WorkingArea ?? Screen.GetWorkingArea(this);
-            base.Height = Math.Min(workingArea.Height - 100, (Panel.LayoutPanel?.GetRowHeights().Sum() ?? 0) + 140);
+            base.Height = Math.Min(workingArea.Height - 100, Panel.PreferredHeight + 140);
             if (base.Bottom > workingArea.Height)
             {
                 base.Top = Math.Max(20, base.Top - (base.Bottom - workingArea.Height) - 20);
