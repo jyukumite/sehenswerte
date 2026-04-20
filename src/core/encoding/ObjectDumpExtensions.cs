@@ -131,17 +131,23 @@ namespace SehensWerte.Utils
             {
                 text += mode switch
                 {
-                    DumpMode.CSharp => Pad(indent + 1, "{{ {0}.{1}, ", GetFullName(key), key),
+                    DumpMode.CSharp => Pad(indent + 1, "{{ {0}, {1} }},\r\n", CSharpLiteral(key), CSharpLiteral(dictionary[key])),
                     _ => Pad(indent + 1, "[{0}] ({1}):\r\n", key, key.GetType().Name),
                 };
-                text += Object(dictionary[key] ?? ((mode == DumpMode.CSharp) ? CNullName : NullName), indent + 2, mode);
-                text += mode switch
+                if (mode != DumpMode.CSharp)
                 {
-                    DumpMode.CSharp => Pad(indent + 1, "}},\r\n"),
-                    _ => "",
-                };
+                    text += Object(dictionary[key] ?? NullName, indent + 2, mode);
+                }
             }
             return text;
+        }
+
+        private static string CSharpLiteral(object? obj)
+        {
+            if (obj == null) return CNullName;
+            if (obj is string s) return $"\"{s}\"";
+            if (obj.GetType().IsEnum) return $"{GetFullName(obj)}.{obj}";
+            return obj.ToString() ?? CNullName;
         }
 
         private static string GetFullName(object key)
