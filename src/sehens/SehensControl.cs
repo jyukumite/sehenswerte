@@ -1068,6 +1068,14 @@ namespace SehensWerte.Controls
                 PaintBoxMouse.DownSeconds = HighResTimer.StaticSeconds;
                 PaintBoxMouse.XDragPixels = 0;
 
+                m_XYDragView = null;
+                if (e.Button == MouseButtons.Left && TryGetXYUnderMouse(e, out var xyView, out _, out _, out _))
+                {
+                    m_XYDragView = xyView;
+                    m_XYDragStartXPan = xyView.XYXPan;
+                    m_XYDragStartYPan = xyView.XYYPan;
+                }
+
                 if ((PaintBoxMouse.MouseGuiSection & PaintBoxMouseInfo.GuiSection.BottomGutter) != 0)
                 {
                     PaintBoxMouse.ClickType = PaintBoxMouseInfo.Type.TraceHeight;
@@ -1233,7 +1241,11 @@ namespace SehensWerte.Controls
             if (m_ViewGroups != null && m_ViewGroups.Count > 0 && PaintBox.PaintedTraces.VisibleTraceGroupList != null && PaintBox.PaintedTraces.VisibleTraceGroupList.Count > 0)
             {
                 Keys modifierKeys = Control.ModifierKeys;
-                if ((modifierKeys & Keys.Control) == Keys.Control)
+                if (TryGetXYUnderMouse(e, out var xyView, out var xTrace, out var yTrace, out var xyGroup))
+                {
+                    PaintBoxMouseWheelXY(e, modifierKeys, xyView, xTrace, yTrace, xyGroup);
+                }
+                else if ((modifierKeys & Keys.Control) == Keys.Control)
                 {
                     PaintBoxMouseWheelHorizontalZoom(e);
                 }
@@ -1251,6 +1263,54 @@ namespace SehensWerte.Controls
                 }
             }
             m_HoldZoomPan = false;
+        }
+
+        private bool TryGetXYUnderMouse(MouseEventArgs e, out TraceView xyView, out TraceView xTrace, out TraceView yTrace, out TraceGroupDisplay group)
+        {
+            xyView = null!; xTrace = null!; yTrace = null!; group = null!;
+            int index = MouseToGroupIndex(e.Y);
+            if (index < 0 || index >= PaintBox.PaintedTraces.VisibleTraceGroupList.Count) return false;
+            var list = PaintBox.PaintedTraces.VisibleTraceGroupList[index];
+            if (list.Count != 2) return false;
+            var view0 = list[0];
+            if (!view0.IsXYMode) return false;
+            group = PaintBox.TraceToGroupDisplayInfo(view0);
+            if (!group.ProjectionArea.Contains(e.X, e.Y)) return false;
+            xyView = view0;
+            xTrace = list[0];
+            yTrace = list[1];
+            return true;
+        }
+
+        private void PaintBoxMouseWheelXY(MouseEventArgs e, Keys mods, TraceView xyView, TraceView xTrace, TraceView yTrace, TraceGroupDisplay group)
+        {
+            double factor = e.Delta > 0 ? 0.8 : 1.25; // wheel up = zoom in
+            double xr = (e.X - group.ProjectionArea.Left) / (double)group.ProjectionArea.Width;
+            double yr = 1.0 - (e.Y - group.ProjectionArea.Top) / (double)group.ProjectionArea.Height; // data Y+ is up
+            xr = Math.Max(0, Math.Min(1, xr));
+            yr = Math.Max(0, Math.Min(1, yr));
+
+            bool zoomX = !mods.HasFlag(Keys.Shift);
+            bool zoomY = !mods.HasFlag(Keys.Control);
+            if (zoomX) ZoomXYAxis(xyView, xTrace.LowestValue, xTrace.HighestValue, factor, xr, xAxis: true);
+            if (zoomY) ZoomXYAxis(xyView, yTrace.LowestValue, yTrace.HighestValue, factor, yr, xAxis: false);
+        }
+
+        private static void ZoomXYAxis(TraceView view, double fullLow, double fullHigh, double factor, double centerRatio, bool xAxis)
+        {
+            double full = fullHigh - fullLow;
+            if (full == 0) return;
+            double curZoom = xAxis ? view.XYXZoom : view.XYYZoom;
+            double curPan  = xAxis ? view.XYXPan  : view.XYYPan;
+            double newZoom = Math.Max(1e-6, Math.Min(1.0, curZoom * factor));
+            double curWin = full * curZoom;
+            double newWin = full * newZoom;
+            double curLow = fullLow + (full - curWin) * curPan;
+            double newLow = curLow + centerRatio * (curWin - newWin);
+            double newPan = (full - newWin) <= 0 ? 0 : (newLow - fullLow) / (full - newWin);
+            newPan = Math.Max(0, Math.Min(1, newPan));
+            if (xAxis) { view.XYXZoom = newZoom; view.XYXPan = newPan; }
+            else { view.XYYZoom = newZoom; view.XYYPan = newPan; }
         }
 
         protected override void WndProc(ref Message m)
@@ -1516,6 +1576,13 @@ namespace SehensWerte.Controls
             if (newVisibleDivision < 0 || newVisibleDivision >= PaintBox.PaintedTraces.VisibleTraceGroupList.Count) return;
 
             TraceGroupDisplay traceDivision = PaintBox.TraceToGroupDisplayInfo(PaintBox.PaintedTraces.VisibleTraceGroupList[newVisibleDivision][0]);
+
+            if (m_XYDragView != null && traceDivision.View0 == m_XYDragView)
+            {
+                XYDragPan(e, traceDivision);
+                return;
+            }
+
             double num = (e.X - PaintBoxMouse.WipeStart?.X) * m_ZoomValue / traceDivision.ProjectionArea.Width - PaintBoxMouse.XDragPixels ?? 0;
 
             PaintBoxMouse.XDragPixels += num;
@@ -1526,6 +1593,29 @@ namespace SehensWerte.Controls
                 VisibleViewGroupTranspose(PaintBoxMouse.MouseDownVisibleGroupIndex, newVisibleDivision);
                 PaintBoxMouse.MouseDownVisibleGroupIndex = newVisibleDivision;
             }
+        }
+
+        // XY drag-pan state: snapshot at MouseDown so drag deltas are computed from a stable origin.
+        private TraceView? m_XYDragView;
+        private double m_XYDragStartXPan;
+        private double m_XYDragStartYPan;
+
+        private void XYDragPan(MouseEventArgs e, TraceGroupDisplay group)
+        {
+            if (PaintBoxMouse.WipeStart == null || m_XYDragView == null) return;
+            double width = group.ProjectionArea.Width;
+            double height = group.ProjectionArea.Height;
+            if (width == 0 || height == 0) return;
+            // Pan is a fraction of (fullRange - visibleRange); converting screen-pixel drag to pan delta
+            // requires scaling by zoom/(1-zoom) so the data point under the cursor stays put.
+            double zx = m_XYDragView.XYXZoom;
+            double zy = m_XYDragView.XYYZoom;
+            double dxPanPerPixel = (zx < 1.0) ? zx / (1.0 - zx) / width : 0.0;
+            double dyPanPerPixel = (zy < 1.0) ? zy / (1.0 - zy) / height : 0.0;
+            double mdx = e.X - PaintBoxMouse.WipeStart.X;
+            double mdy = e.Y - PaintBoxMouse.WipeStart.Y;
+            m_XYDragView.XYXPan = Math.Max(0, Math.Min(1, m_XYDragStartXPan - mdx * dxPanPerPixel));
+            m_XYDragView.XYYPan = Math.Max(0, Math.Min(1, m_XYDragStartYPan + mdy * dyPanPerPixel));
         }
 
         private void SelectVisibleViewGroupRange(int start, int end)

@@ -133,11 +133,45 @@ namespace SehensWerte
                 Generate(scope);
                 ExampleKalman(scope);
                 ExampleControllers(scope);
+                ExampleXY(scope);
             }
             catch (Exception ex)
             {
                 OnLog?.Invoke(new Files.CsvLog.Entry(ex.ToString(), Files.CsvLog.Priority.Exception));
             }
+        }
+
+        // Lissajous demo: drives an XY pair with distinct per-axis units so the
+        // XY painter's unit-aware axis labels and porthole zoom/pan can be exercised.
+        private void ExampleXY(SehensControl scope)
+        {
+            const int sampleCount = 4000;
+            const double sps = 1000;
+            const double ax = 1.2;                  // volts
+            const double ay = 0.8;                  // amps
+            const double fx = 3;
+            const double fy = 5;
+            const double phase = Math.PI / 4;
+
+            var x = new double[sampleCount];
+            var y = new double[sampleCount];
+            for (int i = 0; i < sampleCount; i++)
+            {
+                double t = i / sps;
+                x[i] = ax * Math.Sin(2 * Math.PI * fx * t);
+                y[i] = ay * Math.Sin(2 * Math.PI * fy * t + phase);
+            }
+
+            scope["XY X (volts)"].Update(x, samplesPerSecond: sps);
+            scope["XY Y (amps)"].Update(y, samplesPerSecond: sps);
+
+            var xView = scope.TryGetView("XY X (volts)");
+            var yView = scope.TryGetView("XY Y (amps)");
+            if (xView != null) xView.SamplesVerticalUnit = "V";
+            if (yView != null) yView.SamplesVerticalUnit = "A";
+
+            scope.GroupViews(new[] { "XY X (volts)", "XY Y (amps)" }, colour: true);
+            if (xView != null) xView.PaintMode = TraceView.PaintModes.XYLine;
         }
 
         private void Generate(SehensControl scope)

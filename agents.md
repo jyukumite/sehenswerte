@@ -68,7 +68,8 @@ src/
 | `FftAnalyse` | `src/core/maths/FftAnalyse.cs` | FFT analysis math |
 | `ToneGenerator` | `src/core/generators/ToneGenerator.cs` | Configurable sine/tone generator |
 | `WaveformGenerator` | `src/core/generators/WaveformGenerator.cs` | Multi-waveform generator |
-| `AutoEditor` | `src/core/controls/AutoEditor.cs` | Generates a settings UI panel from a decorated class |
+| `AutoEditor` | `src/core/controls/AutoEditor.cs` | Reflection-based binder between controls and a decorated data object |
+| `AutoEditorControl` | `src/core/controls/AutoEditorControl.cs` | UserControl wrapper — call `Generate(sourceData)` to build the settings panel |
 | `AutoEditorBase` | `src/core/controls/AutoEditorBase.cs` | Base class for auto-editable settings objects |
 | `CsvLog` | `src/core/files/CsvLog.cs` | Structured append-only CSV logger with path-based subsystem tagging |
 | `SerialPort` | `src/core/comms/SerialPort.cs` | Serial port wrapper |
@@ -87,15 +88,38 @@ AudioSource → FilterInput → [FirFilter / IirFilter / FftFilter / …] → Fi
 
 - `FilterInput` is the source adapter; it accepts raw sample arrays.
 - Intermediate filters transform or analyse the signal.
-- `FilterOutput` is the sink adapter; consumers poll or subscribe to get processed samples.
+- `FilterOutput` is the sink adapter; consumers poll or subscribe to get processed samples. Also used for display-rate resampling when feeding a `SehensControl`.
 
 ---
 
 ## AutoEditor Convention
 
-Settings objects inherit `AutoEditorBase` and decorate fields with `[AutoEditor.DisplayOrder(n)]`.  
-Call `AutoEditor.Generate(settingsObject)` to produce a `Panel` with auto-generated controls.  
-Numeric fields tagged with `[AutoEditor.Range(min, max, step)]` render with `-`/`+` kick buttons that nudge the text value by `step`, clamped to `[min, max]`.  
+Settings objects inherit `AutoEditorBase`. Decorate fields/properties with attributes to control rendering:
+
+| Attribute | Effect |
+|-----------|--------|
+| `[AutoEditor.DisplayOrder(n, groupName?)]` | Sort order; items sharing `(int)n` render under the same group header |
+| `[AutoEditor.DisplayName("...")]` | Override the label (default is pretty-printed field name) |
+| `[AutoEditor.Values(new[]{...})]` / `Values(typeof(Enum))` / `Values(typeof(IValuesAttrInterface))` | Render as a `ComboBox` with the given list |
+| `[AutoEditor.Range(min, max, step)]` | On a numeric field, adds `-`/`+` kick buttons that nudge by `step`, clamped to `[min, max]` |
+| `[AutoEditor.Hidden]` | Skip rendering |
+| `[AutoEditor.Disabled]` | Render read-only |
+| `[AutoEditor.Password]` | Mask the TextBox content |
+| `[AutoEditor.PushButton("caption")]` | On a `bool` or delegate field, render as a clickable Button |
+| `[AutoEditor.SubEditor]` | Render a `...` button that opens an `AutoEditorForm` for the nested object |
+
+Host a panel by adding an `AutoEditorControl` to your form and calling `Generate(sourceData)`.  
+`AutoEditorBase` exposes an `OnChanged` callback and an `UpdateControls` action for round-tripping between the UI and model.
+
+---
+
+## SehensControl Usage
+
+- Embed an instance in a form (usually via the Designer); the host owns the control.
+- Feed traces by writing samples through a `FilterOutput`, or by directly calling into `TraceData`.
+- `Scope.Import(path)` loads a previously saved state or trace file — hosts typically wire it to drag-drop or a command-line argument.
+- Right-click context menu is built from `ScopeContextMenu`; per-trace menus are in `src/sehens/ui/ContextMenus.cs`.
+
 ---
 
 ## Native Dependencies
@@ -108,7 +132,8 @@ Numeric fields tagged with `[AutoEditor.Range(min, max, step)]` render with `-`/
 ## Conventions
 
 - Core utilities have no dependency on the Sehens control; keep it that way.
-- Filters are stateful objects — one instance per channel/pipeline, not shared.
+- Filters are stateful objects, one instance per channel/pipeline, not shared.
 - `CsvLog` paths use `/`-separated extension segments to tag log subsystems.
 - XML serialization uses `XmlSerialise` helpers, not `JsonSerializer`.
-- The example app (`example/`) is the canonical integration test — keep it compiling.
+- The example app (`example/`) is the canonical integration test, keep it compiling.
+- ASCII only in source and docs. No em-dashes, en-dashes, curly quotes, arrows, checkmarks, or other non-ASCII punctuation. Use `-`, `--`, `->`, straight quotes, plain words.

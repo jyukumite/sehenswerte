@@ -609,8 +609,13 @@ namespace SehensWerte.Controls.Sehens
                 PaintHorizontalAxis(graphics, viewInfo);
                 PaintAxesTitles(graphics, viewInfo);
                 PaintVerticalAxis(graphics, viewInfo);
+                bool xyGroup = views[0].IsXYMode;
                 foreach (TraceView item in views)
                 {
+                    // In XY mode the XY painter on View0 renders both members of the pair.
+                    // Skip sibling traces so their own (2D) painters don't overlay the XY plot.
+                    if (xyGroup && item != views[0]) continue;
+
                     TraceGroupDisplay itemInfo = TraceToGroupDisplayInfo(item, flags);
                     if (Scope.ShowTraceFeatures)
                     {
