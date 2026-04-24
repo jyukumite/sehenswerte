@@ -163,6 +163,52 @@ namespace SehensWerte.Controls
             LayoutPanel?.Controls.Add(panel, 0, LayoutPanel.RowCount);
         }
 
+        private static Panel MakeKickPanel(TextBox textBox, AutoEditor.EditRow row, AutoEditor.RangeAttribute range)
+        {
+            const int buttonWidth = 24;
+            Panel panel = new Panel
+            {
+                Dock = DockStyle.Top,
+                AutoSize = false,
+                Height = Math.Max(textBox.PreferredHeight, 23),
+                Tag = row,
+            };
+            Button down = new Button { Text = "-", Width = buttonWidth, Dock = DockStyle.Left, TabStop = false };
+            Button up = new Button { Text = "+", Width = buttonWidth, Dock = DockStyle.Right, TabStop = false };
+            down.Enabled = textBox.Enabled;
+            up.Enabled = textBox.Enabled;
+
+            void kick(double direction)
+            {
+                double value;
+                if (!double.TryParse(textBox.Text, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.CurrentCulture, out value))
+                {
+                    value = range.Min;
+                }
+                value = Math.Max(range.Min, Math.Min(range.Max, value + direction * range.Step));
+                string text = IsIntegerType(row.Type) ? ((long)Math.Round(value)).ToString() : value.ToString("G15");
+                if (textBox.Text != text)
+                {
+                    textBox.Text = text;
+                }
+            }
+            down.Click += (s, e) => kick(-1);
+            up.Click += (s, e) => kick(+1);
+
+            panel.Controls.Add(textBox);
+            panel.Controls.Add(up);
+            panel.Controls.Add(down);
+            return panel;
+        }
+
+        private static bool IsIntegerType(Type t)
+        {
+            return t == typeof(byte) || t == typeof(sbyte)
+                || t == typeof(short) || t == typeof(ushort)
+                || t == typeof(int) || t == typeof(uint)
+                || t == typeof(long) || t == typeof(ulong);
+        }
+
         private static void GenerateControl(TableLayoutPanel tableLayout, AutoEditor.EditRow row)
         {
             if (AutoEditor.IsHidden(row.MemberInfo)
@@ -224,14 +270,23 @@ namespace SehensWerte.Controls
                 {
                     TextBox textBox = new TextBox
                     {
-                        Dock = DockStyle.Top,
+                        Dock = DockStyle.Fill,
                         AutoSize = true,
                         Tag = row,
                     };
                     if (AutoEditor.IsPassword(row.MemberInfo)) { textBox.PasswordChar = '*'; }
-                    tableLayout.Controls.Add(control, 0, ++tableLayout.RowCount);
-                    tableLayout.Controls.Add(textBox, 1, tableLayout.RowCount);
                     textBox.Enabled = AutoEditor.IsEnabled(row.MemberInfo);
+
+                    AutoEditor.RangeAttribute? range = (row.Type == typeof(string)) ? null : AutoEditor.Range(row.MemberInfo);
+                    tableLayout.Controls.Add(control, 0, ++tableLayout.RowCount);
+                    if (range != null)
+                    {
+                        tableLayout.Controls.Add(MakeKickPanel(textBox, row, range), 1, tableLayout.RowCount);
+                    }
+                    else
+                    {
+                        tableLayout.Controls.Add(textBox, 1, tableLayout.RowCount);
+                    }
                 }
                 else if (row.Type.IsSubclassOf(typeof(Delegate)) && AutoEditor.IsPushButton(row.MemberInfo))
                 {

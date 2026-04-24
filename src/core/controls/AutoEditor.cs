@@ -180,6 +180,20 @@ namespace SehensWerte.Controls
             public PushButtonAttribute(string caption) { Caption = caption; }
         }
 
+        [AttributeUsage(AttributeTargets.Property | AttributeTargets.Field)]
+        public class RangeAttribute : Attribute
+        {
+            public double Min;
+            public double Max;
+            public double Step;
+            public RangeAttribute(double min, double max, double step)
+            {
+                Min = min;
+                Max = max;
+                Step = step;
+            }
+        }
+
         public interface ValuesAttributeInterface
         {
             public IEnumerable<string> GetValues();
@@ -286,6 +300,12 @@ namespace SehensWerte.Controls
         internal static bool IsPassword(MemberInfo info)
         {
             return info.GetCustomAttributes(typeof(PasswordAttribute), inherit: false).Length != 0;
+        }
+
+        internal static RangeAttribute? Range(MemberInfo info)
+        {
+            object[] customAttributes = info.GetCustomAttributes(typeof(RangeAttribute), inherit: false);
+            return (customAttributes.Length == 0) ? null : (customAttributes[0] as RangeAttribute);
         }
 
         private void WalkControls()
@@ -812,6 +832,7 @@ namespace SehensWerte.Controls
             att = new AutoEditor.HiddenAttribute();
             att = new AutoEditor.DisabledAttribute();
             att = new AutoEditor.PushButtonAttribute("test");
+            att = new AutoEditor.RangeAttribute(0, 100, 1);
         }
 
         [TestMethod]
