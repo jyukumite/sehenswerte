@@ -1271,7 +1271,7 @@ namespace SehensWerte.Controls
             int index = MouseToGroupIndex(e.Y);
             if (index < 0 || index >= PaintBox.PaintedTraces.VisibleTraceGroupList.Count) return false;
             var list = PaintBox.PaintedTraces.VisibleTraceGroupList[index];
-            if (list.Count != 2) return false;
+            if (list.Count < 2 || list.Count > 3) return false;
             var view0 = list[0];
             if (!view0.IsXYMode) return false;
             group = PaintBox.TraceToGroupDisplayInfo(view0);
@@ -1282,6 +1282,13 @@ namespace SehensWerte.Controls
             return true;
         }
 
+        // Returns the Z source trace for XYZ groups, null for XY groups.
+        private static TraceView? GetZTraceIfXYZ(TraceView xyView)
+        {
+            var group = xyView.Painted.Group;
+            return (group != null && group.Count == 3) ? group[2] : null;
+        }
+
         private void PaintBoxMouseWheelXY(MouseEventArgs e, Keys mods, TraceView xyView, TraceView xTrace, TraceView yTrace, TraceGroupDisplay group)
         {
             double factor = e.Delta > 0 ? 0.8 : 1.25; // wheel up = zoom in
@@ -1290,18 +1297,32 @@ namespace SehensWerte.Controls
             xr = Math.Max(0, Math.Min(1, xr));
             yr = Math.Max(0, Math.Min(1, yr));
 
-            bool zoomX = !mods.HasFlag(Keys.Shift);
-            bool zoomY = !mods.HasFlag(Keys.Control);
-            if (zoomX) ZoomXYAxis(xyView, xTrace.LowestValue, xTrace.HighestValue, factor, xr, xAxis: true);
-            if (zoomY) ZoomXYAxis(xyView, yTrace.LowestValue, yTrace.HighestValue, factor, yr, xAxis: false);
+            TraceView? zTrace = GetZTraceIfXYZ(xyView);
+            bool alt = mods.HasFlag(Keys.Alt);
+            bool ctrl = mods.HasFlag(Keys.Control);
+            bool shift = mods.HasFlag(Keys.Shift);
+
+            // Alt+wheel zooms the Z axis only (XYZ mode only). Otherwise Ctrl gates X and Shift gates Y.
+            if (alt && zTrace != null)
+            {
+                ZoomXYAxis(xyView, zTrace.LowestValue, zTrace.HighestValue, factor, 0.5, XYZAxis.Z);
+                return;
+            }
+
+            bool zoomX = !shift;
+            bool zoomY = !ctrl;
+            if (zoomX) ZoomXYAxis(xyView, xTrace.LowestValue, xTrace.HighestValue, factor, xr, XYZAxis.X);
+            if (zoomY) ZoomXYAxis(xyView, yTrace.LowestValue, yTrace.HighestValue, factor, yr, XYZAxis.Y);
         }
 
-        private static void ZoomXYAxis(TraceView view, double fullLow, double fullHigh, double factor, double centerRatio, bool xAxis)
+        private enum XYZAxis { X, Y, Z }
+
+        private static void ZoomXYAxis(TraceView view, double fullLow, double fullHigh, double factor, double centerRatio, XYZAxis axis)
         {
             double full = fullHigh - fullLow;
             if (full == 0) return;
-            double curZoom = xAxis ? view.XYXZoom : view.XYYZoom;
-            double curPan  = xAxis ? view.XYXPan  : view.XYYPan;
+            double curZoom = axis switch { XYZAxis.X => view.XYXZoom, XYZAxis.Y => view.XYYZoom, _ => view.XYZZoom };
+            double curPan  = axis switch { XYZAxis.X => view.XYXPan,  XYZAxis.Y => view.XYYPan,  _ => view.XYZPan  };
             double newZoom = Math.Max(1e-6, Math.Min(1.0, curZoom * factor));
             double curWin = full * curZoom;
             double newWin = full * newZoom;
@@ -1309,8 +1330,12 @@ namespace SehensWerte.Controls
             double newLow = curLow + centerRatio * (curWin - newWin);
             double newPan = (full - newWin) <= 0 ? 0 : (newLow - fullLow) / (full - newWin);
             newPan = Math.Max(0, Math.Min(1, newPan));
-            if (xAxis) { view.XYXZoom = newZoom; view.XYXPan = newPan; }
-            else { view.XYYZoom = newZoom; view.XYYPan = newPan; }
+            switch (axis)
+            {
+                case XYZAxis.X: view.XYXZoom = newZoom; view.XYXPan = newPan; break;
+                case XYZAxis.Y: view.XYYZoom = newZoom; view.XYYPan = newPan; break;
+                case XYZAxis.Z: view.XYZZoom = newZoom; view.XYZPan = newPan; break;
+            }
         }
 
         protected override void WndProc(ref Message m)

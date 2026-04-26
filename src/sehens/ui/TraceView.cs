@@ -291,12 +291,14 @@ namespace SehensWerte.Controls.Sehens
             }
         }
 
-        // XY viewport: interpreted only when PaintMode is one of the XY* modes.
+        // XY/XYZ viewport: interpreted only when PaintMode is one of the XY* or XYZ* modes.
         // Zoom is a fraction (0,1] of the source trace's full extent; pan is 0..(1-zoom).
         private double m_XYXZoom = 1.0;
         private double m_XYXPan = 0.0;
         private double m_XYYZoom = 1.0;
         private double m_XYYPan = 0.0;
+        private double m_XYZZoom = 1.0;
+        private double m_XYZPan = 0.0;
 
         [XmlSave] [AutoEditor.Hidden]
         public double XYXZoom { get => m_XYXZoom; set { double v = Math.Max(1e-6, Math.Min(1.0, value)); if (m_XYXZoom != v) { m_XYXZoom = v; Scope?.ViewNeedsRepaint(this); } } }
@@ -306,11 +308,16 @@ namespace SehensWerte.Controls.Sehens
         public double XYYZoom { get => m_XYYZoom; set { double v = Math.Max(1e-6, Math.Min(1.0, value)); if (m_XYYZoom != v) { m_XYYZoom = v; Scope?.ViewNeedsRepaint(this); } } }
         [XmlSave] [AutoEditor.Hidden]
         public double XYYPan { get => m_XYYPan; set { double v = Math.Max(0.0, Math.Min(1.0, value)); if (m_XYYPan != v) { m_XYYPan = v; Scope?.ViewNeedsRepaint(this); } } }
+        [XmlSave] [AutoEditor.Hidden]
+        public double XYZZoom { get => m_XYZZoom; set { double v = Math.Max(1e-6, Math.Min(1.0, value)); if (m_XYZZoom != v) { m_XYZZoom = v; Scope?.ViewNeedsRepaint(this); } } }
+        [XmlSave] [AutoEditor.Hidden]
+        public double XYZPan { get => m_XYZPan; set { double v = Math.Max(0.0, Math.Min(1.0, value)); if (m_XYZPan != v) { m_XYZPan = v; Scope?.ViewNeedsRepaint(this); } } }
 
         public bool IsXYMode =>
             m_PaintMode == PaintModes.XYLine
             || m_PaintMode == PaintModes.XYPoints
-            || m_PaintMode == PaintModes.XYCurve;
+            || m_PaintMode == PaintModes.XYCurve
+            || m_PaintMode == PaintModes.XYZProjection;
 
         private bool m_HoldPanZoom = false;
         [XmlSave]

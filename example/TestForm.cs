@@ -134,11 +134,53 @@ namespace SehensWerte
                 ExampleKalman(scope);
                 ExampleControllers(scope);
                 ExampleXY(scope);
+                ExampleXYZ(scope);
             }
             catch (Exception ex)
             {
                 OnLog?.Invoke(new Files.CsvLog.Entry(ex.ToString(), Files.CsvLog.Priority.Exception));
             }
+        }
+
+        // Lorenz attractor example
+        private void ExampleXYZ(SehensControl scope)
+        {
+            const int sampleCount = 8000;
+            const double dt = 0.005;
+            const double sigma = 10.0;
+            const double rho = 28.0;
+            const double beta = 8.0 / 3.0;
+
+            var x = new double[sampleCount];
+            var y = new double[sampleCount];
+            var z = new double[sampleCount];
+            double px = 0.1, py = 0.0, pz = 0.0;
+            for (int i = 0; i < sampleCount; i++)
+            {
+                double dx = sigma * (py - px);
+                double dy = px * (rho - pz) - py;
+                double dz = px * py - beta * pz;
+                px += dx * dt;
+                py += dy * dt;
+                pz += dz * dt;
+                x[i] = px;
+                y[i] = py;
+                z[i] = pz;
+            }
+
+            scope["XYZ X (sigma)"].Update(x, samplesPerSecond: 1.0 / dt);
+            scope["XYZ Y (rho)"].Update(y, samplesPerSecond: 1.0 / dt);
+            scope["XYZ Z (beta)"].Update(z, samplesPerSecond: 1.0 / dt);
+
+            var xView = scope.TryGetView("XYZ X (sigma)");
+            var yView = scope.TryGetView("XYZ Y (rho)");
+            var zView = scope.TryGetView("XYZ Z (beta)");
+            if (xView != null) xView.SamplesVerticalUnit = "x";
+            if (yView != null) yView.SamplesVerticalUnit = "y";
+            if (zView != null) zView.SamplesVerticalUnit = "z";
+
+            scope.GroupViews(new[] { "XYZ X (sigma)", "XYZ Y (rho)", "XYZ Z (beta)" }, colour: true);
+            if (xView != null) xView.PaintMode = TraceView.PaintModes.XYZProjection;
         }
 
         // Lissajous demo: drives an XY pair with distinct per-axis units so the
