@@ -625,6 +625,7 @@ namespace SehensWerte.Controls.Sehens
                 {
                     try
                     {
+                        //fixme? use TraceViewAudioPlayback version, but support mouse wipe selection
                         double[]? samples = a.Views[0].CalculatedBeforeZoom;
                         if (samples != null)
                         {
@@ -1377,6 +1378,59 @@ namespace SehensWerte.Controls.Sehens
                                     ? TraceViewEmbedText.Style.Normal
                                     : TraceViewEmbedText.Style.Selected
             });
+
+            embeddedContextMenu.Add(new ScopeContextMenu.EmbeddedMenu
+            {
+                Text = "Audio",
+                Sort = 50,
+                Style = TraceViewEmbedText.Style.Normal,
+                Clicked = (a) => ShowAudioPopup(a.View),
+                GetStyle = (a) =>
+                {
+                    a.Menu.Style = a.View.Samples.InputSamplesPerSecond > 0
+                        ? (a.View.IsPlaying ? TraceViewEmbedText.Style.Selected : TraceViewEmbedText.Style.Normal)
+                        : TraceViewEmbedText.Style.Invisible;
+                }
+            });
+        }
+
+        private static void ShowAudioPopup(TraceView view)
+        {
+            var menu = new ContextMenuStrip();
+
+            var play = new ToolStripMenuItem("Play");
+            play.Enabled = !view.IsPlaying;
+            play.Click += (s, e) =>
+            {
+                try
+                {
+                    view.StartPlayback();
+                }
+                catch (Exception ex)
+                {
+                    MessageBox.Show(ex.Message);
+                }
+            };
+            menu.Items.Add(play);
+
+            var stop = new ToolStripMenuItem("Stop");
+            stop.Enabled = view.IsPlaying;
+            stop.Click += (s, e) => view.StopPlayback();
+            menu.Items.Add(stop);
+
+            var loop = new ToolStripMenuItem("Loop");
+            loop.CheckOnClick = true;
+            loop.Checked = view.AudioLoop;
+            loop.CheckedChanged += (s, e) => view.AudioLoop = loop.Checked;
+            menu.Items.Add(loop);
+
+            var afterFilter = new ToolStripMenuItem("After filter");
+            afterFilter.CheckOnClick = true;
+            afterFilter.Checked = view.AudioAfterFilter;
+            afterFilter.CheckedChanged += (s, e) => view.AudioAfterFilter = afterFilter.Checked;
+            menu.Items.Add(afterFilter);
+
+            menu.Show(Cursor.Position);
         }
 
         private static void AddTraceSubMenu(List<ScopeContextMenu.MenuItem> contextMenu)

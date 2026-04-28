@@ -474,7 +474,6 @@ namespace SehensWerte.Controls.Sehens
         private bool m_ShowPictureInPicture;
         [XmlSave]
         [AutoEditor.DisplayOrder(1.1)]
-
         public bool ShowPictureInPicture
         {
             get => m_ShowPictureInPicture;
@@ -485,6 +484,84 @@ namespace SehensWerte.Controls.Sehens
                 Scope.ViewNeedsRepaint(this);
                 GuiUpdateControls?.Invoke(this);
             }
+        }
+
+        private bool m_AudioLoop;
+        [XmlSave]
+        [AutoEditor.DisplayOrder(1.2)]
+        public bool AudioLoop
+        {
+            get => m_AudioLoop;
+            set
+            {
+                if (m_AudioLoop == value) return;
+                m_AudioLoop = value;
+                GuiUpdateControls?.Invoke(this);
+            }
+        }
+
+        private bool m_AudioAfterFilter = true;
+        [XmlSave]
+        [AutoEditor.DisplayOrder(1.3)]
+        public bool AudioAfterFilter
+        {
+            get => m_AudioAfterFilter;
+            set
+            {
+                if (m_AudioAfterFilter == value) return;
+                m_AudioAfterFilter = value;
+                if (IsPlaying) 
+                {
+                    StartPlayback();
+                }
+                GuiUpdateControls?.Invoke(this);
+            }
+        }
+
+        private TraceViewAudioPlayback? m_AudioPlayback;
+        private double[]? m_PlaybackSourceSamples;
+
+        [AutoEditor.Hidden]
+        public bool IsPlaying => m_AudioPlayback?.IsPlaying ?? false;
+
+        [AutoEditor.Hidden]
+        public int PlaybackSampleNumber => m_AudioPlayback?.CurrentSampleNumber ?? -1;
+
+        public void StartPlayback()
+        {
+            StopPlayback();
+            double[]? samples = m_AudioAfterFilter ? CalculatedBeforeZoom : RawBeforeZoom;
+            double sps = Samples.InputSamplesPerSecond;
+            if (samples == null || samples.Length <= 1 || sps <= 0) return;
+            m_PlaybackSourceSamples = samples;
+            var playback = new TraceViewAudioPlayback(
+                samples, startSample: 0, samplesPerSecond: sps,
+                onTick: () => Scope.ViewNeedsRepaint(this),
+                onFinished: () =>
+                {
+                    Scope.ViewNeedsRepaint(this);
+                    if (m_AudioLoop) Scope.BeginInvokeIfRequired(() => { if (m_AudioLoop) StartPlayback(); });
+                });
+            m_AudioPlayback = playback;
+            playback.Play();
+            Scope.ViewNeedsRepaint(this);
+        }
+
+        public void StopPlayback()
+        {
+            var playback = m_AudioPlayback;
+            m_AudioPlayback = null;
+            m_PlaybackSourceSamples = null;
+            playback?.Dispose();
+            Scope.ViewNeedsRepaint(this);
+        }
+
+        internal void RefreshPlaybackBuffer()
+        {
+            if (!IsPlaying) return;
+            double[]? current = m_AudioAfterFilter ? CalculatedBeforeZoom : RawBeforeZoom;
+            if (current == null || current == m_PlaybackSourceSamples) return;
+            Scope.BeginInvokeIfRequired(() => { if (IsPlaying) StartPlayback(); });
         }
 
         private TraceView? m_TriggerTrace;
@@ -1300,6 +1377,10 @@ namespace SehensWerte.Controls.Sehens
                     {
                         viewer.TraceDataCalculatedSamplesChanged(m_Samples);
                     });
+                }
+                if (before)
+                {
+                    RefreshPlaybackBuffer();
                 }
             }
         }
@@ -2198,6 +2279,7 @@ value=" + string.Format(VerticalUnitFormat, Clicks[0].SampleAtX.ToStringRound(5,
         public void Dispose()
         {
             GroupWithView = "";
+            StopPlayback();
             Scope.RemoveView(this);
             m_Samples.RemoveViewer(this);
             Scope.BeginInvokeIfRequired(() =>

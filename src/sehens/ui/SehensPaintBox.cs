@@ -630,6 +630,18 @@ namespace SehensWerte.Controls.Sehens
                         item.Painter.PaintFeatures(graphics, itemInfo,
                             itemInfo.View0.Samples.ViewedFeatures.Where(x => x.Type != TraceFeature.Feature.Highlight));
                     }
+                    if (item.IsPlaying && item.PlaybackSampleNumber >= 0)
+                    {
+                        item.Painter.PaintFeatures(graphics, itemInfo, new[]
+                        {
+                            new TraceFeature
+                            {
+                                Type = TraceFeature.Feature.Line,
+                                SampleNumber = item.PlaybackSampleNumber,
+                                Colour = Color.LimeGreen,
+                            }
+                        });
+                    }
                     item.Painter.PaintEmbeddedControls(graphics, itemInfo, Scope.ContextMenu);
                     if (itemInfo.MouseOnEmbed)
                     {
