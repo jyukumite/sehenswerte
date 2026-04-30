@@ -75,8 +75,8 @@ src/
 | `SerialPort` | `src/core/comms/SerialPort.cs` | Serial port wrapper |
 | `Ring<T>` | `src/core/Ring.cs` | Generic ring/circular buffer |
 | `StatsFilter` | `src/core/filters/StatsFilter.cs` | Rolling statistics (mean, variance, RMS) filter |
-| `DataGridControl` | `src/core/controls/DataGridControl.cs` | Filterable, sortable data grid with undo/replay stack and save/restore view state |
-| `BoundData` | `src/core/controls/DataGridBoundData.cs` | `IBindingList` backing store for `DataGridControl`; owns `UnfilteredData`, `FilteredData`, `SortKeys`, `UndoList` |
+| `DataGridControl` | `src/core/controls/DataGridControl.cs` | Filterable, sortable data grid with undo/redo/replay stack and save/restore view state. Hotkeys: Ctrl-C copy, Ctrl-Z undo, Ctrl-Y / Ctrl-Shift-Z redo, Ctrl-F regex show on current column |
+| `BoundData` | `src/core/controls/DataGridBoundData.cs` | `IBindingList` backing store for `DataGridControl`; owns `UnfilteredData`, `FilteredData`, `SortKeys`, history + redo stacks. Redo re-dispatches the popped action via the same path as XML replay; any `PushSnapshot` from a non-Redo caller clears the redo stack. Fires `HistoryChanged` so the host can show/hide the Redo button |
 | `DataGridControlHistory` | `src/core/controls/DataGridControlHistory.cs` | XML-serialisable snapshot history for `DataGridControl.SaveView` / `RestoreView` |
 
 ---

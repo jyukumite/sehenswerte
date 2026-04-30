@@ -72,6 +72,7 @@ namespace SehensWerte.Controls
         private ToolStripStatusLabel StatusFilterText;
         private ToolStripDropDownButton ShowAllStatus;
         private ToolStripDropDownButton UndoFilterStatus;
+        private ToolStripDropDownButton RedoFilterStatus;
         private ToolStripDropDownButton HideSelectedStatus;
         private ToolStripDropDownButton HideUnselectedStatus;
         private ToolStripDropDownButton HideAboveStatus;
@@ -127,6 +128,7 @@ namespace SehensWerte.Controls
             this.StatusFilterText = new System.Windows.Forms.ToolStripStatusLabel();
             this.ShowAllStatus = new System.Windows.Forms.ToolStripDropDownButton();
             this.UndoFilterStatus = new System.Windows.Forms.ToolStripDropDownButton();
+            this.RedoFilterStatus = new System.Windows.Forms.ToolStripDropDownButton();
             this.HideSelectedStatus = new System.Windows.Forms.ToolStripDropDownButton();
             this.HideUnselectedStatus = new System.Windows.Forms.ToolStripDropDownButton();
             this.HideAboveStatus = new System.Windows.Forms.ToolStripDropDownButton();
@@ -201,6 +203,7 @@ namespace SehensWerte.Controls
                     this.StatusFilterText,
                     this.ShowAllStatus,
                     this.UndoFilterStatus,
+                    this.RedoFilterStatus,
                     this.HideSelectedStatus,
                     this.HideUnselectedStatus,
                     this.HideAboveStatus,
@@ -241,6 +244,14 @@ namespace SehensWerte.Controls
             this.UndoFilterStatus.Text = "Undo";
             this.UndoFilterStatus.Click += new System.EventHandler(this.UndoFilterStatus_Click);
             this.UndoFilterStatus.BackColor = prettyColours ? Color.FromArgb(216, 208, 242) : SystemColors.Control;
+
+            this.RedoFilterStatus.Name = "RedoFilterStatus";
+            this.RedoFilterStatus.ShowDropDownArrow = false;
+            this.RedoFilterStatus.Size = new System.Drawing.Size(76, 38);
+            this.RedoFilterStatus.Text = "Redo";
+            this.RedoFilterStatus.Visible = false;
+            this.RedoFilterStatus.Click += new System.EventHandler(this.RedoFilterStatus_Click);
+            this.RedoFilterStatus.BackColor = prettyColours ? Color.FromArgb(216, 208, 242) : SystemColors.Control;
 
             this.HideSelectedStatus.Name = "HideSelectedStatus";
             this.HideSelectedStatus.ShowDropDownArrow = false;
@@ -357,6 +368,8 @@ namespace SehensWerte.Controls
 
         private void Grid_KeyDown(object? sender, KeyEventArgs e)
         {
+            bool inEdit = Grid.IsCurrentCellInEditMode; // don't steal selected hotkeys from a cell editor
+
             if (e.Control && e.KeyCode == Keys.C)
             {
                 string[] formats = new string[] { DataFormats.Html, DataFormats.Text, DataFormats.UnicodeText, DataFormats.CommaSeparatedValue };
@@ -380,6 +393,24 @@ namespace SehensWerte.Controls
                     }
                     e.Handled = true;
                 }
+            }
+            else if (!inEdit && e.Control && e.KeyCode == Keys.Z && !e.Shift)
+            {
+                UndoFilterStatus_Click(this, EventArgs.Empty);
+                e.Handled = true;
+                e.SuppressKeyPress = true;
+            }
+            else if (!inEdit && e.Control && (e.KeyCode == Keys.Y || (e.KeyCode == Keys.Z && e.Shift)))
+            {
+                RedoFilterStatus_Click(this, EventArgs.Empty);
+                e.Handled = true;
+                e.SuppressKeyPress = true;
+            }
+            else if (!inEdit && e.Control && e.KeyCode == Keys.F)
+            {
+                ShowByRegexStatus_Click(this, EventArgs.Empty);
+                e.Handled = true;
+                e.SuppressKeyPress = true;
             }
             else if (Grid.CurrentCell != null)
             {
@@ -548,6 +579,21 @@ namespace SehensWerte.Controls
             });
         }
 
+        private void RedoFilterStatus_Click(object? sender, EventArgs e)
+        {
+            this.ExceptionToMessagebox(() =>
+            {
+                ApplyColumnWidths(DataGridBind?.Redo());
+            });
+        }
+
+        private void UpdateButtons(object? sender, EventArgs e)
+        {
+            UndoFilterStatus.Visible = DataGridBind?.CanUndo ?? false;
+            RedoFilterStatus.Visible = DataGridBind?.CanRedo ?? false;
+            ShowAllStatus.Visible = DataGridBind?.IsFiltered ?? false;
+        }
+
         private void ApplyColumnWidths(IEnumerable<(string Name, int Width)>? widths)
         {
             if (widths == null) return;
@@ -628,7 +674,7 @@ namespace SehensWerte.Controls
 
         private void ShowByRegexStatus_Click(object? sender, EventArgs e)
         {
-            if (Grid.SelectedCells.Count != 1) return;
+            if (Grid.CurrentCell == null) return;
             string header = Convert.ToString(Grid.CurrentCell.OwningColumn.HeaderText);
             string regex = InputFieldForm.Show($"Show {header} by regex", "Regex", RegexInput, regex: true) ?? "";
             if (!string.IsNullOrEmpty(regex))
@@ -695,10 +741,7 @@ namespace SehensWerte.Controls
                 {
                     return;
                 }
-
-                string header = Grid.CurrentCell.OwningColumn.HeaderText;
-                int counter = 0;
-                DataGridBind?.HideRowsIf(_ => counter++ % 10 != 0);
+                DataGridBind?.Decimate(10);
             });
         }
 
@@ -869,6 +912,7 @@ namespace SehensWerte.Controls
             NumericGrid = false;
             DataGridBind = null;
             Grid.Columns.Clear();
+            UpdateButtons(this, EventArgs.Empty);
             UpdateStatusStrip();
         }
 
@@ -878,8 +922,9 @@ namespace SehensWerte.Controls
             NumericGrid = numeric;
             DataGridBind = new BoundData(fileName, numeric: numeric, CsvLog.ExtendPath(OnLog, "BoundData"));
             DataGridBind.ListChanged += GridData_ListChanged;
-            DataGridBind.Setup(Grid);
+            DataGridBind.Setup(this);
             UpdateStatusStrip();
+            UpdateButtons(this, EventArgs.Empty);
         }
 
         public void LoadRows(IEnumerable<IEnumerable<string?>> rows, IEnumerable<string> colnames)
@@ -888,8 +933,9 @@ namespace SehensWerte.Controls
             NumericGrid = false;
             DataGridBind = new BoundData(rows, colnames, CsvLog.ExtendPath(OnLog, "BoundData"));
             DataGridBind.ListChanged += GridData_ListChanged;
-            DataGridBind.Setup(Grid);
+            DataGridBind.Setup(this);
             UpdateStatusStrip();
+            UpdateButtons(this, EventArgs.Empty);
         }
 
         public void LoadRows(IEnumerable<IEnumerable<double>> rows, IEnumerable<string> colnames)
@@ -898,8 +944,9 @@ namespace SehensWerte.Controls
             NumericGrid = true;
             DataGridBind = new BoundData(rows, colnames, CsvLog.ExtendPath(OnLog, "BoundData"));
             DataGridBind.ListChanged += GridData_ListChanged;
-            DataGridBind.Setup(Grid);
+            DataGridBind.Setup(this);
             UpdateStatusStrip();
+            UpdateButtons(this, EventArgs.Empty);
         }
 
         public void LoadJson(string json)
@@ -992,6 +1039,7 @@ namespace SehensWerte.Controls
         private void GridData_ListChanged(object? sender, ListChangedEventArgs e)
         {
             UpdateStatusStrip();
+            UpdateButtons(this, EventArgs.Empty);
         }
 
         public DataGridViewCellEventArgs? GetSelectedCell

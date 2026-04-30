@@ -39,7 +39,6 @@ namespace SehensWerte.Controls
                 None,
                 ShowAll,
                 ApplySort,
-                HideRowsIf,
                 HideRowsMatching,
                 HideRowsNotMatching,
                 ShowRowsMatchingRegex,
@@ -48,6 +47,7 @@ namespace SehensWerte.Controls
                 HideRowsAbove,
                 HideRowsBelow,
                 ColumnResize,
+                Decimate,
             }
 
             public Operation Kind { get; set; } = Operation.None;
@@ -57,6 +57,7 @@ namespace SehensWerte.Controls
             public string AnchorValue { get; set; } = ""; // HideRowsAbove/Below: cell value at click time
             public int Row { get; set; } = -1;            // HideRowsAbove/Below positional fallback
             public int Width { get; set; } = -1;          // ColumnResize
+            public int Stride { get; set; } = 0;          // Decimate: keep every Nth row
             public List<string> Values { get; set; } = new(); // HideRowsMatching/NotMatching
         }
 
@@ -195,6 +196,87 @@ namespace SehensWerte.Controls
                 fresh.Undo();
             }
             Assert.AreEqual(3, fresh.FilteredData.Count);
+        }
+
+        [TestMethod]
+        public void RedoRestoresUndoneFilter()
+        {
+            var bd = CreateTestData();
+            bd.HideRowsMatching("Name", new[] { "b" });
+            Assert.AreEqual(2, bd.FilteredData.Count);
+            Assert.IsFalse(bd.CanRedo);
+
+            bd.Undo();
+            Assert.AreEqual(3, bd.FilteredData.Count);
+            Assert.IsTrue(bd.CanRedo);
+
+            bd.Redo();
+            Assert.AreEqual(2, bd.FilteredData.Count);
+            Assert.IsFalse(bd.FilteredData.Any(r => r.Column(0) == "b"));
+            Assert.IsFalse(bd.CanRedo);
+        }
+
+        [TestMethod]
+        public void PushSnapshotClearsRedoStack()
+        {
+            var bd = CreateTestData();
+            bd.HideRowsMatching("Name", new[] { "b" });
+            bd.Undo();
+            Assert.IsTrue(bd.CanRedo);
+
+            // A new operation must invalidate the redo stack - otherwise Redo would
+            // re-apply an action against a state it was never recorded against.
+            bd.HideRowsMatching("Name", new[] { "c" });
+            Assert.IsFalse(bd.CanRedo);
+        }
+
+        [TestMethod]
+        public void UndoRedoUndoIsIdempotent()
+        {
+            var bd = CreateTestData();
+            bd.HideRowsMatching("Name", new[] { "b" });
+            int afterFilter = bd.FilteredData.Count;
+
+            bd.Undo();
+            int afterUndo = bd.FilteredData.Count;
+            bd.Redo();
+            int afterRedo = bd.FilteredData.Count;
+            bd.Undo();
+            int afterUndo2 = bd.FilteredData.Count;
+
+            Assert.AreEqual(2, afterFilter);
+            Assert.AreEqual(3, afterUndo);
+            Assert.AreEqual(2, afterRedo);
+            Assert.AreEqual(3, afterUndo2);
+            Assert.IsTrue(bd.CanRedo);
+        }
+
+        [TestMethod]
+        public void RedoOnEmptyStackReturnsNull()
+        {
+            var bd = CreateTestData();
+            Assert.IsNull(bd.Redo());
+        }
+
+        [TestMethod]
+        public void DecimateRedoes()
+        {
+            var rows = new List<List<string?>>();
+            for (int loop = 0; loop < 30; loop++)
+            {
+                rows.Add(new List<string?> { loop.ToString(), "x" });
+            }
+            var bd = new DataGridControl.BoundData(rows, new List<string> { "Name", "Value" }, _ => { });
+
+            bd.Decimate(10);
+            int afterDecimate = bd.FilteredData.Count;
+            Assert.AreEqual(3, afterDecimate); // rows 0, 10, 20 visible
+
+            bd.Undo();
+            Assert.AreEqual(30, bd.FilteredData.Count);
+
+            bd.Redo();
+            Assert.AreEqual(afterDecimate, bd.FilteredData.Count);
         }
 
         [TestMethod]

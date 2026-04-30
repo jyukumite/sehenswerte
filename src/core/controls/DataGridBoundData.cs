@@ -170,7 +170,7 @@ namespace SehensWerte.Controls
 
         public class BoundData : IBindingList
         {
-            private DataGridView? DataGrid;
+            private DataGridControl? DataGrid;
 
             private Action<CsvLog.Entry> OnLog;
             public CodeProfile Profile => m_Profile;
@@ -180,9 +180,15 @@ namespace SehensWerte.Controls
             public List<BoundDataRow> UnfilteredData;
             public List<BoundDataRow> FilteredData;
             private DataGridControlHistory m_History = new DataGridControlHistory();
+            private DataGridControlHistory m_RedoStack = new DataGridControlHistory();
+            private bool m_SuppressRedoClear = false;
             private List<BoundDataRow> IndexToRow = new List<BoundDataRow>();
             public List<String> ColumnNames;
             public event ListChangedEventHandler? ListChanged;
+
+            public bool CanUndo => m_History.History.Count > 0;
+            public bool CanRedo => m_RedoStack.History.Count > 0;
+            public bool IsFiltered => FilteredData.Count != UnfilteredData.Count;
 
             bool IBindingList.AllowNew => false;
             bool IBindingList.AllowEdit => false;
@@ -328,16 +334,17 @@ namespace SehensWerte.Controls
                 ShowAll();
             }
 
-            public void Setup(DataGridView dataGrid)
+            public void Setup(DataGridControl dataGrid)
             {
                 DataGrid = dataGrid;
+                DataGridView grid = dataGrid.Grid;
 
-                dataGrid.AutoGenerateColumns = false;
-                dataGrid.Columns.Clear();
+                grid.AutoGenerateColumns = false;
+                grid.Columns.Clear();
                 m_History = new DataGridControlHistory();
                 for (int loop = 0; loop < ColumnNames.Count; loop++)
                 {
-                    dataGrid.Columns.Add(new DataGridViewTextBoxColumn
+                    grid.Columns.Add(new DataGridViewTextBoxColumn
                     {
                         Name = ColumnNames[loop],
                         HeaderText = ColumnNames[loop],
@@ -345,7 +352,7 @@ namespace SehensWerte.Controls
                         SortMode = DataGridViewColumnSortMode.Automatic
                     });
                 }
-                dataGrid.DataSource = this;
+                grid.DataSource = this;
             }
 
             public void Unbind()
@@ -368,8 +375,9 @@ namespace SehensWerte.Controls
                 int last = m_History.History.Count - 1;
                 var snap = m_History.History[last];
                 m_History.History.RemoveAt(last);
+                m_RedoStack.History.Add(snap);
                 OnLog?.Invoke(new CsvLog.Entry(
-                    $"Undo: popped {Describe(snap.Action)} | buffer: {DescribeHistory()}",
+                    $"Undo: popped {Describe(snap.Action)} | buffer: {DescribeHistory()} | redo depth: {m_RedoStack.History.Count}",
                     CsvLog.Priority.Debug));
                 ApplyVisible(snap);
                 ReshowFiltered();
@@ -387,7 +395,42 @@ namespace SehensWerte.Controls
                     const int defaultColumnWidth = 100;
                     widths.Add((col, prior?.Width ?? defaultColumnWidth));
                 }
+                DataGrid?.UpdateButtons(this, EventArgs.Empty);
                 return widths;
+            }
+
+            public IEnumerable<(string Name, int Width)>? Redo()
+            {
+                if (m_RedoStack.History.Count == 0)
+                {
+                    OnLog?.Invoke(new CsvLog.Entry("Redo: stack empty, nothing to redo", CsvLog.Priority.Debug));
+                    return null;
+                }
+                int top = m_RedoStack.History.Count - 1;
+                var snap = m_RedoStack.History[top];
+                m_RedoStack.History.RemoveAt(top);
+                if (snap.Action == null)
+                {
+                    OnLog?.Invoke(new CsvLog.Entry("Redo: popped snapshot with null action, skipping", CsvLog.Priority.Debug));
+                    DataGrid?.UpdateButtons(this, EventArgs.Empty);
+                    return new List<(string, int)>();
+                }
+                OnLog?.Invoke(new CsvLog.Entry(
+                    $"Redo: dispatching {Describe(snap.Action)} | redo depth now: {m_RedoStack.History.Count}",
+                    CsvLog.Priority.Debug));
+
+                var widthsByColumn = new Dictionary<string, int>();
+                m_SuppressRedoClear = true;
+                try
+                {
+                    DispatchAction(snap.Action, widthsByColumn);
+                }
+                finally
+                {
+                    m_SuppressRedoClear = false;
+                }
+                DataGrid?.UpdateButtons(this, EventArgs.Empty);
+                return widthsByColumn.Select(kv => (kv.Key, kv.Value)).ToList();
             }
 
             private void Refilter()
@@ -420,9 +463,14 @@ namespace SehensWerte.Controls
                 var snap = MakeSnapshot(cacheRefs: true);
                 snap.Action = action;
                 m_History.History.Add(snap);
+                if (!m_SuppressRedoClear)
+                {
+                    m_RedoStack.History.Clear();
+                }
                 OnLog?.Invoke(new CsvLog.Entry(
                     $"PushSnapshot: {Describe(action)} | buffer: {DescribeHistory()}",
                     CsvLog.Priority.Debug));
+                DataGrid?.UpdateButtons(this, EventArgs.Empty);
             }
 
             private static string Describe(DataGridControlHistory.FilterAction? a)
@@ -471,8 +519,8 @@ namespace SehensWerte.Controls
             public IEnumerable<int> RowsWithSelection()
             {
                 if (DataGrid == null) return Array.Empty<int>();
-                var rows = DataGrid.SelectedRows.Cast<DataGridViewRow>().Select(x => ((BoundDataRow?)(x.DataBoundItem))?.Index);
-                var cells = DataGrid.SelectedCells.Cast<DataGridViewCell>().Select(x => ((BoundDataRow?)(x.OwningRow.DataBoundItem))?.Index);
+                var rows = DataGrid.Grid.SelectedRows.Cast<DataGridViewRow>().Select(x => ((BoundDataRow?)(x.DataBoundItem))?.Index);
+                var cells = DataGrid.Grid.SelectedCells.Cast<DataGridViewCell>().Select(x => ((BoundDataRow?)(x.OwningRow.DataBoundItem))?.Index);
                 var union = rows.Union(cells).Where(x => x != null).Select(y => (int)(y ?? 0));
                 return union.ToArray();
             }
@@ -480,8 +528,8 @@ namespace SehensWerte.Controls
             public IEnumerable<int> ColsWithSelection()
             {
                 if (DataGrid == null) return Array.Empty<int>();
-                var cols = DataGrid.SelectedColumns.Cast<DataGridViewColumn>().Select(x => x.Index);
-                var cells = DataGrid.SelectedCells.Cast<DataGridViewCell>().Select(x => x.OwningColumn.Index);
+                var cols = DataGrid.Grid.SelectedColumns.Cast<DataGridViewColumn>().Select(x => x.Index);
+                var cells = DataGrid.Grid.SelectedCells.Cast<DataGridViewCell>().Select(x => x.OwningColumn.Index);
                 return cols.Union(cells).ToArray();
             }
 
@@ -686,13 +734,8 @@ namespace SehensWerte.Controls
                 Refilter();
             }
 
-            public void HideRowsIf(Func<BoundDataRow, bool> predicate)
-            {
-                PushSnapshot(new DataGridControlHistory.FilterAction { Kind = DataGridControlHistory.FilterAction.Operation.HideRowsIf });
-                HideRowsIfNoPush(predicate);
-            }
-
-            private void HideRowsIfNoPush(Func<BoundDataRow, bool> predicate)
+            // Predicate-based hide. Does NOT push a snapshot
+            private void HideRowsIf(Func<BoundDataRow, bool> predicate)
             {
                 if (FilteredData == null) return;
                 foreach (var v in FilteredData.Where(predicate))
@@ -700,6 +743,18 @@ namespace SehensWerte.Controls
                     v.Visible = false;
                 }
                 Refilter();
+            }
+
+            public void Decimate(int stride)
+            {
+                if (stride < 2) return;
+                PushSnapshot(new DataGridControlHistory.FilterAction
+                {
+                    Kind = DataGridControlHistory.FilterAction.Operation.Decimate,
+                    Stride = stride
+                });
+                int counter = 0;
+                HideRowsIf(_ => counter++ % stride != 0);
             }
 
             public void HideNotFirstUnique(string column)
@@ -712,7 +767,7 @@ namespace SehensWerte.Controls
                 // keep the first, hide the rest
                 int colIndex = ColumnNames.IndexOf(column);
                 var seen = new HashSet<string?>();
-                HideRowsIfNoPush(x =>
+                HideRowsIf(x =>
                 {
                     var value = x.Column(colIndex);
                     if (seen.Contains(value))
@@ -735,7 +790,7 @@ namespace SehensWerte.Controls
                 });
                 // case insensitive
                 int colIndex = ColumnNames.IndexOf(column);
-                HideRowsIfNoPush(x => strings.Contains(x.Column(colIndex)?.ToLower()));
+                HideRowsIf(x => strings.Contains(x.Column(colIndex)?.ToLower()));
             }
 
             public void HideRowsNotMatching(string column, IEnumerable<string?> rows)
@@ -749,7 +804,7 @@ namespace SehensWerte.Controls
                 });
                 // case insensitive
                 int colIndex = ColumnNames.IndexOf(column);
-                HideRowsIfNoPush(x => !strings.Contains(x.Column(colIndex)?.ToLower()));
+                HideRowsIf(x => !strings.Contains(x.Column(colIndex)?.ToLower()));
             }
 
             public void ShowRowsMatchingRegex(string regex, string column)
@@ -762,7 +817,7 @@ namespace SehensWerte.Controls
                 });
                 Regex match = new Regex(regex, RegexOptions.Compiled | RegexOptions.IgnoreCase);
                 int colIndex = ColumnNames.IndexOf(column);
-                HideRowsIfNoPush(x => !match.IsMatch(x.Column(colIndex) ?? "null"));
+                HideRowsIf(x => !match.IsMatch(x.Column(colIndex) ?? "null"));
             }
 
             public void HideRowsMatchingRegex(string regex, string column)
@@ -775,7 +830,7 @@ namespace SehensWerte.Controls
                 });
                 Regex match = new Regex(regex, RegexOptions.Compiled | RegexOptions.IgnoreCase);
                 int colIndex = ColumnNames.IndexOf(column);
-                HideRowsIfNoPush(x => match.IsMatch(x.Column(colIndex) ?? "null"));
+                HideRowsIf(x => match.IsMatch(x.Column(colIndex) ?? "null"));
             }
 
             object? IList.this[int index]
@@ -860,7 +915,8 @@ namespace SehensWerte.Controls
             private void UpdateSortGlyphs()
             {
                 if (DataGrid == null) return;
-                foreach (DataGridViewColumn col in DataGrid.Columns)
+                DataGridView grid = DataGrid.Grid;
+                foreach (DataGridViewColumn col in grid.Columns)
                 {
                     col.HeaderCell.SortGlyphDirection = SortOrder.None;
                 }
@@ -870,9 +926,9 @@ namespace SehensWerte.Controls
                     // Newest click is primary, so the glyph goes on keys[^1].
                     var primary = keys[^1];
                     int idx = ColumnNames.IndexOf(primary.columnName);
-                    if (idx >= 0 && idx < DataGrid.Columns.Count)
+                    if (idx >= 0 && idx < grid.Columns.Count)
                     {
-                        DataGrid.Columns[idx].HeaderCell.SortGlyphDirection =
+                        grid.Columns[idx].HeaderCell.SortGlyphDirection =
                             primary.direction == ListSortDirection.Ascending
                                 ? SortOrder.Ascending : SortOrder.Descending;
                     }
@@ -908,12 +964,14 @@ namespace SehensWerte.Controls
             private void ResetForReplay()
             {
                 m_History.History.Clear();
+                m_RedoStack.History.Clear();
                 foreach (var v in UnfilteredData)
                 {
                     v.Visible = true;
                 }
                 Refilter();
                 UpdateSortGlyphs();
+                DataGrid?.UpdateButtons(this, EventArgs.Empty);
             }
 
             private void ApplyVisible(DataGridControlHistory.Snapshot snap)
@@ -999,8 +1057,8 @@ namespace SehensWerte.Controls
                             widthsByColumn[action.Column] = action.Width;
                             PushSnapshot(action);
                             break;
-                        case DataGridControlHistory.FilterAction.Operation.HideRowsIf:
-                            // fixme: what do we do here
+                        case DataGridControlHistory.FilterAction.Operation.Decimate:
+                            Decimate(action.Stride);
                             break;
                         default:
                             OnLog?.Invoke(new CsvLog.Entry($"replay: unknown action {action.Kind}", CsvLog.Priority.Warn));
@@ -1040,19 +1098,20 @@ namespace SehensWerte.Controls
             internal SelectedCellsData SelectedCellsToClipboardFormats(bool numericGrid)
             {
                 if (DataGrid == null) return default;
-                var cells = DataGrid.SelectedCells.Cast<DataGridViewCell>().ToArray();
+                DataGridView grid = DataGrid.Grid;
+                var cells = grid.SelectedCells.Cast<DataGridViewCell>().ToArray();
 
-                var colFlags = new bool[DataGrid.ColumnCount];
-                var rowFlags = new bool[DataGrid.RowCount];
+                var colFlags = new bool[grid.ColumnCount];
+                var rowFlags = new bool[grid.RowCount];
                 foreach (var cell in cells)
                 {
                     colFlags[cell.ColumnIndex] = true;
                     rowFlags[cell.RowIndex] = true;
                 }
 
-                var colIndex = new int[DataGrid.ColumnCount];
+                var colIndex = new int[grid.ColumnCount];
                 int resultCols = 0;
-                for (int loop = 0; loop < DataGrid.ColumnCount; loop++)
+                for (int loop = 0; loop < grid.ColumnCount; loop++)
                 {
                     if (colFlags[loop])
                     {
@@ -1060,9 +1119,9 @@ namespace SehensWerte.Controls
                     }
                 }
 
-                var rowIndex = new int[DataGrid.RowCount];
+                var rowIndex = new int[grid.RowCount];
                 int resultRows = 0;
-                for (int loop = 0; loop < DataGrid.RowCount; loop++)
+                for (int loop = 0; loop < grid.RowCount; loop++)
                 {
                     if (rowFlags[loop])
                     {
