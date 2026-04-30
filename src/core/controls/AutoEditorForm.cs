@@ -120,9 +120,12 @@ namespace SehensWerte.Controls
 
         private void ButtonCancel_Click(object? sender, EventArgs e)
         {
-            ResultButton = DialogResult.Cancel;
-            Panel.Revert();
-            Close();
+            this.ExceptionToMessagebox(() =>
+            {
+                ResultButton = DialogResult.Cancel;
+                Panel.Revert();
+                Close();
+            }, "Cancel edits");
         }
     }
 }

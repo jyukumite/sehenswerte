@@ -491,46 +491,49 @@ namespace SehensWerte.Controls
         {
             if (SourceData == null || !(sender is Control)) return;
             Control control = (Control)sender;
-            object? value = GetValue(SourceData, control.Tag as EditRow);
-            if (value is Color && control is Panel)
+            control.ExceptionToMessagebox(() =>
             {
-                ColorDialog colorDialog = new ColorDialog();
-                colorDialog.Color = (Color)value;
-                if (colorDialog.ShowDialog() == DialogResult.OK)
+                object? value = GetValue(SourceData, control.Tag as EditRow);
+                if (value is Color && control is Panel)
                 {
-                    SetValue((EditRow)control.Tag, colorDialog.Color);
-                    control.BackColor = colorDialog.Color;
-                }
-            }
-            else if (control is Button && value != null)
-            {
-                object[]? array = ((EditRow)control.Tag)?.MemberInfo
-                    .GetCustomAttributes(typeof(AutoEditor.SubEditorAttribute), inherit: false);
-                if (array != null && array.Length != 0)
-                {
-                    // sub editor
-                    AutoEditorForm? autoEditorForm = ParentForm(control) as AutoEditorForm;
-                    bool closeOnClick = ((array[0] as AutoEditor.SubEditorAttribute)?.CloseOnClick ?? false) && autoEditorForm != null;
-                    if (closeOnClick && autoEditorForm != null)
+                    ColorDialog colorDialog = new ColorDialog();
+                    colorDialog.Color = (Color)value;
+                    if (colorDialog.ShowDialog() == DialogResult.OK)
                     {
-                        autoEditorForm.Visible = false;
-                    }
-                    new AutoEditorForm().ShowDialog(control.Text, (control.Tag as EditRow)?.DisplayText ?? "", value);
-                    if (closeOnClick)
-                    {
-                        autoEditorForm?.ButtonOK_Click(autoEditorForm, new EventArgs());
+                        SetValue((EditRow)control.Tag, colorDialog.Color);
+                        control.BackColor = colorDialog.Color;
                     }
                 }
-                else if (value.GetType().IsSubclassOf(typeof(Delegate)))
+                else if (control is Button && value != null)
                 {
-                    ((Delegate)value).DynamicInvoke();
+                    object[]? array = ((EditRow)control.Tag)?.MemberInfo
+                        .GetCustomAttributes(typeof(AutoEditor.SubEditorAttribute), inherit: false);
+                    if (array != null && array.Length != 0)
+                    {
+                        // sub editor
+                        AutoEditorForm? autoEditorForm = ParentForm(control) as AutoEditorForm;
+                        bool closeOnClick = ((array[0] as AutoEditor.SubEditorAttribute)?.CloseOnClick ?? false) && autoEditorForm != null;
+                        if (closeOnClick && autoEditorForm != null)
+                        {
+                            autoEditorForm.Visible = false;
+                        }
+                        new AutoEditorForm().ShowDialog(control.Text, (control.Tag as EditRow)?.DisplayText ?? "", value);
+                        if (closeOnClick)
+                        {
+                            autoEditorForm?.ButtonOK_Click(autoEditorForm, new EventArgs());
+                        }
+                    }
+                    else if (value.GetType().IsSubclassOf(typeof(Delegate)))
+                    {
+                        ((Delegate)value).DynamicInvoke();
+                    }
+                    else if (value.GetType() == typeof(bool))
+                    {
+                        SetValue(control.Tag as EditRow, true);
+                        UpdateControls();
+                    }
                 }
-                else if (value.GetType() == typeof(bool))
-                {
-                    SetValue(control.Tag as EditRow, true);
-                    UpdateControls();
-                }
-            }
+            }, "Edit setting");
         }
 
         private Form? ParentForm(Control control)

@@ -2,7 +2,9 @@
 
 ## Agent Instruction
 
-**Always update this file** when you learn something architectural — even if not asked. If you add a class, change a major data flow, rename a subsystem, or discover how something works, record it here. Keep entries concise and accurate; remove stale entries when things change.
+**Always update this file** when you learn something architectural -- even if not asked. If you add a class, change a major data flow, rename a subsystem, or discover how something works, record it here. Keep entries concise and accurate; remove stale entries when things change.
+
+**Use parallel subagents aggressively.** For any task involving multiple files, multiple searches, or independent exploration, dispatch subagents in parallel by issuing multiple Agent tool calls in a single message. Sequential work should be reserved for steps that genuinely depend on earlier results. Examples that should be parallelised: surveying related code under `src/core/`, `src/sehens/`, and `example/`; reading several candidate files; running independent greps.
 
 ---
 
@@ -75,8 +77,8 @@ src/
 | `SerialPort` | `src/core/comms/SerialPort.cs` | Serial port wrapper |
 | `Ring<T>` | `src/core/Ring.cs` | Generic ring/circular buffer |
 | `StatsFilter` | `src/core/filters/StatsFilter.cs` | Rolling statistics (mean, variance, RMS) filter |
-| `DataGridControl` | `src/core/controls/DataGridControl.cs` | Filterable, sortable data grid with undo/redo/replay stack and save/restore view state. Hotkeys: Ctrl-C copy, Ctrl-Z undo, Ctrl-Y / Ctrl-Shift-Z redo, Ctrl-F regex show on current column |
-| `BoundData` | `src/core/controls/DataGridBoundData.cs` | `IBindingList` backing store for `DataGridControl`; owns `UnfilteredData`, `FilteredData`, `SortKeys`, history + redo stacks. Redo re-dispatches the popped action via the same path as XML replay; any `PushSnapshot` from a non-Redo caller clears the redo stack. Fires `HistoryChanged` so the host can show/hide the Redo button |
+| `DataGridControl` | `src/core/controls/DataGridControl.cs` | Filterable, sortable data grid with undo/replay stack and save/restore view state |
+| `BoundData` | `src/core/controls/DataGridBoundData.cs` | `IBindingList` backing store for `DataGridControl`; owns `UnfilteredData`, `FilteredData`, `SortKeys`, `UndoList` |
 | `DataGridControlHistory` | `src/core/controls/DataGridControlHistory.cs` | XML-serialisable snapshot history for `DataGridControl.SaveView` / `RestoreView` |
 
 ---
@@ -186,3 +188,5 @@ Follow C# standard guidelines, with these specific rules:
 - Large classes are split into partial classes for clarity (e.g. `DataGridControl`
   / `DataGridBoundData`)
 - Forms/controls use `AutoScaleMode.Font` - do not change
+- Keep comments short and pithy. They should describe non-obvious behaviour,
+  not obvious code (e.g. avoid `int a = 5; // set a to 5`)

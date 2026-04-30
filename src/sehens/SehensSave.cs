@@ -257,7 +257,7 @@ namespace SehensWerte
 
         internal static void LoadStateBinary(string filename, SehensControl scope)
         {
-            try
+            scope.ExceptionToMessagebox(() =>
             {
                 var serializer = new GroBuf.Serializer(new FieldsExtractor(), options: GroBufOptions.WriteEmptyObjects);
                 var compressed = System.IO.File.ReadAllBytes(filename);
@@ -291,11 +291,7 @@ namespace SehensWerte
                     }
                     newScope.SaveTo(scope);
                 }
-            }
-            catch (Exception ex)//remove
-            {
-                MessageBox.Show(ex.Message, "Save file appears corrupt");
-            }
+            }, "Load saved state");
         }
 
     }

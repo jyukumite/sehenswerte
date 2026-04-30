@@ -105,14 +105,26 @@ namespace SehensWerte.Controls.Sehens
             ButtonSave.TabIndex = 75;
             ButtonSave.Text = "Save";
             ButtonSave.UseVisualStyleBackColor = true;
-            ButtonSave.Click += (o, e) => { ImportExport.SaveStateDialog(Scope); };
+            ButtonSave.Click += (o, e) =>
+            {
+                this.ExceptionToMessagebox(() =>
+                {
+                    ImportExport.SaveStateDialog(Scope);
+                }, "Save state");
+            };
             ButtonLoad.Dock = DockStyle.Bottom;
             ButtonLoad.Location = new Point(6, 200);
             ButtonLoad.Size = new Size(131, 23);
             ButtonLoad.TabIndex = 80;
             ButtonLoad.Text = "Load";
             ButtonLoad.UseVisualStyleBackColor = true;
-            ButtonLoad.Click += (o, e) => { ImportExport.LoadStateDialog(Scope); };
+            ButtonLoad.Click += (o, e) =>
+            {
+                this.ExceptionToMessagebox(() =>
+                {
+                    ImportExport.LoadStateDialog(Scope);
+                }, "Load state");
+            };
             ButtonAllOff.Dock = DockStyle.Bottom;
             ButtonAllOff.Location = new Point(65, 0);
             ButtonAllOff.Size = new Size(72, 23);
@@ -125,14 +137,26 @@ namespace SehensWerte.Controls.Sehens
             ButtonAutoAll.TabIndex = 74;
             ButtonAutoAll.Text = "Auto All";
             ButtonAutoAll.UseVisualStyleBackColor = true;
-            ButtonAutoAll.Click += (o, e) => { Scope.AutoRangeAll(); };
+            ButtonAutoAll.Click += (o, e) =>
+            {
+                this.ExceptionToMessagebox(() =>
+                {
+                    Scope.AutoRangeAll();
+                }, "Auto-range all");
+            };
             ButtonSort.Dock = DockStyle.Bottom;
             ButtonSort.Location = new Point(65, 52);
             ButtonSort.Size = new Size(72, 23);
             ButtonSort.TabIndex = 77;
             ButtonSort.Text = "Sort";
             ButtonSort.UseVisualStyleBackColor = true;
-            ButtonSort.Click += (o, e) => { Scope.SortViewGroups(); };
+            ButtonSort.Click += (o, e) =>
+            {
+                this.ExceptionToMessagebox(() =>
+                {
+                    Scope.SortViewGroups();
+                }, "Sort traces");
+            };
             LabelFilterBy.Dock = DockStyle.Bottom;
             LabelFilterBy.Location = new Point(3, 97);
             LabelFilterBy.Size = new Size(78, 13);
@@ -160,7 +184,13 @@ namespace SehensWerte.Controls.Sehens
             ButtonMenu.TabIndex = 81;
             ButtonMenu.Text = "Menu";
             ButtonMenu.UseVisualStyleBackColor = true;
-            ButtonMenu.Click += (o, e) => { Scope.ShowContextMenu(); };
+            ButtonMenu.Click += (o, e) =>
+            {
+                this.ExceptionToMessagebox(() =>
+                {
+                    Scope.ShowContextMenu();
+                }, "Show menu");
+            };
 
             base.Controls.Add(LabelFilterBy);
             base.Controls.Add(TextBoxFilter);
@@ -344,28 +374,31 @@ namespace SehensWerte.Controls.Sehens
 
         private void PaintBox_Click(object? sender, EventArgs e)
         {
-            PaintBox.Focus();
-            TraceView? traceView = ClickToTrace(e);
-            if (traceView == null) return;
+            this.ExceptionToMessagebox(() =>
+            {
+                PaintBox.Focus();
+                TraceView? traceView = ClickToTrace(e);
+                if (traceView == null) return;
 
-            MouseEventArgs args = (MouseEventArgs)e;
-            if (args.X < TextLeft)
-            {
-                traceView.Visible = !traceView.Visible;
-            }
-            else
-            {
-                if (args.Button == MouseButtons.Left)
+                MouseEventArgs args = (MouseEventArgs)e;
+                if (args.X < TextLeft)
                 {
-                    traceView.Colour = Scope.ActiveSkin.ColourNext(traceView.Colour);
+                    traceView.Visible = !traceView.Visible;
                 }
-                else if (args.Button == MouseButtons.Right)
+                else
                 {
-                    traceView.Colour = Scope.ActiveSkin.DefaultPenColour;
+                    if (args.Button == MouseButtons.Left)
+                    {
+                        traceView.Colour = Scope.ActiveSkin.ColourNext(traceView.Colour);
+                    }
+                    else if (args.Button == MouseButtons.Right)
+                    {
+                        traceView.Colour = Scope.ActiveSkin.DefaultPenColour;
+                    }
+                    RefilterTraceList();
+                    Scope.Invalidate();
                 }
-                RefilterTraceList();
-                Scope.Invalidate();
-            }
+            }, "Trace click");
         }
 
         private void PaintBox_MouseMove(object? sender, MouseEventArgs e)

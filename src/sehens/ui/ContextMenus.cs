@@ -623,7 +623,7 @@ namespace SehensWerte.Controls.Sehens
                 Call = ScopeContextMenu.MenuItem.CallWhen.PerTrace,
                 Clicked = (a) =>
                 {
-                    try
+                    a.Scope.ExceptionToMessagebox(() =>
                     {
                         //fixme? use TraceViewAudioPlayback version, but support mouse wipe selection
                         double[]? samples = a.Views[0].CalculatedBeforeZoom;
@@ -633,11 +633,7 @@ namespace SehensWerte.Controls.Sehens
                             int length = a.Views[0].Measure(a.Mouse.WipeBottomRight).IndexAfterTrim - sampleNumberAfterTrim;
                             Play(samples.Copy(sampleNumberAfterTrim, length), a.Views[0].Samples.InputSamplesPerSecond);
                         }
-                    }
-                    catch (Exception ex2)
-                    {
-                        MessageBox.Show(ex2.Message);
-                    }
+                    }, "Play samples");
                 },
             });
 
@@ -649,18 +645,14 @@ namespace SehensWerte.Controls.Sehens
                 Call = ScopeContextMenu.MenuItem.CallWhen.PerTrace,
                 Clicked = (a) =>
                 {
-                    try
+                    a.Scope.ExceptionToMessagebox(() =>
                     {
                         double[]? samples = a.Views[0].CalculatedBeforeZoom;
                         if (samples != null)
                         {
                             Play(samples, a.Views[0].Samples.InputSamplesPerSecond);
                         }
-                    }
-                    catch (Exception ex)
-                    {
-                        MessageBox.Show(ex.Message);
-                    }
+                    }, "Play samples");
                 },
             });
 
@@ -1402,14 +1394,10 @@ namespace SehensWerte.Controls.Sehens
             play.Enabled = !view.IsPlaying;
             play.Click += (s, e) =>
             {
-                try
+                menu.ExceptionToMessagebox(() =>
                 {
                     view.StartPlayback();
-                }
-                catch (Exception ex)
-                {
-                    MessageBox.Show(ex.Message);
-                }
+                }, "Play samples");
             };
             menu.Items.Add(play);
 

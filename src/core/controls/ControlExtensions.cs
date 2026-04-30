@@ -76,7 +76,7 @@
             }
         }
 
-        public static void ExceptionToMessagebox(this Control control, Action action)
+        public static void ExceptionToMessagebox(this Control control, Action action, string? context = null)
         {
             try
             {
@@ -84,7 +84,14 @@
             }
             catch (Exception e)
             {
-                MessageBox.Show(e.ToString());
+                if (context == null)
+                {
+                    MessageBox.Show(e.ToString());
+                }
+                else
+                {
+                    MessageBox.Show(e.ToString(), context);
+                }
             }
         }
 

@@ -201,12 +201,15 @@ namespace SehensWerte.Controls.Sehens
                     contextMenu.Menu.Size = new Size(162, 22);
                     contextMenu.Menu.Click += (o, e) =>
                     {
-                        if (!scope.SimpleUi)
+                        scope.ExceptionToMessagebox(() =>
                         {
-                            ContextMenuList
-                                .Where(x => (o as ToolStripMenuItem) == x.Menu)
-                                .ForEach(x => scope.ContextMenuClick(contextMenu));
-                        }
+                            if (!scope.SimpleUi)
+                            {
+                                ContextMenuList
+                                    .Where(x => (o as ToolStripMenuItem) == x.Menu)
+                                    .ForEach(x => scope.ContextMenuClick(contextMenu));
+                            }
+                        }, "Menu action");
                     };
                     ToolStripItemCollection items = ScopeMenuStrip.Items;
                     if (contextMenu.SubMenuText.Length != 0)

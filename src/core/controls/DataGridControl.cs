@@ -376,7 +376,7 @@ namespace SehensWerte.Controls
 
                 if (DataGridBind != null)
                 {
-                    try
+                    this.ExceptionToMessagebox(() =>
                     {
                         //var temp = Grid.GetClipboardContent();
                         var data = DataGridBind.SelectedCellsToClipboardFormats(NumericGrid);
@@ -386,11 +386,7 @@ namespace SehensWerte.Controls
                         dataObj.SetData(DataFormats.Html, data.wrappedHtml);
                         dataObj.SetData(DataFormats.CommaSeparatedValue, data.csv);
                         Clipboard.SetDataObject(dataObj, true);
-                    }
-                    catch (Exception ex)
-                    {
-                        MessageBox.Show(ex.ToString());
-                    }
+                    }, "Copy to clipboard");
                     e.Handled = true;
                 }
             }
@@ -568,7 +564,7 @@ namespace SehensWerte.Controls
             this.ExceptionToMessagebox(() =>
             {
                 DataGridBind?.ShowAll();
-            });
+            }, "Show all");
         }
 
         private void UndoFilterStatus_Click(object? sender, EventArgs e)
@@ -576,7 +572,7 @@ namespace SehensWerte.Controls
             this.ExceptionToMessagebox(() =>
             {
                 ApplyColumnWidths(DataGridBind?.Undo());
-            });
+            }, "Undo filter");
         }
 
         private void RedoFilterStatus_Click(object? sender, EventArgs e)
@@ -584,7 +580,7 @@ namespace SehensWerte.Controls
             this.ExceptionToMessagebox(() =>
             {
                 ApplyColumnWidths(DataGridBind?.Redo());
-            });
+            }, "Redo filter");
         }
 
         private void UpdateButtons(object? sender, EventArgs e)
@@ -630,7 +626,7 @@ namespace SehensWerte.Controls
             this.ExceptionToMessagebox(() =>
             {
                 DataGridBind?.HideRows(DataGridBind.RowsWithSelection());
-            });
+            }, "Hide selected rows");
         }
 
         private void HideUnselectedStatus_Click(object? sender, EventArgs e)
@@ -638,7 +634,7 @@ namespace SehensWerte.Controls
             this.ExceptionToMessagebox(() =>
             {
                 DataGridBind?.HideRowsOtherThan(DataGridBind.RowsWithSelection());
-            });
+            }, "Hide unselected rows");
         }
 
         private void HideAboveStatus_Click(object? sender, EventArgs e)
@@ -646,7 +642,7 @@ namespace SehensWerte.Controls
             this.ExceptionToMessagebox(() =>
             {
                 DataGridBind?.HideRowsAbove(DataGridBind.RowsWithSelection().FirstOrDefault());
-            });
+            }, "Hide rows above");
         }
 
         private void HideBelowStatus_Click(object? sender, EventArgs e)
@@ -654,7 +650,7 @@ namespace SehensWerte.Controls
             this.ExceptionToMessagebox(() =>
             {
                 DataGridBind?.HideRowsBelow(DataGridBind.RowsWithSelection().FirstOrDefault());
-            });
+            }, "Hide rows below");
         }
 
         private void HideByRegexStatus_Click(object? sender, EventArgs e)
@@ -668,7 +664,7 @@ namespace SehensWerte.Controls
                 this.ExceptionToMessagebox(() =>
                 {
                     DataGridBind?.HideRowsMatchingRegex(regex, header);
-                });
+                }, "Hide by regex");
             }
         }
 
@@ -683,7 +679,7 @@ namespace SehensWerte.Controls
                 this.ExceptionToMessagebox(() =>
                 {
                     DataGridBind?.ShowRowsMatchingRegex(regex, header);
-                });
+                }, "Show by regex");
             }
         }
 
@@ -700,7 +696,7 @@ namespace SehensWerte.Controls
                 DataGridBind?.HideRowsMatching(
                     Convert.ToString(header) ?? "",
                     GetSelectedRowsOfColumn(header));
-            });
+            }, "Hide matching cells");
         }
 
         private void HideUnmatchCellStatus_Click(object? sender, EventArgs e)
@@ -716,7 +712,7 @@ namespace SehensWerte.Controls
                 DataGridBind?.HideRowsNotMatching(
                     Convert.ToString(header) ?? "",
                     GetSelectedRowsOfColumn(header));
-            });
+            }, "Hide unmatching cells");
         }
 
         private void UniqueCellStatus_Click(object? sender, EventArgs e)
@@ -730,7 +726,7 @@ namespace SehensWerte.Controls
 
                 string header = Grid.CurrentCell.OwningColumn.HeaderText;
                 DataGridBind?.HideNotFirstUnique(Convert.ToString(header) ?? "");
-            });
+            }, "Unique cells");
         }
 
         private void DecimateCellStatus_Click(object? sender, EventArgs e)
@@ -742,14 +738,14 @@ namespace SehensWerte.Controls
                     return;
                 }
                 DataGridBind?.Decimate(10);
-            });
+            }, "Decimate");
         }
 
         private void TransposeGrid_Click(object? sender, EventArgs e)
         {
             this.ExceptionToMessagebox(() =>
             {
-            });
+            }, "Transpose grid");
         }
 
         private SaveFileDialog m_SaveFileDialog = new SaveFileDialog();
@@ -767,7 +763,7 @@ namespace SehensWerte.Controls
                         DataGridBind?.SaveToCsv(m_SaveFileDialog.FileName);
                     }
                 }
-            });
+            }, "Save CSV");
         }
 
         private OpenFileDialog m_LoadFileDialog = new OpenFileDialog();
@@ -783,7 +779,7 @@ namespace SehensWerte.Controls
                     LoadCsv(m_LoadFileDialog.FileName,
                         MessageBox.Show("Load as strings?", "Load as strings?", MessageBoxButtons.YesNo) == DialogResult.No);
                 }
-            });
+            }, "Load CSV");
         }
 
         private void Grid_CellPainting(object? sender, DataGridViewCellPaintingEventArgs e)

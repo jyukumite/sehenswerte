@@ -392,18 +392,14 @@ namespace SehensWerte.Controls.Sehens
                 ShownText = ScopeContextMenu.MenuItem.TextDisplay.NoChange,
                 Clicked = (a) =>
                 {
-                    try
+                    a.Scope.ExceptionToMessagebox(() =>
                     {
                         string? text = ListSelectForm.Show("Export", "Export", GetDescriptions<ExportType>(), GetDescription(ExportType.SinglePng));
                         if (text != null)
                         {
                             Export(a, ValueFromDescription<ExportType>(text), ExportDataForm.Destination.Clipboard);
                         }
-                    }
-                    catch (Exception ex)
-                    {
-                        MessageBox.Show(ex.Message, "Can't export");
-                    }
+                    }, "Export to clipboard");
                 },
                 HotKeyModifier = ScopeContextMenu.MenuItem.HotKeyModifierState.Ctrl,
                 HotKeyCode = Keys.C
@@ -564,17 +560,13 @@ namespace SehensWerte.Controls.Sehens
             m_OpenFileDialog.RestoreDirectory = true;
             if (m_OpenFileDialog.ShowDialog() == DialogResult.OK)
             {
-                try
+                display.ExceptionToMessagebox(() =>
                 {
                     foreach (string file in m_OpenFileDialog.FileNames)
                     {
                         LoadWaveformsUsingExtension(display, new string[] { file }, csvHeaderLinePrefix, targetTrace);
                     }
-                }
-                catch (Exception ex)
-                {
-                    MessageBox.Show(ex.ToString());
-                }
+                }, "Import");
             }
         }
 
@@ -589,15 +581,11 @@ namespace SehensWerte.Controls.Sehens
 
             if (m_SaveFileDialog.FilterIndex != 0)
             {
-                try
+                scope.ExceptionToMessagebox(() =>
                 {
                     ExportType type = (ExportType)(m_SaveFileDialog.FilterIndex - 1);
                     Export(a, type, ExportDataForm.Destination.File, m_SaveFileDialog.FileName);
-                }
-                catch (Exception ex)
-                {
-                    MessageBox.Show(ex.ToString());
-                }
+                }, "Export");
             }
             else
             {
@@ -672,14 +660,10 @@ namespace SehensWerte.Controls.Sehens
                                 Clipboard.SetData(DataFormats.Rtf, File.ReadAllText(filename));
                                 break;
                             default:
-                                try
+                                a.Scope.ExceptionToMessagebox(() =>
                                 {
                                     Clipboard.SetText(File.ReadAllText(filename));
-                                }
-                                catch
-                                {
-                                    MessageBox.Show("Clipboard error");
-                                }
+                                }, "Copy to clipboard");
                                 break;
                         }
                         try
@@ -748,7 +732,7 @@ namespace SehensWerte.Controls.Sehens
 
         private static void Import(SehensControl display, ImportType type, string[] fileNames, string csvHeaderLinePrefix = "", string targetTrace = "", ImportDataForm.Source dataSource = ImportDataForm.Source.File)
         {
-            try
+            display.ExceptionToMessagebox(() =>
             {
                 using AutoEditorForm autoEditorForm = new AutoEditorForm();
                 ImportDataForm? importData = (ImportDataForm?)ImportExportEdit(type, autoEditorForm);
@@ -829,11 +813,7 @@ namespace SehensWerte.Controls.Sehens
                         }
                         break;
                 }
-            }
-            catch (Exception ex)
-            {
-                MessageBox.Show($"Error {ex.Message} loading files");
-            }
+            }, "Import");
         }
 
         private static bool ImportExportHasEdit<T>(T value)
@@ -918,7 +898,7 @@ namespace SehensWerte.Controls.Sehens
                 _ => ','
             };
 
-            try
+            scope.ExceptionToMessagebox(() =>
             {
                 Regex? regex = (edit.ColumnMatchRegex.Length > 0) ? new Regex(edit.ColumnMatchRegex, RegexOptions.IgnoreCase) : null;
                 string[] fileNames = edit.Filenames;
@@ -979,11 +959,7 @@ namespace SehensWerte.Controls.Sehens
                         fileStream?.Dispose();
                     }
                 }
-            }
-            catch (Exception ex)
-            {
-                MessageBox.Show($"Error {ex.Message} loading CSV");
-            }
+            }, "Load CSV");
         }
 
         private static void LoadWaveformsWAV(SehensControl scope, ImportDataWavForm edit)
@@ -1217,7 +1193,7 @@ namespace SehensWerte.Controls.Sehens
 
         internal static void ShowDataGridView(ScopeContextMenu.DropDownArgs a)
         {
-            try
+            a.Scope.ExceptionToMessagebox(() =>
             {
                 Traces traces = ExtractWaveformsToSave(a, new ExportDataForm() { ExportScope = ExportDataForm.Scope.SelectedDisplayedSamples });
                 var screen = Screen.FromPoint(Cursor.Position);
@@ -1237,11 +1213,7 @@ namespace SehensWerte.Controls.Sehens
                 var rows = traces.Extracted.Select(x => x.CopyToDoubleArray()).Transpose();
                 grid.LoadRows(rows, traces.Names);
                 form.Show();
-            }
-            catch (Exception ex)
-            {
-                MessageBox.Show(ex.Message, "Can't export");
-            }
+            }, "Show data grid");
         }
     }
 }

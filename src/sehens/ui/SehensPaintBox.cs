@@ -87,10 +87,13 @@ namespace SehensWerte.Controls.Sehens
 
             DragDrop += (s, e) =>
             {
-                foreach (var file in (e.Data?.GetData(DataFormats.FileDrop) as string[]) ?? new string[0])
+                this.ExceptionToMessagebox(() =>
                 {
-                    Scope.Import(file);
-                }
+                    foreach (var file in (e.Data?.GetData(DataFormats.FileDrop) as string[]) ?? new string[0])
+                    {
+                        Scope.Import(file);
+                    }
+                }, "Drop file");
             };
         }
 

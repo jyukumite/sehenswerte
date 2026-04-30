@@ -635,14 +635,10 @@ namespace SehensWerte.Controls
                 string time = log.Original?.Data?.Time?.ToString("yyyy/MM/dd HH:mm:ss.fff ") ?? "";
                 text.AppendFormat("{0}\n", (log.DisplayedLine == null) ? "null" : time + log.DisplayedLine);
             }
-            try
+            this.ExceptionToMessagebox(() =>
             {
                 Clipboard.SetText(text.ToString());
-            }
-            catch
-            {
-                MessageBox.Show("Clipboard error");
-            }
+            }, "Copy log");
         }
 
         private void FilterChanged()
