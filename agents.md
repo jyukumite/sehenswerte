@@ -75,6 +75,9 @@ src/
 | `SerialPort` | `src/core/comms/SerialPort.cs` | Serial port wrapper |
 | `Ring<T>` | `src/core/Ring.cs` | Generic ring/circular buffer |
 | `StatsFilter` | `src/core/filters/StatsFilter.cs` | Rolling statistics (mean, variance, RMS) filter |
+| `DataGridControl` | `src/core/controls/DataGridControl.cs` | Filterable, sortable data grid with undo/replay stack and save/restore view state |
+| `BoundData` | `src/core/controls/DataGridBoundData.cs` | `IBindingList` backing store for `DataGridControl`; owns `UnfilteredData`, `FilteredData`, `SortKeys`, `UndoList` |
+| `DataGridControlHistory` | `src/core/controls/DataGridControlHistory.cs` | XML-serialisable snapshot history for `DataGridControl.SaveView` / `RestoreView` |
 
 ---
 
@@ -122,6 +125,28 @@ Host a panel by adding an `AutoEditorControl` to your form and calling `Generate
 
 ---
 
+## DataGridControl
+
+A `DataGridView` wrapper with a status-strip toolbar offering filter/sort operations.
+Data lives in `BoundData` (implements `IBindingList`):
+- `UnfilteredData` - all rows in original order. Each `BoundDataRow.Index` is the
+  stable identity used everywhere instead of grid position.
+- `FilteredData` - currently visible/sorted rows; what the grid shows.
+- `UndoList` - `Stack<UndoEntry>` of full view snapshots.
+
+### SaveView / RestoreView
+
+```csharp
+DataGridControlHistory view = grid.SaveView();
+string xml = view.ToXml(); // ToXml/FromXml from StringExtensions.cs
+File.WriteAllText("view.xml", xml);
+
+DataGridControlHistory? loaded = File.ReadAllText("view.xml").FromXml<DataGridControlHistory>();
+if (loaded != null) grid.RestoreView(loaded);
+```
+
+---
+
 ## Native Dependencies
 
 - **FFTW** (`x86/`, `x64/`, `arm64/`) — native FFT library; see `COPYING.FFTW` / `README.FFTW`
@@ -137,3 +162,27 @@ Host a panel by adding an `AutoEditorControl` to your form and calling `Generate
 - XML serialization uses `XmlSerialise` helpers, not `JsonSerializer`.
 - The example app (`example/`) is the canonical integration test, keep it compiling.
 - ASCII only in source and docs. No em-dashes, en-dashes, curly quotes, arrows, checkmarks, or other non-ASCII punctuation. Use `-`, `--`, `->`, straight quotes, plain words.
+
+### Coding style
+
+Follow C# standard guidelines, with these specific rules:
+- Use the prefix `m_` for module-level variables, excluding simple classes where
+  it's not necessary
+- Use leading capital letters for property and field names
+- Try for one return statement in functions, except for first-in checks
+- Avoid modifying parameter variables unless necessary for the caller
+- Use exception handling for exceptional situations rather than normal cases
+- Use unit tests to verify correctness and behaviour when applicable. Tests typically 
+  live in the same source file as the code they test, in a `[TestClass]` with
+  `[TestMethod]` members from `Microsoft.VisualStudio.TestTools.UnitTesting`. Run
+  with `dotnet test src/core/Core.csproj`
+- Name loop variables `loop`, not `i`
+- Always use braces for if/else/foreach/while/try/finally bodies, even single-line
+  ones. Exception: guard clauses that immediately return/continue/break may stay
+  on one line without braces: `if (!foo) return;`. This applies to lambdas too --
+  `() => { foo(); }` must be expanded to multi-line. For all other cases, put `{`
+  on the next line (Allman style)
+- Do not use `using static` - qualify static class members explicitly
+- Large classes are split into partial classes for clarity (e.g. `DataGridControl`
+  / `DataGridBoundData`)
+- Forms/controls use `AutoScaleMode.Font` - do not change

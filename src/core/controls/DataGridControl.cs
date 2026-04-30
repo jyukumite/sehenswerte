@@ -90,6 +90,9 @@ namespace SehensWerte.Controls
 
         public BoundData? DataGridBind;
         private string RegexInput = ".*";
+        private bool m_ResizingColumn = false;
+        private string? m_ResizingColumnName;
+        private bool m_ApplyingProgrammaticWidths = false;
 
         protected override void Dispose(bool disposing)
         {
@@ -164,6 +167,28 @@ namespace SehensWerte.Controls
             this.Grid.CellMouseLeave += (s, e) => { HoverHide(); };
             this.Grid.ShowCellToolTips = false;
             this.Grid.CellToolTipTextNeeded += (s, e) => { e.ToolTipText = ""; };
+            this.Grid.ColumnWidthChanged += (s, e) =>
+            {
+                if (m_ApplyingProgrammaticWidths) return;
+                m_ResizingColumn = true;
+                m_ResizingColumnName = e.Column.Name;
+            };
+            this.Grid.MouseUp += (s, e) =>
+            {
+                if (m_ResizingColumn)
+                {
+                    m_ResizingColumn = false;
+                    var col = m_ResizingColumnName != null && Grid.Columns.Contains(m_ResizingColumnName)
+                        ? Grid.Columns[m_ResizingColumnName] : null;
+                    DataGridBind?.PushSnapshot(new DataGridControlHistory.FilterAction
+                    {
+                        Kind = DataGridControlHistory.FilterAction.Operation.ColumnResize,
+                        Column = m_ResizingColumnName ?? "",
+                        Width = col?.Width ?? 0
+                    });
+                    m_ResizingColumnName = null;
+                }
+            };
             this.NullForeColor = this.Grid.ForeColor;
 
             this.HoverShowTimer = new System.Windows.Forms.Timer();
@@ -404,8 +429,25 @@ namespace SehensWerte.Controls
                 }
 
                 int maxWidth = widths.Values.Max(value => value.m);
-                column.Width = Math.Max(10, Math.Min(grid.Parent.Width - 20, maxWidth + 10));
+                int newWidth = Math.Max(10, Math.Min(grid.Parent.Width - 20, maxWidth + 10));
                 widths.Dispose();
+
+                DataGridBind?.PushSnapshot(new DataGridControlHistory.FilterAction
+                {
+                    Kind = DataGridControlHistory.FilterAction.Operation.ColumnResize,
+                    Column = column.Name,
+                    Width = newWidth
+                });
+
+                m_ApplyingProgrammaticWidths = true;
+                try
+                {
+                    column.Width = newWidth;
+                }
+                finally
+                {
+                    m_ApplyingProgrammaticWidths = false;
+                }
 
                 e.Handled = true;
             }
@@ -502,8 +544,39 @@ namespace SehensWerte.Controls
         {
             this.ExceptionToMessagebox(() =>
             {
-                DataGridBind?.Undo();
+                ApplyColumnWidths(DataGridBind?.Undo());
             });
+        }
+
+        private void ApplyColumnWidths(IEnumerable<(string Name, int Width)>? widths)
+        {
+            if (widths == null) return;
+            m_ApplyingProgrammaticWidths = true;
+            try
+            {
+                foreach (var w in widths)
+                {
+                    if (Grid.Columns.Contains(w.Name))
+                    {
+                        int wasWidth = Grid.Columns[w.Name].Width;
+                        Grid.Columns[w.Name].Width = w.Width;
+                        int isWidth = Grid.Columns[w.Name].Width;
+                        OnLog?.Invoke(new CsvLog.Entry(
+                            $"ApplyColumnWidths: {w.Name} {wasWidth} -> requested {w.Width} (now {isWidth})",
+                            CsvLog.Priority.Debug));
+                    }
+                    else
+                    {
+                        OnLog?.Invoke(new CsvLog.Entry(
+                            $"ApplyColumnWidths: column {w.Name} not in Grid.Columns",
+                            CsvLog.Priority.Debug));
+                    }
+                }
+            }
+            finally
+            {
+                m_ApplyingProgrammaticWidths = false;
+            }
         }
 
         private void HideSelectedStatus_Click(object? sender, EventArgs e)
@@ -988,9 +1061,22 @@ namespace SehensWerte.Controls
 
         public void CollapseColumn(string column)
         {
-            if (Grid.Columns.Contains(column))
+            if (!Grid.Columns.Contains(column)) return;
+            int newWidth = Grid.Columns[column].MinimumWidth;
+            DataGridBind?.PushSnapshot(new DataGridControlHistory.FilterAction
             {
-                Grid.Columns[column].Width = Grid.Columns[column].MinimumWidth;
+                Kind = DataGridControlHistory.FilterAction.Operation.ColumnResize,
+                Column = column,
+                Width = newWidth
+            });
+            m_ApplyingProgrammaticWidths = true;
+            try
+            {
+                Grid.Columns[column].Width = newWidth;
+            }
+            finally
+            {
+                m_ApplyingProgrammaticWidths = false;
             }
         }
 
@@ -1040,11 +1126,14 @@ namespace SehensWerte.Controls
             DataGridBind?.CellColour(col, row, colour);
         }
 
-        public class UndoEntry
+        public DataGridControlHistory SaveView()
         {
-            // shouldn't mutate caller's data, or callbacks may lose caller's context
-            // consider: save context for caller, or adjust for viewer?
-            public List<BoundDataRow>? VisibleRows;
+            return DataGridBind?.SaveBoundState() ?? new DataGridControlHistory();
+        }
+
+        public void RestoreView(DataGridControlHistory state)
+        {
+            ApplyColumnWidths(DataGridBind?.RestoreBoundState(state));
         }
     }
 }
