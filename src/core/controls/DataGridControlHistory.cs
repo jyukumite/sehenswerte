@@ -24,6 +24,17 @@ namespace SehensWerte.Controls
             // the first apply, which lazy-resolves and caches.
             [XmlIgnore]
             public List<DataGridControl.BoundDataRow>? VisibleRowRefs;
+
+            // Pre-Transpose data stash (Action.Kind == Transpose only). Transpose
+            // replaces UnfilteredData with freshly built rows, so prior snapshots'
+            // VisibleRowRefs become orphaned. Undo restores these to bring the row
+            // identities back, keeping older Undo entries consistent.
+            // XmlIgnored - on XML restore the history is replayed from scratch,
+            // which rebuilds these naturally.
+            [XmlIgnore]
+            public List<DataGridControl.BoundDataRow>? PreTransposeUnfiltered;
+            [XmlIgnore]
+            public List<string>? PreTransposeColumnNames;
         }
 
         // Records what user operation produced a Snapshot. Replay-safe because every
@@ -48,6 +59,7 @@ namespace SehensWerte.Controls
                 HideRowsBelow,
                 ColumnResize,
                 Decimate,
+                Transpose,
             }
 
             public Operation Kind { get; set; } = Operation.None;
@@ -277,6 +289,105 @@ namespace SehensWerte.Controls
 
             bd.Redo();
             Assert.AreEqual(afterDecimate, bd.FilteredData.Count);
+        }
+
+        [TestMethod]
+        public void TransposeForwardThenReverseRoundTrips()
+        {
+            var bd = CreateTestData();
+            // start: 3 rows, 2 cols (Name, Value)
+            Assert.AreEqual(3, bd.FilteredData.Count);
+
+            bd.Transpose();
+            // after forward: 2 rows (one per source col), 4 cols (headers + row 1..3)
+            Assert.AreEqual(2, bd.FilteredData.Count);
+            Assert.AreEqual("Name", bd.FilteredData[0].Column(0));
+            Assert.AreEqual("a", bd.FilteredData[0].Column(1));
+            Assert.AreEqual("b", bd.FilteredData[0].Column(2));
+            Assert.AreEqual("c", bd.FilteredData[0].Column(3));
+            Assert.AreEqual("Value", bd.FilteredData[1].Column(0));
+            Assert.AreEqual("1", bd.FilteredData[1].Column(1));
+            Assert.AreEqual("2", bd.FilteredData[1].Column(2));
+            Assert.AreEqual("3", bd.FilteredData[1].Column(3));
+
+            // second click detects shape and reverses
+            bd.Transpose();
+            Assert.AreEqual(3, bd.FilteredData.Count);
+            Assert.AreEqual("a", bd.FilteredData[0].Column(0));
+            Assert.AreEqual("1", bd.FilteredData[0].Column(1));
+            Assert.AreEqual("b", bd.FilteredData[1].Column(0));
+            Assert.AreEqual("2", bd.FilteredData[1].Column(1));
+            Assert.AreEqual("c", bd.FilteredData[2].Column(0));
+            Assert.AreEqual("3", bd.FilteredData[2].Column(1));
+        }
+
+        [TestMethod]
+        public void TransposeIsUndoable()
+        {
+            var bd = CreateTestData();
+            bd.Transpose();
+            Assert.AreEqual(2, bd.FilteredData.Count); // forward result
+
+            bd.Undo();
+            // undo of transpose re-runs transpose - the reverse direction restores
+            // visible content equivalent to the pre-transpose view.
+            Assert.AreEqual(3, bd.FilteredData.Count);
+            Assert.AreEqual("a", bd.FilteredData[0].Column(0));
+            Assert.AreEqual("1", bd.FilteredData[0].Column(1));
+        }
+
+        [TestMethod]
+        public void TransposeRedoRestoresTransposedView()
+        {
+            var bd = CreateTestData();
+            bd.Transpose();
+            bd.Undo();
+            Assert.AreEqual(3, bd.FilteredData.Count);
+            Assert.IsTrue(bd.CanRedo);
+
+            bd.Redo();
+            Assert.AreEqual(2, bd.FilteredData.Count);
+            Assert.AreEqual("Name", bd.FilteredData[0].Column(0));
+            Assert.AreEqual("Value", bd.FilteredData[1].Column(0));
+        }
+
+        [TestMethod]
+        public void UndoFilterAfterUndoTransposeRestoresOriginalCounts()
+        {
+            // Repro for "164/1" bug: filter, transpose, undo (transpose), undo
+            // (filter) must put both UnfilteredData and FilteredData back in sync
+            // with the pre-filter state.
+            var bd = CreateTestData();
+            bd.HideRowsMatching("Name", new[] { "a", "b" }); // FD=1 (only "c")
+            Assert.AreEqual(1, bd.FilteredData.Count);
+            Assert.AreEqual(3, bd.UnfilteredData.Count);
+
+            bd.Transpose();
+            bd.Undo(); // undo transpose
+            Assert.AreEqual(1, bd.FilteredData.Count);
+            Assert.AreEqual(3, bd.UnfilteredData.Count);
+
+            bd.Undo(); // undo filter
+            Assert.AreEqual(3, bd.FilteredData.Count);
+            Assert.AreEqual(3, bd.UnfilteredData.Count);
+        }
+
+        [TestMethod]
+        public void TransposeReplaysFromXml()
+        {
+            var original = CreateTestData();
+            original.Transpose();
+            string xml = original.SaveBoundState().ToXml();
+
+            var fresh = CreateTestData();
+            var loaded = xml.FromXml<DataGridControlHistory>();
+            Assert.IsNotNull(loaded);
+            fresh.RestoreBoundState(loaded!);
+
+            Assert.AreEqual(2, fresh.FilteredData.Count);
+            Assert.AreEqual("Name", fresh.FilteredData[0].Column(0));
+            Assert.AreEqual("a", fresh.FilteredData[0].Column(1));
+            Assert.AreEqual("Value", fresh.FilteredData[1].Column(0));
         }
 
         [TestMethod]

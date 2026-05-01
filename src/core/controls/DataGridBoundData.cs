@@ -362,11 +362,17 @@ namespace SehensWerte.Controls
             public void Setup(DataGridControl dataGrid)
             {
                 DataGrid = dataGrid;
-                DataGridView grid = dataGrid.Grid;
+                m_History = new DataGridControlHistory();
+                RebuildGridColumns();
+            }
 
+            internal void RebuildGridColumns()
+            {
+                if (DataGrid == null) return;
+                DataGridView grid = DataGrid.Grid;
+                grid.DataSource = null;
                 grid.AutoGenerateColumns = false;
                 grid.Columns.Clear();
-                m_History = new DataGridControlHistory();
                 for (int loop = 0; loop < ColumnNames.Count; loop++)
                 {
                     grid.Columns.Add(new DataGridViewTextBoxColumn
@@ -409,10 +415,19 @@ namespace SehensWerte.Controls
                 OnLog?.Invoke(new CsvLog.Entry(
                     $"Undo: popped {Describe(snap.Action)} | buffer: {DescribeHistory()} | redo depth: {m_RedoStack.History.Count}",
                     CsvLog.Priority.Debug));
-                ApplyVisible(snap);
+                bool wasTranspose = snap.Action?.Kind == DataGridControlHistory.FilterAction.Operation.Transpose;
+                if (wasTranspose)
+                {
+                    UndoTranspose(snap);
+                }
+                else
+                {
+                    ApplyVisible(snap);
+                }
                 ReshowFiltered();
                 UpdateSortGlyphs();
 
+                const int defaultColumnWidth = 100;
                 var widths = new List<(string Name, int Width)>();
                 if (snap.Action?.Kind == DataGridControlHistory.FilterAction.Operation.ColumnResize)
                 {
@@ -422,8 +437,22 @@ namespace SehensWerte.Controls
                         .LastOrDefault(a => a != null
                             && a.Kind == DataGridControlHistory.FilterAction.Operation.ColumnResize
                             && a.Column == col);
-                    const int defaultColumnWidth = 100;
                     widths.Add((col, prior?.Width ?? defaultColumnWidth));
+                }
+                else if (wasTranspose)
+                {
+                    // Restore widths the user set on the now-restored columns from
+                    // the most recent ColumnResize entry per column in remaining
+                    // history. Columns never resized fall back to default 100.
+                    foreach (var name in ColumnNames)
+                    {
+                        var prior = m_History.History
+                            .Select(s => s.Action)
+                            .LastOrDefault(a => a != null
+                                && a.Kind == DataGridControlHistory.FilterAction.Operation.ColumnResize
+                                && a.Column == name);
+                        widths.Add((name, prior?.Width ?? defaultColumnWidth));
+                    }
                 }
                 DataGrid?.UpdateButtons(this, EventArgs.Empty);
                 return widths;
@@ -787,6 +816,113 @@ namespace SehensWerte.Controls
                 HideRowsIf(_ => counter++ % stride != 0);
             }
 
+            // First click pivots the visible view: existing column headers become a
+            // single "headers" column, and each visible row becomes a "row 1", "row 2"
+            // ... column. Second click - detected by the same shape - reverses.
+            // Undo restores the pre-transpose UnfilteredData/ColumnNames so that
+            // older snapshots' row references stay valid after walking back.
+            public void Transpose()
+            {
+                var preUnfiltered = UnfilteredData;
+                var preColumnNames = ColumnNames;
+                PushSnapshot(new DataGridControlHistory.FilterAction
+                {
+                    Kind = DataGridControlHistory.FilterAction.Operation.Transpose
+                });
+                var pushed = m_History.History[^1];
+                pushed.PreTransposeUnfiltered = preUnfiltered;
+                pushed.PreTransposeColumnNames = preColumnNames;
+                DoTransposeInPlace();
+            }
+
+            private void UndoTranspose(DataGridControlHistory.Snapshot snap)
+            {
+                if (snap.PreTransposeUnfiltered != null && snap.PreTransposeColumnNames != null)
+                {
+                    UnfilteredData = snap.PreTransposeUnfiltered;
+                    ColumnNames = snap.PreTransposeColumnNames;
+                    IndexToRow = UnfilteredData.OrderBy(r => r.Index).ToList();
+                    RebuildGridColumns();
+                    ApplyVisible(snap);
+                }
+                else
+                {
+                    // No stash (e.g. pre-stash snapshot); fall back to re-executing.
+                    DoTransposeInPlace();
+                }
+            }
+
+            private bool IsTransposedShape()
+            {
+                if (ColumnNames.Count < 1) return false;
+                if (ColumnNames[0] != "headers") return false;
+                for (int loop = 1; loop < ColumnNames.Count; loop++)
+                {
+                    if (ColumnNames[loop] != $"row {loop}") return false;
+                }
+                return true;
+            }
+
+            private void DoTransposeInPlace()
+            {
+                bool reverse = IsTransposedShape();
+                int oldRows = FilteredData.Count;
+                int oldCols = ColumnNames.Count;
+
+                var newColumnNames = new List<string>();
+                var newRows = new List<BoundDataRow>();
+
+                if (reverse)
+                {
+                    // "headers" column values become new column names; each "row N"
+                    // column reflows into a new row.
+                    for (int loop = 0; loop < oldRows; loop++)
+                    {
+                        newColumnNames.Add(FilteredData[loop].Column(0) ?? "");
+                    }
+                    int newRowCount = oldCols - 1;
+                    for (int rowIdx = 0; rowIdx < newRowCount; rowIdx++)
+                    {
+                        int sourceCol = rowIdx + 1;
+                        string?[] data = new string?[oldRows];
+                        for (int colIdx = 0; colIdx < oldRows; colIdx++)
+                        {
+                            data[colIdx] = FilteredData[colIdx].Column(sourceCol);
+                        }
+                        newRows.Add(new BoundDataRowString(rowIdx, data));
+                    }
+                }
+                else
+                {
+                    newColumnNames.Add("headers");
+                    for (int loop = 0; loop < oldRows; loop++)
+                    {
+                        newColumnNames.Add($"row {loop + 1}");
+                    }
+                    for (int colIdx = 0; colIdx < oldCols; colIdx++)
+                    {
+                        string?[] data = new string?[oldRows + 1];
+                        data[0] = ColumnNames[colIdx];
+                        for (int rowIdx = 0; rowIdx < oldRows; rowIdx++)
+                        {
+                            data[rowIdx + 1] = FilteredData[rowIdx].Column(colIdx);
+                        }
+                        newRows.Add(new BoundDataRowString(colIdx, data));
+                    }
+                }
+
+                ColumnNames = newColumnNames;
+                UnfilteredData = newRows;
+                IndexToRow = new List<BoundDataRow>(newRows);
+                foreach (var v in UnfilteredData)
+                {
+                    v.Visible = true;
+                }
+
+                RebuildGridColumns();
+                Refilter();
+            }
+
             public void HideNotFirstUnique(string column)
             {
                 PushSnapshot(new DataGridControlHistory.FilterAction
@@ -1083,6 +1219,9 @@ namespace SehensWerte.Controls
                             break;
                         case DataGridControlHistory.FilterAction.Operation.Decimate:
                             Decimate(action.Stride);
+                            break;
+                        case DataGridControlHistory.FilterAction.Operation.Transpose:
+                            Transpose();
                             break;
                         default:
                             OnLog?.Invoke(new CsvLog.Entry($"replay: unknown action {action.Kind}", CsvLog.Priority.Warn));

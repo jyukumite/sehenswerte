@@ -214,7 +214,7 @@ namespace SehensWerte.Controls
                     this.HideUnmatchCellStatus,
                     this.UniqueCellStatus,
                     this.DecimateCellStatus,
-                    //this.TransposeGrid,
+                    this.TransposeGrid,
                     this.SaveCsvButton,
                     this.LoadCsvButton});
             this.StatusStrip.LayoutStyle = System.Windows.Forms.ToolStripLayoutStyle.HorizontalStackWithOverflow;
@@ -745,6 +745,8 @@ namespace SehensWerte.Controls
         {
             this.ExceptionToMessagebox(() =>
             {
+                if (DataGridBind == null) return;
+                DataGridBind.Transpose();
             }, "Transpose grid");
         }
 
