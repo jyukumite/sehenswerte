@@ -13,6 +13,11 @@ namespace SehensWerte
 {
     public static class StringExtensions
     {
+        public static StringDiff.Diffs StringDiff(this string self, string other)
+        {
+            return SehensWerte.StringDiff.Compute(self, other);
+        }
+
         public static bool CompareConstantTime(this string a, string b)
         {
             int result = a.Length ^ b.Length;

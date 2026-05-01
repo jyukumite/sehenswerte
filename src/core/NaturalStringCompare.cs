@@ -112,74 +112,83 @@ namespace SehensWerte
             } while (IsNumeric(str, idx, ref dot) == isNum);
             return (isNum, new string(result, 0, idx2));
         }
+    }
 
-        [TestClass]
-        public class NaturalCompareTest
+
+    [TestClass]
+    public class NaturalCompareTest
+    {
+        [TestMethod]
+        public void Test()
         {
-            [TestMethod]
-            public void Test()
+            Action<string, string> testless = (a, b) =>
             {
-                Action<string, string> testless = (a, b) =>
-                {
-                    Assert.IsTrue(CompareStrings(a, b) < 0);
-                    Assert.IsTrue(a.NaturalCompare(b) < 0);
-                    Assert.IsTrue(CompareStrings(b, a) > 0);
-                    Assert.IsTrue(b.NaturalCompare(a) > 0);
-                };
-                Action<string, string> testsame = (a, b) =>
-                {
-                    Assert.IsTrue(a.NaturalCompare(b) == 0);
-                    Assert.IsTrue(CompareStrings(a, b) == 0);
-                    Assert.IsTrue(b.NaturalCompare(a) == 0);
-                    Assert.IsTrue(CompareStrings(b, a) == 0);
-                };
+                Assert.IsTrue(NaturalStringCompare.CompareStrings(a, b) < 0);
+                Assert.IsTrue(a.NaturalCompare(b) < 0);
+                Assert.IsTrue(NaturalStringCompare.CompareStrings(b, a) > 0);
+                Assert.IsTrue(b.NaturalCompare(a) > 0);
+            };
+            Action<string, string> testsame = (a, b) =>
+            {
+                Assert.IsTrue(a.NaturalCompare(b) == 0);
+                Assert.IsTrue(NaturalStringCompare.CompareStrings(a, b) == 0);
+                Assert.IsTrue(b.NaturalCompare(a) == 0);
+                Assert.IsTrue(NaturalStringCompare.CompareStrings(b, a) == 0);
+            };
 
-                //not sure about this - comparing a double with a dotted numeric: testless("2.73", "2.84.1");
+            //not sure about this - comparing a double with a dotted numeric: testless("2.73", "2.84.1");
 
-                testsame("", "");
-                testsame("a2a", "a2a");
-                testsame("test2", "test2");
-                testsame("test2a", "test2a");
-                testsame("a-2a", "a-2a");
-                testsame("test-2", "test-2");
-                testsame("test-2a", "test-2a");
+            testsame("", "");
+            testsame("a2a", "a2a");
+            testsame("test2", "test2");
+            testsame("test2a", "test2a");
+            testsame("a-2a", "a-2a");
+            testsame("test-2", "test-2");
+            testsame("test-2a", "test-2a");
 
-                testless("", "a");
-                testless("a", "aa");
-                testless("a", "b");
-                testless("a1", "a1a");
-                testsame("a1.5a", "a01.5a");
-                testless("a1a", "a2a");
-                testless("test1", "test2");
-                testless("test2", "test12");
-                testless("test1a", "test1b");
+            testless("", "a");
+            testless("a", "aa");
+            testless("a", "b");
+            testless("a1", "a1a");
+            testsame("a1.5a", "a01.5a");
+            testless("a1a", "a2a");
+            testless("test1", "test2");
+            testless("test2", "test12");
+            testless("test1a", "test1b");
 
-                testsame("test1.50a", "test1.5a");
-                testsame("test-1.50a", "test-1.5a");
-                testsame("test1-1.50a", "test1-1.5a"); // negative cancels the number but . brings it back
+            testsame("test1.50a", "test1.5a");
+            testsame("test-1.50a", "test-1.5a");
+            testsame("test1-1.50a", "test1-1.5a"); // negative cancels the number but . brings it back
 
-                testsame("test2022-1-7a", "test2022-01-07a");
-                testless("test2022-1-7a", "test2022-02-07a");
-                testless("test2022-1-7a", "test2022-01-8a");
-                testless("test2022-1-7a", "test2022-1-8a");
+            testsame("test2022-1-7a", "test2022-01-07a");
+            testless("test2022-1-7a", "test2022-02-07a");
+            testless("test2022-1-7a", "test2022-01-8a");
+            testless("test2022-1-7a", "test2022-1-8a");
 
-                testless("test2022-1.4-7a", "test2022-1.5-8a");
-                testless("test2022-1.4-7a", "test2022-1.51-8a");
-                testless("test2022-1.419-7a", "test2022-1.420-8a");
-                testless("test2022-1.419-7a", "test2022-1.4191-8a");
+            testless("test2022-1.4-7a", "test2022-1.5-8a");
+            testless("test2022-1.4-7a", "test2022-1.51-8a");
+            testless("test2022-1.419-7a", "test2022-1.420-8a");
+            testless("test2022-1.419-7a", "test2022-1.4191-8a");
 
-                testless("a.5b", "a.6b");
-                testless("a.5b", "a.51b");
-                testless("a0.5b", "a0.51b");
-                testless("a-.51b", "a-.5b");
-                testless("a-0.51b", "a-0.5b");
+            testless("a.5b", "a.6b");
+            testless("a.5b", "a.51b");
+            testless("a0.5b", "a0.51b");
+            testless("a-.51b", "a-.5b");
+            testless("a-0.51b", "a-0.5b");
 
-                testless("1,234,567.89", "1,23,5000.42"); // commas as part of a number
+            testless("1,234,567.89", "1,23,5000.42"); // commas as part of a number
 
-                testless("1.12.3", "1.23.10"); // multiple periods in this form should cancel a decimal
-                testless("1.12.3.20", "1.12.3.100");
-                testless("1.12.3.20-a-1.2-b", "2.83.10.0-a-1.25-b");
-            }
+            testless("1.12.3", "1.23.10"); // multiple periods in this form should cancel a decimal
+            testless("1.12.3.20", "1.12.3.100");
+            testless("1.12.3.20-a-1.2-b", "2.83.10.0-a-1.25-b");
+        }
+
+        [TestMethod]
+        public void ExtensionMatchesStaticMethod()
+        {
+            Assert.IsTrue("a2".NaturalCompare("a10") < 0);
+            Assert.IsTrue("a10".NaturalCompare("a2") > 0);
+            Assert.AreEqual(0, "test1.5a".NaturalCompare("test1.50a"));
         }
     }
 }

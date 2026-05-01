@@ -847,11 +847,29 @@ namespace SehensWerte.Controls
             }
             Region originalClip = e.Graphics.Clip.Clone();
             e.Graphics.SetClip(e.CellBounds, System.Drawing.Drawing2D.CombineMode.Intersect);
+
+            StringDiff.Diffs? diff = null;
+            if (!selected && !masked && DataGridBind?.FilteredData.Count > e.RowIndex)
+            {
+                diff = DataGridBind.FilteredData[e.RowIndex]?.Diffs?[e.ColumnIndex];
+                if (diff != null && diff.LeftText != displayText)
+                {
+                    diff = null;
+                }
+            }
+
             using (SolidBrush textBrush = new SolidBrush(textColor))
             {
                 try
                 {
-                    e.Graphics.DrawString(displayText, cellFont, textBrush, textBounds, stringFormat);
+                    if (diff == null)
+                    {
+                        e.Graphics.DrawString(displayText, cellFont, textBrush, textBounds, stringFormat);
+                    }
+                    else
+                    {
+                        DrawDiffString(e.Graphics, diff, cellFont, textBrush, textBounds, stringFormat);
+                    }
                 }
                 catch
                 {
@@ -864,6 +882,79 @@ namespace SehensWerte.Controls
             }
             e.Graphics.Clip = originalClip;
             e.Handled = true;
+        }
+
+        private static readonly Color DiffChangedForeColor = Color.Red;
+
+        private static void DrawDiffString(Graphics g, StringDiff.Diffs diff, Font font, SolidBrush textBrush, RectangleF textBounds, StringFormat baseFormat)
+        {
+            string leftText = diff.LeftText;
+            g.DrawString(leftText, font, textBrush, textBounds, baseFormat);
+
+            int cursor = 0;
+            List<(int Start, int Length)> changed = new();
+            foreach (var (text, side) in diff)
+            {
+                if (side == StringDiff.Diffs.Side.Right)
+                {
+                    continue;
+                }
+                if (side == StringDiff.Diffs.Side.Left && text.Length > 0)
+                {
+                    changed.Add((cursor, text.Length));
+                }
+                cursor += text.Length;
+            }
+            if (changed.Count == 0 || cursor == 0)
+            {
+                return;
+            }
+
+            using StringFormat measureFormat = (StringFormat)baseFormat.Clone();
+            measureFormat.FormatFlags = baseFormat.FormatFlags | StringFormatFlags.MeasureTrailingSpaces;
+
+            using Region union = new Region();
+            union.MakeEmpty();
+
+            // Win32 limit: 32 measurable ranges per call. Chunk if needed.
+            const int maxRangesPerCall = 32;
+            for (int chunkStart = 0; chunkStart < changed.Count; chunkStart += maxRangesPerCall)
+            {
+                int chunkLen = Math.Min(maxRangesPerCall, changed.Count - chunkStart);
+                CharacterRange[] ranges = new CharacterRange[chunkLen];
+                for (int loop = 0; loop < chunkLen; loop++)
+                {
+                    var s = changed[chunkStart + loop];
+                    ranges[loop] = new CharacterRange(s.Start, s.Length);
+                }
+                measureFormat.SetMeasurableCharacterRanges(ranges);
+                Region[] regions;
+                try
+                {
+                    regions = g.MeasureCharacterRanges(leftText, font, textBounds, measureFormat);
+                }
+                catch
+                {
+                    return;
+                }
+                foreach (Region r in regions)
+                {
+                    union.Union(r);
+                    r.Dispose();
+                }
+            }
+
+            using SolidBrush brush = new SolidBrush(DiffChangedForeColor);
+            Region savedClip = g.Clip;
+            try
+            {
+                g.IntersectClip(union);
+                g.DrawString(leftText, font, brush, textBounds, baseFormat);
+            }
+            finally
+            {
+                g.Clip = savedClip;
+            }
         }
 
         private void DataGrid_RowPostPaint(object? sender, DataGridViewRowPostPaintEventArgs e)
@@ -1167,6 +1258,11 @@ namespace SehensWerte.Controls
         public void CellColour(int col, int row, Color colour)
         {
             DataGridBind?.CellColour(col, row, colour);
+        }
+
+        public void CellDiffs(int col, int row, StringDiff.Diffs? diff)
+        {
+            DataGridBind?.CellDiffs(col, row, diff);
         }
 
         public DataGridControlHistory SaveView()

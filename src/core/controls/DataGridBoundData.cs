@@ -19,6 +19,7 @@ namespace SehensWerte.Controls
             public int Index;
             public int ResortIndex;
             public Color?[]? Colours = null;
+            public StringDiff.Diffs?[]? Diffs = null;
 
             public BoundDataRow(int index)
             {
@@ -68,6 +69,22 @@ namespace SehensWerte.Controls
                 }
                 Colours[col] = colour;
             }
+
+            public void CellDiffs(int col, StringDiff.Diffs? diff)
+            {
+                if (Diffs == null)
+                {
+                    if (diff == null)
+                    {
+                        return;
+                    }
+                    Diffs = new StringDiff.Diffs?[Count];
+                }
+                if (col >= 0 && col < Diffs.Length)
+                {
+                    Diffs[col] = diff;
+                }
+            }
         }
 
         public class BoundDataRowString : BoundDataRow
@@ -78,7 +95,11 @@ namespace SehensWerte.Controls
             public override string?[] Strings => Data;
             public override string? Column(int index) => index < Data.Length ? Data[index] : "";
             public override double ColumnDouble(int index) => index < Data.Length ? (Data[index]?.ToDouble(0) ?? 0) : 0;
-            public override void Set(int index, string? to) { Data[index] = to; }
+            public override void Set(int index, string? to)
+            {
+                Data[index] = to;
+                CellDiffs(index, null);
+            }
 
             public BoundDataRowString(int index, string?[] sourceRow) : base(index)
             {
@@ -126,7 +147,11 @@ namespace SehensWerte.Controls
             public override string[] Strings => Data.Select(x => x.ToString(CultureInfo.InvariantCulture)).ToArray();
             public override string Column(int index) => index >= Data.Length ? "" : Data[index].ToString(CultureInfo.InvariantCulture);
             public override double ColumnDouble(int index) => index >= Data.Length ? 0 : Data[index];
-            public override void Set(int index, string? to) { Data[index] = to?.ToDouble(0) ?? 0; }
+            public override void Set(int index, string? to)
+            {
+                Data[index] = to?.ToDouble(0) ?? 0;
+                CellDiffs(index, null);
+            }
 
             public BoundDataRowDouble(int index, double[] sourceRow) : base(index)
             {
@@ -363,6 +388,11 @@ namespace SehensWerte.Controls
             public void CellColour(int col, int row, Color colour)
             {
                 FilteredData[row].CellColour(col, colour);
+            }
+
+            public void CellDiffs(int col, int row, StringDiff.Diffs? diff)
+            {
+                FilteredData[row].CellDiffs(col, diff);
             }
 
             public IEnumerable<(string Name, int Width)>? Undo()
