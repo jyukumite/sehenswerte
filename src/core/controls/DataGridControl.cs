@@ -887,10 +887,9 @@ namespace SehensWerte.Controls
         {
         }
 
-        public void SortByColumn(string heading)
+        public void SortByColumn(string heading, ListSortDirection direction = ListSortDirection.Ascending)
         {
-            DataGridViewColumn dataGridViewColumn = Grid.Columns[heading];
-            Grid.Sort(dataGridViewColumn, ListSortDirection.Ascending);
+            DataGridBind?.SortByColumn(heading, direction);
         }
 
         public void UpdateStatusStrip()

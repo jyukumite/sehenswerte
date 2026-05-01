@@ -842,6 +842,12 @@ namespace SehensWerte.Controls
 
             void IBindingList.ApplySort(PropertyDescriptor property, ListSortDirection direction)
             {
+                // The `direction` argument is intentionally ignored here. DataGridView appears to
+                // always pass Ascending on header clicks against this custom IBindingList (its
+                // sortedColumn/sortOrder tracking does not interact with us as expected), so we
+                // toggle relative to our own m_History to give the user alternating click UX.
+                // Programmatic callers that need an explicit direction should call SortByColumn
+                // directly instead of going through DataGridView.Sort / IBindingList.ApplySort.
                 Profile.Enter();
                 if (UnfilteredData.Count != 0)
                 {
@@ -850,26 +856,14 @@ namespace SehensWerte.Controls
                     {
                         int colIndex = int.Parse(property.Name.Replace("col", ""));
                         string colName = ColumnNames[colIndex];
-
-                        // Toggle direction relative to the existing entry (if any) for
-                        // this column in the derived sort sequence.
                         var existing = CurrentSortKeys().FirstOrDefault(k => k.columnName == colName);
                         var newDir = existing == default
                             ? ListSortDirection.Ascending
                             : (existing.direction == ListSortDirection.Ascending
                                 ? ListSortDirection.Descending : ListSortDirection.Ascending);
-
                         Cursor.Current = Cursors.WaitCursor;
-                        PushSnapshot(new DataGridControlHistory.FilterAction
-                        {
-                            Kind = DataGridControlHistory.FilterAction.Operation.ApplySort,
-                            Column = colName,
-                            Direction = newDir
-                        });
                         CurrentSortProperty = property;
-
-                        ApplySortDirect();
-                        UpdateSortGlyphs();
+                        SortByColumn(colName, newDir);
                     }
                     catch
                     {
@@ -1051,7 +1045,7 @@ namespace SehensWerte.Controls
                                 break;
                             }
                         case DataGridControlHistory.FilterAction.Operation.ApplySort:
-                            ApplySortByName(action.Column, action.Direction);
+                            SortByColumn(action.Column, action.Direction);
                             break;
                         case DataGridControlHistory.FilterAction.Operation.ColumnResize:
                             widthsByColumn[action.Column] = action.Width;
@@ -1071,12 +1065,12 @@ namespace SehensWerte.Controls
                 }
             }
 
-            private void ApplySortByName(string column, ListSortDirection direction)
+            public void SortByColumn(string column, ListSortDirection direction = ListSortDirection.Ascending)
             {
                 int colIndex = ColumnNames.IndexOf(column);
                 if (colIndex < 0)
                 {
-                    OnLog?.Invoke(new CsvLog.Entry($"replay ApplySort: no column {column}", CsvLog.Priority.Warn));
+                    OnLog?.Invoke(new CsvLog.Entry($"SortByColumn: no column {column}", CsvLog.Priority.Warn));
                     return;
                 }
                 PushSnapshot(new DataGridControlHistory.FilterAction
