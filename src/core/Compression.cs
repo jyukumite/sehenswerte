@@ -4,6 +4,7 @@ using System.Security.Cryptography;
 using System.Text;
 using K4os.Compression.LZ4.Streams;
 using K4os.Compression.LZ4;
+using ZstdSharp;
 
 namespace SehensWerte.Utils
 {
@@ -105,6 +106,44 @@ namespace SehensWerte.Utils
             }
         }
 
+        static public byte[] ZstdCompress(byte[] data)
+        {
+            using (var compressor = new Compressor())
+            {
+                return compressor.Wrap(data).ToArray();
+            }
+        }
+
+        static public byte[] ZstdDecompress(byte[] data)
+        {
+            using (var decompressor = new Decompressor())
+            {
+                return decompressor.Unwrap(data).ToArray();
+            }
+        }
+
+        static public void ZstdCompress(byte[] inputData, string filename)
+        {
+            using (var inputStream = new MemoryStream(inputData))
+            using (var compressedStream = File.OpenWrite(filename))
+            using (var zstdStream = new CompressionStream(compressedStream))
+            {
+                inputStream.CopyTo(zstdStream);
+                zstdStream.Flush();
+            }
+        }
+
+        static public byte[] ZstdDecompress(string filename)
+        {
+            using (var compressedStream = File.OpenRead(filename))
+            using (var zstdStream = new DecompressionStream(compressedStream))
+            using (var resultStream = new MemoryStream())
+            {
+                zstdStream.CopyTo(resultStream);
+                return resultStream.ToArray();
+            }
+        }
+
     }
 
     [TestClass]
@@ -154,6 +193,57 @@ namespace SehensWerte.Utils
                 CollectionAssert.AreEqual(decompressed, test);
                 File.Delete(fn);
             }
+        }
+
+        [TestMethod]
+        public void TestZstd()
+        {
+            foreach (var test in new[] {
+                RandomNumberGenerator.GetBytes(10000),
+                RandomNumberGenerator.GetBytes(10),
+                Encoding.UTF8.GetBytes("Test of Zstd compression"),
+                new byte[0]})
+            {
+                var compressed = Compression.ZstdCompress(test);
+                if (test.Length > 0) CollectionAssert.AreNotEqual(compressed, test);
+                byte[] decompressed = Compression.ZstdDecompress(compressed);
+                CollectionAssert.AreEqual(decompressed, test);
+
+                string fn = Path.GetTempFileName();
+                Compression.ZstdCompress(test, fn);
+                if (test.Length > 0) CollectionAssert.AreNotEqual(System.IO.File.ReadAllBytes(fn), test);
+                decompressed = Compression.ZstdDecompress(fn);
+                CollectionAssert.AreEqual(decompressed, test);
+                File.Delete(fn);
+            }
+        }
+
+        [TestMethod]
+        public void TestGZipCrossFormat()
+        {
+            // byte[] overload and file overload must produce mutually decodable output.
+            foreach (var test in new[] {
+                RandomNumberGenerator.GetBytes(10000),
+                Encoding.UTF8.GetBytes("Test of gzip cross format"),
+                new byte[0]})
+            {
+                string fn = Path.GetTempFileName();
+                try
+                {
+                    Compression.GZipCompress(test, fn);
+                    CollectionAssert.AreEqual(test, Compression.GZipDecompress(System.IO.File.ReadAllBytes(fn)));
+
+                    System.IO.File.WriteAllBytes(fn, Compression.GZipCompress(test));
+                    CollectionAssert.AreEqual(test, Compression.GZipDecompress(fn));
+                }
+                finally { File.Delete(fn); }
+            }
+        }
+
+        [TestMethod]
+        public void TestGZipRejectsCorrupt()
+        {
+            Assert.ThrowsException<InvalidDataException>(() => Compression.GZipDecompress(new byte[] { 1, 2, 3, 4, 5 }));
         }
     }
 }
