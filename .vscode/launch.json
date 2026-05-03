@@ -10,7 +10,8 @@
             "args": [],
             "cwd": "${workspaceFolder}/example",
             "stopAtEntry": false,
-            "console": "internalConsole"
+            "console": "internalConsole",
+            "justMyCode": false
         }
     ],
     "compounds": []

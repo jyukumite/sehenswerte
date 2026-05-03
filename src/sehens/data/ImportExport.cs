@@ -71,7 +71,12 @@ namespace SehensWerte.Controls.Sehens
 
             [Description("XML Sehens File")]
             [Extension(".xml")]
-            SehensXML
+            SehensXML,
+
+            [Description("Parquet (data in columns, sample rate in metadata)")]
+            [Extension(".parquet")]
+            [EditFormType(typeof(ExportDataForm))]
+            Parquet
         }
 
         private enum ImportType
@@ -117,7 +122,12 @@ namespace SehensWerte.Controls.Sehens
 
             [Description("XML Sehens State File")]
             [Extension(".xml")]
-            SehensXMLState
+            SehensXMLState,
+
+            [Description("Parquet (data in columns, sample rate in metadata)")]
+            [Extension(".parquet")]
+            [EditFormType(typeof(ImportDataParquetForm))]
+            Parquet
         }
 
         [AttributeUsage(AttributeTargets.All)]
@@ -293,6 +303,32 @@ namespace SehensWerte.Controls.Sehens
         {
             [AutoEditor.DisplayName("Target trace view name")]
             public string TargetTrace = "";
+        }
+
+        public enum ParquetLoadMode
+        {
+            [Description("YT (pair .Time + .Value timestamp columns into YT traces)")]
+            YT,
+            [Description("Y only (one trace per column, no time pairing)")]
+            Y
+        }
+
+        private class ImportDataParquetForm : ImportDataForm
+        {
+            [AutoEditor.DisplayName("Samples per second (fallback if file has no metadata)")]
+            public double SamplesPerSecond = 10000;
+
+            [AutoEditor.DisplayName("Trace name suffix")]
+            public string TraceNameSuffix = "";
+
+            [AutoEditor.DisplayName("Trace prefix")]
+            public string TraceNamePrefix = "Parquet.";
+
+            [AutoEditor.DisplayName("Remove invalid samples")]
+            public bool RemoveNAN = true;
+
+            [AutoEditor.DisplayName("Load mode")]
+            public ParquetLoadMode LoadMode = ParquetLoadMode.YT;
         }
 
         private static string GetDescription<T>(T value)
@@ -639,6 +675,7 @@ namespace SehensWerte.Controls.Sehens
                     case ExportType.TraceNames: SaveNames(filename, a); break;
                     case ExportType.SehensXML: SehensSave.SaveStateXml(filename, a.Scope); break;
                     case ExportType.SehensBinary: SehensSave.SaveStateBinary(filename, a.Scope); break;
+                    case ExportType.Parquet: SaveParquet((ExportDataForm)(edit ?? new ExportDataForm()), waveforms ?? new Traces()); break;
                 }
                 switch (dest)
                 {
@@ -722,6 +759,15 @@ namespace SehensWerte.Controls.Sehens
             List<object> extracted = waveforms.Extracted;
             extracted.Insert(0, waveforms.Names);
             CSVSave.SaveRows(edit.Filename, null, extracted, " ");
+        }
+
+        private static void SaveParquet(ExportDataForm edit, Traces waveforms)
+        {
+            var columns = waveforms.Extracted.Select(x => x.CopyToDoubleArray()).ToList();
+            // The .Time suffix is the YT-extraction convention (only ExtractWaveformsToSave's
+            // YT branch produces it); use it to flag the column as a parquet TIMESTAMP type.
+            var isTimeStamp = waveforms.Names.Select(n => n.EndsWith(".Time")).ToList();
+            ParquetNumeric.SaveCols(edit.Filename, waveforms.Names, columns, waveforms.SamplesPerSeconds, waveforms.SampleOffsets, isTimeStamp);
         }
 
         private static void SaveNames(string filename, ScopeContextMenu.DropDownArgs a)
@@ -810,6 +856,12 @@ namespace SehensWerte.Controls.Sehens
                         if (importData != null)
                         {
                             ImportFeaturesToTimeTrace(display, (ImportDataFeaturesForm)importData);
+                        }
+                        break;
+                    case ImportType.Parquet:
+                        if (importData != null)
+                        {
+                            LoadWaveformsParquet(display, (ImportDataParquetForm)importData);
                         }
                         break;
                 }
@@ -960,6 +1012,93 @@ namespace SehensWerte.Controls.Sehens
                     }
                 }
             }, "Load CSV");
+        }
+
+        private static void LoadWaveformsParquet(SehensControl scope, ImportDataParquetForm edit)
+        {
+            SehensControl scope2 = scope;
+            ImportDataParquetForm edit2 = edit;
+            if (edit2.DataSource == ImportDataForm.Source.File)
+            {
+                new Thread((ThreadStart)delegate
+                {
+                    scope2.IncrementBackgroundThreadCount();
+                    LoadWaveformsParquetInner(scope2, edit2);
+                    scope2.DecrementBackgroundThreadCount();
+                }).Start();
+            }
+            else
+            {
+                LoadWaveformsParquetInner(scope2, edit2);
+            }
+        }
+
+        private static void LoadWaveformsParquetInner(SehensControl scope, ImportDataParquetForm edit)
+        {
+            try
+            {
+                foreach (string path in edit.Filenames)
+                {
+                    var columns = ParquetNumeric.LoadCols(path);
+
+                    // YT mode: pair timestamp + value columns into YT traces; Y mode skips
+                    // the pair pass entirely so every column becomes a regular Y trace.
+                    var consumed = new HashSet<string>();
+                    if (edit.LoadMode == ParquetLoadMode.YT)
+                    {
+                        var byName = columns.ToDictionary(c => c.Name);
+                        foreach (var timeCol in columns)
+                        {
+                            if (timeCol.Error != null) continue;
+                            if (!timeCol.IsTimestamp) continue;
+                            if (!timeCol.Name.EndsWith(".Time")) continue;
+                            var baseName = timeCol.Name.Substring(0, timeCol.Name.Length - ".Time".Length);
+                            if (!byName.TryGetValue(baseName + ".Value", out var valueCol) || valueCol.Error != null) continue;
+
+                            string traceName = edit.TraceNamePrefix
+                                + (edit.AppendFilenamePrefix ? (Path.GetFileNameWithoutExtension(path) + ".") : "")
+                                + baseName
+                                + edit.TraceNameSuffix;
+                            var trace = scope[traceName].UpdateByRef(valueCol.Values, timeCol.Values);
+                            scope.AddTrace(trace);
+                            edit.ApplyTo(trace);
+                            consumed.Add(timeCol.Name);
+                            consumed.Add(valueCol.Name);
+                        }
+                    }
+
+                    foreach (var col in columns)
+                    {
+                        if (col.Error != null) continue;
+                        if (consumed.Contains(col.Name)) continue;
+
+                        string text = edit.TraceNamePrefix
+                            + (edit.AppendFilenamePrefix ? (Path.GetFileNameWithoutExtension(path) + ".") : "")
+                            + col.Name
+                            + edit.TraceNameSuffix;
+
+                        var values = col.Values;
+                        if (edit.RemoveNAN)
+                        {
+                            var list = new List<double>(values.Length);
+                            for (int i = 0; i < values.Length; i++)
+                            {
+                                if (!double.IsNaN(values[i])) list.Add(values[i]);
+                            }
+                            values = list.ToArray();
+                        }
+
+                        double sps = col.SamplesPerSecond ?? edit.SamplesPerSecond;
+                        var trace = scope[text].UpdateByRef(values, sps);
+                        scope.AddTrace(trace);
+                        edit.ApplyTo(trace);
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Error {ex.Message} loading Parquet");
+            }
         }
 
         private static void LoadWaveformsWAV(SehensControl scope, ImportDataWavForm edit)

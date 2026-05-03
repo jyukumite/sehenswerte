@@ -13,7 +13,7 @@
 **Sehenswerte** — C# .NET 6 WinForms library ("worth seeing" in German). Provides a reusable core of signal processing utilities, visual controls, and the `Sehens` oscilloscope control for high-speed real-time data acquisition and visualization.
 
 - Solution root: `sehenswerte/`
-- Core library: `src/core/Core.csproj` (namespace not fixed — utilities are standalone classes)
+- Core library: `src/core/Core.csproj` (namespace not fixed -- utilities are standalone classes)
 - Sehens control: `src/sehens/Sehens.csproj`
 - Example app: `example/Use.csproj`
 
@@ -29,7 +29,7 @@ src/
     filters/              — signal filter chain (FIR, IIR, FFT, Kalman, NLMS, RLS, …)
     generators/           — tone, noise, waveform generators
     maths/                — FFT, interpolation, statistics, PID, LQR, rolling averages
-    files/                — CSV load/save, CsvLog, RIFF audio read/write, AudioReader
+    files/                — CSV load/save, CsvLog, RIFF audio read/write, AudioReader, ParquetNumeric (Parquet.Net wrapper for numeric columns)
     AES.cs                — AES encryption helper
     CodeProfile.cs        — lightweight performance profiler
     Compression.cs        — data compression utilities
