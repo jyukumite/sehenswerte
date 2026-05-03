@@ -863,6 +863,7 @@ namespace SehensWerte.Controls.Sehens
                     {
                         TraceView.MouseInfo clickInfo = item.Measure(mouse.Click);
                         string text = item.TraceHoverStatistics(clickInfo);
+                        if (string.IsNullOrEmpty(text)) continue;
 
                         int y = item.Painter.HoverLabelYFromOffsetX(info, mouseX) + info.GroupArea.Top;
                         SizeF sizeF = graphics.MeasureString(text, font);

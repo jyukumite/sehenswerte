@@ -4,3 +4,5 @@ obj/
 *.*~
 *.csproj.user
 example/*.csv
+.claude/
+
