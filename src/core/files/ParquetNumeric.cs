@@ -361,7 +361,16 @@ namespace SehensWerte.Files
             try
             {
                 File.WriteAllText(path, "this is not a parquet file");
-                Assert.ThrowsException<InvalidDataException>(() => ParquetNumeric.LoadCols(path));
+                bool threw = false;
+                try
+                {
+                    ParquetNumeric.LoadCols(path);
+                }
+                catch (InvalidDataException)
+                {
+                    threw = true;
+                }
+                Assert.IsTrue(threw, "Expected InvalidDataException");
             }
             finally
             {

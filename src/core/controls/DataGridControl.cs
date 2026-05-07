@@ -122,7 +122,10 @@ namespace SehensWerte.Controls
             };
             HideTooltipWindow += (s, e) =>
             {
-                HoverTip.Hide(Grid);
+                if (Grid != null && !Grid.IsDisposed)
+                {
+                    HoverTip.Hide(Grid);
+                }
             };
             this.StatusStrip = new System.Windows.Forms.StatusStrip();
             this.StatusFilterText = new System.Windows.Forms.ToolStripStatusLabel();

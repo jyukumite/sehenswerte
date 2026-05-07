@@ -243,7 +243,16 @@ namespace SehensWerte.Utils
         [TestMethod]
         public void TestGZipRejectsCorrupt()
         {
-            Assert.ThrowsException<InvalidDataException>(() => Compression.GZipDecompress(new byte[] { 1, 2, 3, 4, 5 }));
+            bool threw = false;
+            try
+            {
+                Compression.GZipDecompress(new byte[] { 1, 2, 3, 4, 5 });
+            }
+            catch (InvalidDataException)
+            {
+                threw = true;
+            }
+            Assert.IsTrue(threw, "Expected InvalidDataException");
         }
     }
 }
