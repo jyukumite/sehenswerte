@@ -264,6 +264,14 @@ namespace SehensWerte.Controls
             return Show(prompt, title, selection, "");
         }
 
+        public static object? Show(string prompt, string title, Dictionary<string, object> selection)
+        {
+            // key is shown, value is returned
+            var displayMap = selection.ToDictionary(kv => kv.Key, kv => kv.Key);
+            var picked = Show(prompt, title, displayMap);
+            return (picked != null && selection.TryGetValue(picked, out var value)) ? value : null;
+        }
+
         public static string? Show(string prompt, string title, IEnumerable<string> selection)
         {
             return Show(prompt, title, selection, "");
