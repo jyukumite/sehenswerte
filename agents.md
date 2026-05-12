@@ -136,6 +136,12 @@ Data lives in `BoundData` (implements `IBindingList`):
 - `FilteredData` - currently visible/sorted rows; what the grid shows.
 - `UndoList` - `Stack<UndoEntry>` of full view snapshots.
 
+### Column mutations
+
+Limit: column display is bound via the hardcoded `col0..col99` accessors on
+`BoundDataRow`, so columns beyond index 99 will not render values. Extend that
+accessor block if a use case needs more.
+
 ### SaveView / RestoreView
 
 ```csharp

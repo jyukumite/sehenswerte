@@ -31,8 +31,21 @@ namespace SehensWerte.Controls
             public abstract double ColumnDouble(int colIndex);
             public abstract int Count { get; }
             public abstract void Set(int index, string? to);
+            public abstract void AppendColumnValue(string? value);
 
             public abstract IComparer<BoundDataRow> GetSortComparer(int colIndex, ListSortDirection sortDirection);
+
+            protected void GrowCellMetadata()
+            {
+                if (Colours != null)
+                {
+                    Array.Resize(ref Colours, Colours.Length + 1);
+                }
+                if (Diffs != null)
+                {
+                    Array.Resize(ref Diffs, Diffs.Length + 1);
+                }
+            }
 
             //DataPropertyName = $"col{loop}",
             public String? col0 => Column(0); public String? col1 => Column(1); public String? col2 => Column(2); public String? col3 => Column(3);
@@ -101,6 +114,14 @@ namespace SehensWerte.Controls
                 CellDiffs(index, null);
             }
 
+            public override void AppendColumnValue(string? value)
+            {
+                int oldLen = Data.Length;
+                Array.Resize(ref Data, oldLen + 1);
+                Data[oldLen] = value;
+                GrowCellMetadata();
+            }
+
             public BoundDataRowString(int index, string?[] sourceRow) : base(index)
             {
                 ResortIndex = index;
@@ -151,6 +172,14 @@ namespace SehensWerte.Controls
             {
                 Data[index] = to?.ToDouble(0) ?? 0;
                 CellDiffs(index, null);
+            }
+
+            public override void AppendColumnValue(string? value)
+            {
+                int oldLen = Data.Length;
+                Array.Resize(ref Data, oldLen + 1);
+                Data[oldLen] = value?.ToDouble(0) ?? 0;
+                GrowCellMetadata();
             }
 
             public BoundDataRowDouble(int index, double[] sourceRow) : base(index)
@@ -335,6 +364,20 @@ namespace SehensWerte.Controls
                         FilteredData.Add(item);
                     }
                 }
+                ListChanged?.Invoke(this, new ListChangedEventArgs(ListChangedType.Reset, 0));
+            }
+
+            public void AddColumn(string header, IEnumerable<string?> values)
+            {
+                using var rowIter = UnfilteredData.GetEnumerator();
+                using var valIter = values.GetEnumerator();
+                while (rowIter.MoveNext())
+                {
+                    string? value = valIter.MoveNext() ? valIter.Current : null;
+                    rowIter.Current.AppendColumnValue(value);
+                }
+                ColumnNames.Add(header);
+                RebuildGridColumns();
                 ListChanged?.Invoke(this, new ListChangedEventArgs(ListChangedType.Reset, 0));
             }
 

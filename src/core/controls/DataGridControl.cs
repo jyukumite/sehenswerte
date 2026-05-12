@@ -1127,6 +1127,13 @@ namespace SehensWerte.Controls
             UpdateStatusStrip();
         }
 
+        // Append a new column on the right. values aligned with UnfilteredData.
+        public void AddColumn(string header, IEnumerable<string?> values)
+        {
+            DataGridBind?.AddColumn(header, values);
+            UpdateStatusStrip();
+        }
+
         private void GridData_ListChanged(object? sender, ListChangedEventArgs e)
         {
             UpdateStatusStrip();
