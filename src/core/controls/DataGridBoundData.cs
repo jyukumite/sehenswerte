@@ -413,18 +413,33 @@ namespace SehensWerte.Controls
             {
                 if (DataGrid == null) return;
                 DataGridView grid = DataGrid.Grid;
+
+                var savedBackColor = new Dictionary<string, Color>();
+                foreach (DataGridViewColumn c in grid.Columns)
+                {
+                    if (!c.DefaultCellStyle.BackColor.IsEmpty)
+                    {
+                        savedBackColor[c.Name] = c.DefaultCellStyle.BackColor;
+                    }
+                }
+
                 grid.DataSource = null;
                 grid.AutoGenerateColumns = false;
                 grid.Columns.Clear();
                 for (int loop = 0; loop < ColumnNames.Count; loop++)
                 {
-                    grid.Columns.Add(new DataGridViewTextBoxColumn
+                    var col = new DataGridViewTextBoxColumn
                     {
                         Name = ColumnNames[loop],
                         HeaderText = ColumnNames[loop],
                         DataPropertyName = $"col{loop}",
                         SortMode = DataGridViewColumnSortMode.Automatic
-                    });
+                    };
+                    if (savedBackColor.TryGetValue(col.Name, out var bg))
+                    {
+                        col.DefaultCellStyle.BackColor = bg;
+                    }
+                    grid.Columns.Add(col);
                 }
                 grid.DataSource = this;
             }
