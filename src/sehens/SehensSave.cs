@@ -127,9 +127,46 @@ namespace SehensWerte
 
             public void SaveTo(TraceView obj)
             {
+                TranslateLegacyTraceXml(OtherElements);
                 XmlSaveAttribute.Inject(obj, OtherElements);
                 //CalculatedSourceViews fixup after loading all views
                 //TriggerView fixup after loading all views
+            }
+
+            // Rewrites legacy <MathType>/<LogVertical>/<LogHorizontal>
+            private static void TranslateLegacyTraceXml(List<XmlElement> elements)
+            {
+                if (elements == null) return;
+                foreach (var el in elements)
+                {
+                    if (el.Name == "LogVertical")
+                    {
+                        if (el.InnerText == "True") el.InnerText = "Log";
+                        else if (el.InnerText == "False") el.InnerText = "Off";
+                    }
+                    else if (el.Name == "LogHorizontal")
+                    {
+                        if (el.InnerText == "True") el.InnerText = "Log";
+                        else if (el.InnerText == "False") el.InnerText = "Off";
+                    }
+                }
+                XmlElement? math = elements.FirstOrDefault(e => e.Name == "MathType");
+                if (math != null && (math.InnerText == "FFT10Log10" || math.InnerText == "FFT20Log10"))
+                {
+                    string dbValue = math.InnerText == "FFT20Log10" ? "dB20" : "dB10";
+                    math.InnerText = "FFTMagnitude";
+                    XmlElement? logV = elements.FirstOrDefault(e => e.Name == "LogVertical");
+                    if (logV != null)
+                    {
+                        logV.InnerText = dbValue;
+                    }
+                    else
+                    {
+                        XmlElement created = math.OwnerDocument.CreateElement("LogVertical");
+                        created.InnerText = dbValue;
+                        elements.Add(created);
+                    }
+                }
             }
         }
 

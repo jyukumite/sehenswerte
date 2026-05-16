@@ -2,6 +2,7 @@
 using System.Linq;
 using System.Windows.Forms;
 using System;
+using System.Collections;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 
 namespace SehensWerte.Controls
@@ -70,6 +71,16 @@ namespace SehensWerte.Controls
             public double DisplayOrder;
             public string? GroupName;
             public Type Type;
+
+            // [InlineClass] children: resolve MemberInfo against this instead of SourceData.
+            public object? NestedSource;
+            // [InlineClass] children: sort under the host field's DisplayOrder.
+            public double? ParentDisplayOrder;
+            // [InlineClass] children: host field's groupName, emitted once at block entry.
+            public string? HostGroupName;
+            // [ArrayEditor] support.
+            public bool OpenArraySubForm;
+            public bool OpenElementSubForm;
 
             public EditRow(MemberInfo memberInfo, Type type)
             {
@@ -150,6 +161,38 @@ namespace SehensWerte.Controls
             public SubEditorAttribute(bool closeOnClick = false) { CloseOnClick = closeOnClick; }
         }
 
+        // Inlines the members of a nested class directly into the parent panel at the
+        // host field's [DisplayOrder] slot. Child rows keep their own ordering/grouping
+        // within that slot. Alternative to [SubEditor], which uses a button + popup form.
+        [AttributeUsage(AttributeTargets.Property | AttributeTargets.Field)]
+        public class InlineClassAttribute : Attribute
+        {
+        }
+
+        // Generates a per-element editor for an IList/array field. Inline mode emits one
+        // row per element directly into the parent panel; SubForm mode emits a single
+        // button that opens a popup AutoEditorForm whose contents are the inline rows.
+        // Element types that AutoEditor renders as scalars (primitive/enum/bool/string)
+        // become a control per row; class-typed elements become a button per row that
+        // opens a per-element AutoEditorForm.
+        [AttributeUsage(AttributeTargets.Property | AttributeTargets.Field)]
+        public class ArrayEditorAttribute : Attribute
+        {
+            public enum DisplayMode { Inline, SubForm }
+            public DisplayMode Mode;
+            public string ItemLabelFormat; // {0} = index
+            public string? ButtonCaption;  // SubForm mode button text
+            public ArrayEditorAttribute(
+                DisplayMode mode = DisplayMode.Inline,
+                string itemLabelFormat = "[{0}]",
+                string? buttonCaption = null)
+            {
+                Mode = mode;
+                ItemLabelFormat = itemLabelFormat;
+                ButtonCaption = buttonCaption;
+            }
+        }
+
         public class ValueListEntry // for List<ValueArrayEntry>
         {
             public string Name = "";
@@ -157,6 +200,17 @@ namespace SehensWerte.Controls
             public int Order;
             public object? Tag;
         }
+
+        // Wraps an IList<T> for ArrayEditor SubForm mode: the popup AutoEditorForm
+        // generates inline rows from the [ArrayEditor(Inline)] field on this wrapper.
+        // Items is assigned via reflection in the SubForm launch path.
+#pragma warning disable CS0649 //Field is never assigned to, and will always have its default value
+        internal class ArraySubFormHost<T>
+        {
+            [ArrayEditor(ArrayEditorAttribute.DisplayMode.Inline)]
+            public IList<T>? Items;
+        }
+#pragma warning restore CS0649
 
         [AttributeUsage(AttributeTargets.Property | AttributeTargets.Field)]
         public class HiddenAttribute : Attribute
@@ -279,6 +333,44 @@ namespace SehensWerte.Controls
         internal static bool IsSubEditor(MemberInfo info)
         {
             return info.GetCustomAttributes(typeof(SubEditorAttribute), inherit: false).Length != 0;
+        }
+
+        internal static bool IsInlineClass(MemberInfo info)
+        {
+            return info.GetCustomAttributes(typeof(InlineClassAttribute), inherit: false).Length != 0;
+        }
+
+        internal static ArrayEditorAttribute? ArrayEditor(MemberInfo info)
+        {
+            var attrs = info.GetCustomAttributes(typeof(ArrayEditorAttribute), inherit: false);
+            return attrs.Length == 0 ? null : (ArrayEditorAttribute)attrs[0];
+        }
+
+        internal static Type? MemberType(MemberInfo info)
+        {
+            return info is FieldInfo f ? f.FieldType
+                 : info is PropertyInfo p ? p.PropertyType
+                 : null;
+        }
+
+        internal static Type? ElementType(Type listType)
+        {
+            if (listType.IsArray) return listType.GetElementType();
+            if (listType.IsGenericType) return listType.GetGenericArguments()[0];
+            return null;
+        }
+
+        // Element types that GenerateControl renders as a scalar control rather than
+        // a sub-editor button. Class-typed elements fall through to per-element button rows.
+        internal static bool IsScalarElementType(Type t)
+        {
+            return t == typeof(byte) || t == typeof(sbyte)
+                || t == typeof(short) || t == typeof(ushort)
+                || t == typeof(int) || t == typeof(uint)
+                || t == typeof(long) || t == typeof(ulong)
+                || t == typeof(float) || t == typeof(double)
+                || t == typeof(string) || t == typeof(bool)
+                || t.IsEnum;
         }
 
         internal static bool IsPushButton(MemberInfo info)
@@ -506,31 +598,61 @@ namespace SehensWerte.Controls
                 }
                 else if (control is Button && value != null)
                 {
-                    object[]? array = ((EditRow)control.Tag)?.MemberInfo
-                        .GetCustomAttributes(typeof(AutoEditor.SubEditorAttribute), inherit: false);
-                    if (array != null && array.Length != 0)
+                    EditRow? row = control.Tag as EditRow;
+                    if (row?.OpenArraySubForm == true && value is IList listForForm)
                     {
-                        // sub editor
-                        AutoEditorForm? autoEditorForm = ParentForm(control) as AutoEditorForm;
-                        bool closeOnClick = ((array[0] as AutoEditor.SubEditorAttribute)?.CloseOnClick ?? false) && autoEditorForm != null;
-                        if (closeOnClick && autoEditorForm != null)
+                        Type elementType = ElementType(row.Type) ?? typeof(object);
+                        Type hostType = typeof(ArraySubFormHost<>).MakeGenericType(elementType);
+                        object host = Activator.CreateInstance(hostType)!;
+                        hostType.GetField("Items")!.SetValue(host, listForForm);
+                        // Popup creates its own AutoEditor with no Parent link, so changes
+                        // inside it can't propagate up via InvokeOnChanged. Fire ours on OK.
+                        if (new AutoEditorForm().ShowDialog(control.Text, row.DisplayText ?? "", host))
                         {
-                            autoEditorForm.Visible = false;
-                        }
-                        new AutoEditorForm().ShowDialog(control.Text, (control.Tag as EditRow)?.DisplayText ?? "", value);
-                        if (closeOnClick)
-                        {
-                            autoEditorForm?.ButtonOK_Click(autoEditorForm, new EventArgs());
+                            InvokeOnChanged();
                         }
                     }
-                    else if (value.GetType().IsSubclassOf(typeof(Delegate)))
+                    else if (row?.OpenElementSubForm == true)
                     {
-                        ((Delegate)value).DynamicInvoke();
+                        if (new AutoEditorForm().ShowDialog(control.Text, row.DisplayText ?? "", value))
+                        {
+                            InvokeOnChanged();
+                        }
                     }
-                    else if (value.GetType() == typeof(bool))
+                    else
                     {
-                        SetValue(control.Tag as EditRow, true);
-                        UpdateControls();
+                        object[]? array = row?.MemberInfo
+                            .GetCustomAttributes(typeof(AutoEditor.SubEditorAttribute), inherit: false);
+                        if (array != null && array.Length != 0)
+                        {
+                            // sub editor
+                            AutoEditorForm? autoEditorForm = ParentForm(control) as AutoEditorForm;
+                            bool closeOnClick = ((array[0] as AutoEditor.SubEditorAttribute)?.CloseOnClick ?? false) && autoEditorForm != null;
+                            if (closeOnClick && autoEditorForm != null)
+                            {
+                                autoEditorForm.Visible = false;
+                            }
+                            bool ok = new AutoEditorForm().ShowDialog(control.Text, (control.Tag as EditRow)?.DisplayText ?? "", value);
+                            if (closeOnClick)
+                            {
+                                autoEditorForm?.ButtonOK_Click(autoEditorForm, new EventArgs());
+                            }
+                            else if (ok)
+                            {
+                                // Popup creates its own AutoEditor with no Parent link, so changes
+                                // inside it can't propagate up via InvokeOnChanged. Fire ours on OK.
+                                InvokeOnChanged();
+                            }
+                        }
+                        else if (value.GetType().IsSubclassOf(typeof(Delegate)))
+                        {
+                            ((Delegate)value).DynamicInvoke();
+                        }
+                        else if (value.GetType() == typeof(bool))
+                        {
+                            SetValue(control.Tag as EditRow, true);
+                            UpdateControls();
+                        }
                     }
                 }
             }, "Edit setting");
@@ -565,19 +687,31 @@ namespace SehensWerte.Controls
         private static object? GetValue(object sourceData, EditRow? row)
         {
             if (row == null) return null;
+            object source = row.NestedSource ?? sourceData;
             object? obj = null;
             if (row.ObjectIndex != null)
             {
-                var va = ((FieldInfo)row.MemberInfo).GetValue(sourceData) as List<ValueListEntry>;
-                return va == null ? null : va[row.ObjectIndex.Value].Value;
+                object? container = row.MemberInfo is FieldInfo f
+                    ? f.GetValue(source)
+                    : row.MemberInfo is PropertyInfo p ? p.GetValue(source, null) : null;
+                int idx = row.ObjectIndex.Value;
+                if (container is List<ValueListEntry> vle)
+                {
+                    return (idx >= 0 && idx < vle.Count) ? vle[idx].Value : null;
+                }
+                if (container is IList list)
+                {
+                    return (idx >= 0 && idx < list.Count) ? list[idx] : null;
+                }
+                return null;
             }
             else if (row.MemberInfo is FieldInfo)
             {
-                obj = ((FieldInfo)row.MemberInfo).GetValue(sourceData);
+                obj = ((FieldInfo)row.MemberInfo).GetValue(source);
             }
             else if (row.MemberInfo is PropertyInfo)
             {
-                obj = ((PropertyInfo)row.MemberInfo).GetValue(sourceData, null);
+                obj = ((PropertyInfo)row.MemberInfo).GetValue(source, null);
             }
             return obj;
         }
@@ -595,14 +729,30 @@ namespace SehensWerte.Controls
         {
             if (row == null) return;
             if (SourceData == null) return;
+            object source = row.NestedSource ?? SourceData;
             object? obj = null;
             if (row.ObjectIndex != null)
             {
-                var va = ((FieldInfo)row.MemberInfo).GetValue(SourceData) as List<ValueListEntry>;
-                if (va != null)
+                object? container = row.MemberInfo is FieldInfo cf
+                    ? cf.GetValue(source)
+                    : row.MemberInfo is PropertyInfo cp ? cp.GetValue(source, null) : null;
+                int idx = row.ObjectIndex.Value;
+                if (container is List<ValueListEntry> vle)
                 {
-                    var entry = va[row.ObjectIndex.Value];
+                    if (idx < 0 || idx >= vle.Count) return;
+                    var entry = vle[idx];
                     entry.Value = (string)value;
+                }
+                else if (container is IList list)
+                {
+                    if (idx < 0 || idx >= list.Count) return;
+                    object? parsed = ParseTo(row.Type, value);
+                    if (parsed != null)
+                    {
+                        InvokeOnChanging();
+                        list[idx] = parsed;
+                        InvokeOnChanged();
+                    }
                 }
             }
             else
@@ -613,7 +763,7 @@ namespace SehensWerte.Controls
                 if (obj != null && !fieldInfo.IsLiteral && !fieldInfo.IsInitOnly)
                 {
                     InvokeOnChanging();
-                    fieldInfo.SetValue(SourceData, obj);
+                    fieldInfo.SetValue(source, obj);
                     InvokeOnChanged();
                 }
             }
@@ -626,7 +776,7 @@ namespace SehensWerte.Controls
                     InvokeOnChanging();
                     try
                     {
-                        propertyInfo.SetValue(SourceData, obj, null);
+                        propertyInfo.SetValue(source, obj, null);
                     }
                     catch (ArgumentException)
                     {
@@ -813,11 +963,38 @@ namespace SehensWerte.Controls
             }
         }
 
+        class ArrayInlineHost
+        {
+            [AutoEditor.ArrayEditor(AutoEditor.ArrayEditorAttribute.DisplayMode.Inline, "item {0}")]
+            public double[] Items = new double[3];
+        }
+
+        class ArraySubFormHost
+        {
+            [AutoEditor.ArrayEditor(AutoEditor.ArrayEditorAttribute.DisplayMode.SubForm)]
+            public List<int> Items = new();
+        }
+
+        class InlineClassHost
+        {
+            [AutoEditor.InlineClass]
+            [AutoEditor.DisplayOrder(5)]
+            public NestedTestData Inner = new NestedTestData();
+        }
+
 
         [TestMethod]
         public void TestAutoEditor()
         {
             //fixme: test
+        }
+
+        class NestedTestData : AutoEditorBase
+        {
+            [AutoEditor.DisplayOrder(1)]
+            public double Nested1 = 1.5;
+            [AutoEditor.DisplayOrder(2)]
+            public string Nested2 = "hello";
         }
 
         [TestMethod]
@@ -836,6 +1013,86 @@ namespace SehensWerte.Controls
             att = new AutoEditor.DisabledAttribute();
             att = new AutoEditor.PushButtonAttribute("test");
             att = new AutoEditor.RangeAttribute(0, 100, 1);
+            att = new AutoEditor.ArrayEditorAttribute();
+            att = new AutoEditor.ArrayEditorAttribute(AutoEditor.ArrayEditorAttribute.DisplayMode.SubForm, "[{0}]", "Edit...");
+            att = new AutoEditor.InlineClassAttribute();
+        }
+
+        [TestMethod]
+        public void TestArrayEditorAttributeDefaults()
+        {
+            var attr = new AutoEditor.ArrayEditorAttribute();
+            Assert.AreEqual(AutoEditor.ArrayEditorAttribute.DisplayMode.Inline, attr.Mode);
+            Assert.AreEqual("[{0}]", attr.ItemLabelFormat);
+            Assert.IsNull(attr.ButtonCaption);
+        }
+
+        [TestMethod]
+        public void TestArrayEditorAccessorFindsAttribute()
+        {
+            var member = typeof(ArrayInlineHost).GetField(nameof(ArrayInlineHost.Items))!;
+            var attr = AutoEditor.ArrayEditor(member);
+            Assert.IsNotNull(attr);
+            Assert.AreEqual(AutoEditor.ArrayEditorAttribute.DisplayMode.Inline, attr!.Mode);
+            Assert.AreEqual("item {0}", attr.ItemLabelFormat);
+
+            var plainMember = typeof(TestClass).GetProperty(nameof(TestClass.TestString))!;
+            Assert.IsNull(AutoEditor.ArrayEditor(plainMember));
+        }
+
+        [TestMethod]
+        public void TestIsInlineClass()
+        {
+            var inlined = typeof(InlineClassHost).GetField(nameof(InlineClassHost.Inner))!;
+            Assert.IsTrue(AutoEditor.IsInlineClass(inlined));
+
+            var plain = typeof(TestClass).GetProperty(nameof(TestClass.TestInt))!;
+            Assert.IsFalse(AutoEditor.IsInlineClass(plain));
+        }
+
+        [TestMethod]
+        public void TestElementType()
+        {
+            Assert.AreEqual(typeof(double), AutoEditor.ElementType(typeof(double[])));
+            Assert.AreEqual(typeof(string), AutoEditor.ElementType(typeof(List<string>)));
+            Assert.AreEqual(typeof(int), AutoEditor.ElementType(typeof(IList<int>)));
+            // Non-generic IList has no element type info; helper returns null.
+            Assert.IsNull(AutoEditor.ElementType(typeof(System.Collections.ArrayList)));
+            Assert.IsNull(AutoEditor.ElementType(typeof(string)));
+        }
+
+        [TestMethod]
+        public void TestMemberType()
+        {
+            var prop = typeof(TestClass).GetProperty(nameof(TestClass.TestInt))!;
+            Assert.AreEqual(typeof(int), AutoEditor.MemberType(prop));
+
+            var field = typeof(ArrayInlineHost).GetField(nameof(ArrayInlineHost.Items))!;
+            Assert.AreEqual(typeof(double[]), AutoEditor.MemberType(field));
+        }
+
+        [TestMethod]
+        public void TestIsScalarElementType()
+        {
+            Assert.IsTrue(AutoEditor.IsScalarElementType(typeof(int)));
+            Assert.IsTrue(AutoEditor.IsScalarElementType(typeof(double)));
+            Assert.IsTrue(AutoEditor.IsScalarElementType(typeof(string)));
+            Assert.IsTrue(AutoEditor.IsScalarElementType(typeof(bool)));
+            Assert.IsTrue(AutoEditor.IsScalarElementType(typeof(System.Windows.Forms.AnchorStyles))); // enum
+            Assert.IsFalse(AutoEditor.IsScalarElementType(typeof(NestedTestData)));
+            Assert.IsFalse(AutoEditor.IsScalarElementType(typeof(object)));
+        }
+
+        [TestMethod]
+        public void TestArraySubFormHostHasInlineAttribute()
+        {
+            // The wrapper used at runtime to host an array in a popup form must carry
+            // [ArrayEditor(Inline)] on its Items field so AutoEditorControl expands it inline.
+            var member = typeof(AutoEditor.ArraySubFormHost<double>)
+                .GetField(nameof(AutoEditor.ArraySubFormHost<double>.Items))!;
+            var attr = AutoEditor.ArrayEditor(member);
+            Assert.IsNotNull(attr);
+            Assert.AreEqual(AutoEditor.ArrayEditorAttribute.DisplayMode.Inline, attr!.Mode);
         }
 
         [TestMethod]

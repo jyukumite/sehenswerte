@@ -23,6 +23,8 @@ namespace SehensWerte.Controls.Sehens
         public double PaintLowestValue;
         public double PaintHighestY;
         public double PaintLowestY;
+        public double PaintLeftHValue;
+        public double PaintRightHValue;
 
         private static List<Tuple<double, string>> HorizontalUnits = new List<Tuple<double, string>>
         {
@@ -165,7 +167,7 @@ namespace SehensWerte.Controls.Sehens
                 PaintHighestY = y;
             }
             float num;
-            if (View?.LogVertical == true)
+            if (View?.IsLogY == true)
             {
                 ProjectLog(View.HighestValue, y, out var newMax, out var output);
                 num = (float)(PaintProjectionArea.Top + (newMax - output) * PaintProjectionArea.Height / newMax);
@@ -315,13 +317,19 @@ namespace SehensWerte.Controls.Sehens
         private void PaintProjectionY(TraceGroupDisplay info, Graphics graphics)
         {
             double[] samples = SnapshotProjection(info.View0);
+
+            if (info.View0.IsLogX
+                && (PaintLeftHValue != info.LeftSampleNumberValue || PaintRightHValue != info.RightSampleNumberValue))
+            {
+                SnapshotReprojectionRequired = true;
+            }
             if (SnapshotReprojectionRequired)
             {
                 LastTraceHighestValue = double.PositiveInfinity;
                 LastTraceLowestValue = double.NegativeInfinity;
                 SnapshotReprojectionRequired = false;
                 DrawnPolygon = null;
-                Project2dCurves(samples, info.View0, info.ProjectionArea, info.View0.HighestValue, info.View0.LowestValue);
+                Project2dCurves(samples, info.View0, info.ProjectionArea, info.View0.HighestValue, info.View0.LowestValue, info.LeftSampleNumberValue, info.RightSampleNumberValue);
             }
 
             bool dots = info.View0.PaintMode == TraceView.PaintModes.Points || info.View0.PaintMode == TraceView.PaintModes.PointsIfChanged;
@@ -569,9 +577,9 @@ namespace SehensWerte.Controls.Sehens
             graphics.DrawString(lowText, font, brush, info.GroupArea.Right - lowSize.Width - 5f, info.ProjectionArea.Bottom - lowSize.Height);
         }
 
-        public void Project2dCurves(double[] samples, TraceView trace, RectangleF traceDrawArea, double highestValue, double lowestValue)
+        public void Project2dCurves(double[] samples, TraceView trace, RectangleF traceDrawArea, double highestValue, double lowestValue, double leftHValue = 0.0, double rightHValue = 0.0)
         {
-            trace.Scope.OnLog?.Invoke(new Files.CsvLog.Entry($"Project2dCurves {trace.DecoratedName}", Files.CsvLog.Priority.Info));
+            trace.Scope.OnLog?.Invoke(new Files.CsvLog.Entry($"Project2dCurves {trace.DecoratedName} logH={trace.LogHorizontal} left={leftHValue} right={rightHValue} len={samples.Length} fft={trace.IsFftTrace} rebased={trace.IsRebasedResult} width={traceDrawArea.Width}", Files.CsvLog.Priority.Debug));
             TraceView.PaintModes currentTraceMode = trace.PaintMode;
             float width = traceDrawArea.Width;
 
@@ -581,6 +589,8 @@ namespace SehensWerte.Controls.Sehens
             PaintProjectionArea = traceDrawArea;
             PaintHighestValue = highestValue;
             PaintLowestValue = lowestValue;
+            PaintLeftHValue = leftHValue;
+            PaintRightHValue = rightHValue;
             PaintLowestY = samples.Length == 0 ? 0 : samples[0];
             PaintHighestY = samples.Length == 0 ? 0 : samples[0];
 
@@ -646,13 +656,16 @@ namespace SehensWerte.Controls.Sehens
             int length = PaintSamples.Length;
             int left = (int)PaintProjectionArea.Left;
             int width = (int)PaintProjectionArea.Width;
+            bool logH = UseLogH;
 
             int prevX = -1;
             double prevY = 0.0;
 
             for (int loop = 0; loop < length; loop++)
             {
-                int x = (int)((long)loop * (long)width / length);
+                int x = logH
+                    ? LogSampleIndexToXOffset(loop, length)
+                    : (int)((long)loop * (long)width / length);
                 double y = PaintSamples[loop];
                 bool add = loop != 0 && (y != prevY || !removeDuplicates) && x != prevX;
                 prevY = y;
@@ -664,6 +677,47 @@ namespace SehensWerte.Controls.Sehens
                 }
             }
             return list;
+        }
+
+        private bool UseLogH => View?.IsLogX == true && PaintRightHValue > 0;
+
+        // Returns (leftOutput, newMax) for the current H range
+        private (double leftOutput, double newMax) LogHBounds()
+        {
+            double effectiveLeft = PaintLeftHValue > 0 ? PaintLeftHValue : PaintRightHValue * 0.01;
+            ProjectLog(PaintRightHValue, effectiveLeft, out double nm, out double lo);
+            return (lo, nm);
+        }
+
+        // Pixel (0..width-1) -> fractional sample index via inverse log projection.
+        private double LogPixelToFracSampleIndex(int loop, int width, int length)
+        {
+            var (leftOutput, newMax) = LogHBounds();
+            double output = leftOutput + (double)loop / width * (newMax - leftOutput);
+            double val = PaintRightHValue * Math.Pow(10.0, output - newMax);
+            double range = PaintRightHValue - PaintLeftHValue;
+            if (range <= 0) return 0.0;
+            return (val - PaintLeftHValue) / range * (length - 1);
+        }
+
+        // Pixel -> integer sample index, clamped.
+        private int LogPixelToSampleIndex(int loop, int width, int length)
+        {
+            double frac = LogPixelToFracSampleIndex(loop, width, length);
+            return Math.Max(0, Math.Min(length - 1, (int)frac));
+        }
+
+        // Sample index -> pixel-offset-from-left in log X mode.
+        private int LogSampleIndexToXOffset(int sampleIndex, int length)
+        {
+            double range = PaintRightHValue - PaintLeftHValue;
+            if (range <= 0) return 0;
+            double val = PaintLeftHValue + (double)sampleIndex / Math.Max(1, length - 1) * range;
+            ProjectLog(PaintRightHValue, val, out var newMax, out var output);
+            var (leftOutput, _) = LogHBounds();
+            double span = newMax - leftOutput;
+            if (span <= 0) return 0;
+            return (int)((output - leftOutput) / span * PaintProjectionArea.Width);
         }
 
         private PointF[] Projection2d()
@@ -684,10 +738,13 @@ namespace SehensWerte.Controls.Sehens
             int left = (int)PaintProjectionArea.Left;
             int width = (int)PaintProjectionArea.Width;
             PointF[] array = new PointF[width];
+            bool logH = UseLogH;
 
             for (int loop = 0; loop < width; loop++)
             {
-                int index = (int)((long)loop * (long)length / width);
+                int index = logH
+                    ? LogPixelToSampleIndex(loop, width, length)
+                    : (int)((long)loop * (long)length / width);
                 double y = PaintSamples[index];
                 array[loop] = new PointF(left + loop, Project(y));
             }
@@ -702,14 +759,15 @@ namespace SehensWerte.Controls.Sehens
             int left = (int)PaintProjectionArea.Left;
             int width = (int)PaintProjectionArea.Width;
             PointF[] array = new PointF[width];
+            bool logH = UseLogH;
 
-            int endIndex;
             for (int loop = 0; loop < width; loop++)
             {
-                int startIndex = (int)((long)loop * (long)length / width);
-                endIndex = (int)((long)(loop + 1) * (long)length / width);
+                int startIndex = logH ? LogPixelToSampleIndex(loop, width, length) : (int)((long)loop * (long)length / width);
+                int endIndex = logH ? LogPixelToSampleIndex(loop + 1, width, length) : (int)((long)(loop + 1) * (long)length / width);
+                if (endIndex <= startIndex) endIndex = startIndex + 1;
                 double y = PaintSamples[startIndex];
-                for (int index = startIndex; index < endIndex; index++)
+                for (int index = startIndex; index < endIndex && index < length; index++)
                 {
                     double sample = PaintSamples[index];
                     y = min ? (sample < y ? sample : y) : (sample > y ? sample : y);
@@ -727,22 +785,24 @@ namespace SehensWerte.Controls.Sehens
             int left = (int)PaintProjectionArea.Left;
             int width = (int)PaintProjectionArea.Width;
             PointF[] array = new PointF[width];
+            bool logH = UseLogH;
 
             int prevIndex = -1;
             for (int loop = 0; loop < width; loop++)
             {
-                double ratio = (double)loop * (double)length / (double)width;
-                int indexLeft = (int)ratio;
-                ratio -= (double)indexLeft;
+                double frac = logH
+                    ? LogPixelToFracSampleIndex(loop, width, length)
+                    : (double)loop * (double)length / (double)width;
+                int indexLeft = (int)frac;
+                double ratio = frac - indexLeft;
                 int indexRight = indexLeft + 1;
                 if (prevIndex != indexLeft)
                 {
                     ratio = 0.0;
                     prevIndex = indexLeft;
                 }
-                double leftSample = PaintSamples[indexLeft];
-                double rightSample = ((indexRight >= PaintSamples.Length) ? PaintSamples[indexLeft] : PaintSamples[indexRight]);
-
+                double leftSample = PaintSamples[Math.Max(0, Math.Min(length - 1, indexLeft))];
+                double rightSample = indexRight >= length ? PaintSamples[length - 1] : PaintSamples[indexRight];
                 array[loop] = new PointF(left + loop, Project(leftSample * (1.0 - ratio) + rightSample * ratio));
             }
 
@@ -757,17 +817,18 @@ namespace SehensWerte.Controls.Sehens
             int left = (int)PaintProjectionArea.Left;
             int width = (int)PaintProjectionArea.Width;
             PointF[] array = new PointF[width];
+            bool logH = UseLogH;
 
             for (int loop = 0; loop < width; loop++)
             {
-                int startIndex = (int)((long)loop * (long)length / width);
-                int endIndex = (int)((long)(loop + 1) * (long)length / width);
+                int startIndex = logH ? LogPixelToSampleIndex(loop, width, length) : (int)((long)loop * (long)length / width);
+                int endIndex = logH ? LogPixelToSampleIndex(loop + 1, width, length) : (int)((long)(loop + 1) * (long)length / width);
                 double sum = 0.0;
-                if (endIndex == startIndex)
+                if (endIndex <= startIndex)
                 {
-                    endIndex++;
+                    endIndex = startIndex + 1;
                 }
-                for (int index = startIndex; index < endIndex; index++)
+                for (int index = startIndex; index < endIndex && index < length; index++)
                 {
                     double y = PaintSamples[index];
                     if (y < PaintLowestY)

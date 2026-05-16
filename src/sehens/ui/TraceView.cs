@@ -454,17 +454,47 @@ namespace SehensWerte.Controls.Sehens
             }
         }
 
-        private bool m_LogVertical;
+        public enum LogVerticalMode { Off, Log, dB10, dB20 }
+        public enum LogHorizontalMode { Off, Log }
+
+        private LogVerticalMode m_LogVertical;
         [XmlSave]
         [AutoEditor.DisplayName("Log vertical axis")]
         [AutoEditor.DisplayOrder(2)]
-        public bool LogVertical
+        public LogVerticalMode LogVertical
         {
             get => m_LogVertical;
             set
             {
                 if (m_LogVertical == value) return;
+                bool oldWasDb = m_LogVertical == LogVerticalMode.dB10 || m_LogVertical == LogVerticalMode.dB20;
+                bool newIsDb = value == LogVerticalMode.dB10 || value == LogVerticalMode.dB20;
                 m_LogVertical = value;
+                if (oldWasDb || newIsDb)
+                {
+                    ClearPeakHold();
+                    BeforeZoomCalculateRequired();
+                }
+                else
+                {
+                    RecalculateProjectionRequired();
+                }
+                Scope.ViewNeedsRepaint(this);
+                GuiUpdateControls?.Invoke(this);
+            }
+        }
+
+        private LogHorizontalMode m_LogHorizontal;
+        [XmlSave]
+        [AutoEditor.DisplayName("Log horizontal axis")]
+        [AutoEditor.DisplayOrder(2.1)]
+        public LogHorizontalMode LogHorizontal
+        {
+            get => m_LogHorizontal;
+            set
+            {
+                if (m_LogHorizontal == value) return;
+                m_LogHorizontal = value;
                 RecalculateProjectionRequired();
                 Scope.ViewNeedsRepaint(this);
                 GuiUpdateControls?.Invoke(this);
@@ -1034,9 +1064,7 @@ namespace SehensWerte.Controls.Sehens
         {
             Normal,
             FFTMagnitude,
-            FFTPhase,
-            FFT10Log10,
-            FFT20Log10
+            FFTPhase
         }
         private MathTypes m_MathType;
         [XmlSave]
@@ -1114,7 +1142,7 @@ namespace SehensWerte.Controls.Sehens
             public MouseInfo ShallowClone() { return (MouseInfo)MemberwiseClone(); }
         }
 
-        internal bool IsFftTrace => m_MathType == MathTypes.FFTMagnitude || m_MathType == MathTypes.FFTPhase || m_MathType == MathTypes.FFT10Log10 || m_MathType == MathTypes.FFT20Log10;
+        internal bool IsFftTrace => m_MathType == MathTypes.FFTMagnitude || m_MathType == MathTypes.FFTPhase;
 
         internal string TraceHoverStatistics(MouseInfo clickInfo)
         {
@@ -1122,7 +1150,9 @@ namespace SehensWerte.Controls.Sehens
         }
 
         internal bool UseFftFilter => m_Samples.InputSamplesPerSecond != 0.0 && m_FftFilterType != FftFilterTypes.None;
-        internal bool IsLogarithmicY => m_MathType == MathTypes.FFT10Log10 || m_MathType == MathTypes.FFT20Log10;
+        internal bool IsLogarithmicY => m_LogVertical == LogVerticalMode.dB10 || m_LogVertical == LogVerticalMode.dB20;
+        internal bool IsLogY => m_LogVertical == LogVerticalMode.Log;
+        internal bool IsLogX => m_LogHorizontal == LogHorizontalMode.Log;
         internal bool IsRebasedResult => IsFftTrace && CalculateAfterZoom;
         internal bool IsRecalculateProjectionRequired => m_RecalculateProjectionRequired != 0 || m_AfterZoomCalculateRequired;
         internal bool ProcessAtInput => m_PaintMode == PaintModes.PeakHold;
@@ -1356,6 +1386,9 @@ namespace SehensWerte.Controls.Sehens
                         {
                             (var peakMin, var peakMax) = PeakHoldBeforeZoom(samples, sampleOffset, drawnStart, projected.Length);
                             projected = CalculateAfterZoom ? CalculateFft(projected) : projected;
+                            // dB conversion for non-FFT traces (FFT path already applies it inside ExecuteFft).
+                            // ApplyDbInPlace early-returns if LogVertical isn't a dB mode.
+                            if (!IsFftTrace) ApplyDbInPlace(projected);
                             PeakHoldAfterZoom(projected, ref peakMin, ref peakMax);
                             lock (m_Samples.DataLock)
                             {
@@ -1468,8 +1501,6 @@ namespace SehensWerte.Controls.Sehens
             {
                 case MathTypes.FFTMagnitude:
                 case MathTypes.FFTPhase:
-                case MathTypes.FFT10Log10:
-                case MathTypes.FFT20Log10:
                     return (m_CalculatePhase == CalculatePhases.AfterZoom) ? m_DrawnSamples!.Length : m_CalculatedBeforeZoom!.Length;
                 default:
                     return 0;
@@ -1480,7 +1511,7 @@ namespace SehensWerte.Controls.Sehens
         {
             return m_MathType switch
             {
-                MathTypes.FFTMagnitude or MathTypes.FFTPhase or MathTypes.FFT10Log10 or MathTypes.FFT20Log10 => m_Samples.InputSamplesPerSecond / (double)m_FftInputBins * (double)(m_FftResultBins - 1),
+                MathTypes.FFTMagnitude or MathTypes.FFTPhase => m_Samples.InputSamplesPerSecond / (double)m_FftInputBins * (double)(m_FftResultBins - 1),
                 _ => 0.0,
             };
         }
@@ -1710,30 +1741,35 @@ namespace SehensWerte.Controls.Sehens
                 result = m_Fft.SpectralMagnitude;
             }
             m_FftResultBins = result.Length;
-            if (m_MathType == MathTypes.FFT10Log10 || m_MathType == MathTypes.FFT20Log10)
-            {
-                int length = result.Length;
-                double min = 0.0;
-                double ratio = m_MathType == MathTypes.FFT20Log10 ? 20.0 : 10.0;
-                for (int loop = 0; loop < length; loop++)
-                {
-                    double dB = ratio * Math.Log10(result[loop]);
-                    if (double.IsNegativeInfinity(dB))
-                    {
-                        dB = double.NegativeInfinity;
-                    }
-                    else
-                    {
-                        min = min < dB ? min : dB;
-                    }
-                    result[loop] = dB;
-                }
-                for (int loop = 0; loop < length; loop++)
-                {
-                    result[loop] = result[loop] == double.NegativeInfinity ? min : result[loop];
-                }
-            }
+            ApplyDbInPlace(result);
             return result;
+        }
+
+        // 10*log10(|v|) or 20*log10(|v|) in place. Negative-infinity bins are clamped to the
+        // minimum finite dB seen so axes don't blow up. Caller must check LogVertical is a dB mode.
+        private void ApplyDbInPlace(double[] data)
+        {
+            if (m_LogVertical != LogVerticalMode.dB10 && m_LogVertical != LogVerticalMode.dB20) return;
+            int length = data.Length;
+            double min = 0.0;
+            double ratio = m_LogVertical == LogVerticalMode.dB20 ? 20.0 : 10.0;
+            for (int loop = 0; loop < length; loop++)
+            {
+                double dB = ratio * Math.Log10(Math.Abs(data[loop]));
+                if (double.IsNegativeInfinity(dB))
+                {
+                    dB = double.NegativeInfinity;
+                }
+                else
+                {
+                    min = min < dB ? min : dB;
+                }
+                data[loop] = dB;
+            }
+            for (int loop = 0; loop < length; loop++)
+            {
+                data[loop] = data[loop] == double.NegativeInfinity ? min : data[loop];
+            }
         }
 
         private bool FindTrigger(double[] samples, ref int sampleCount, ref int sampleOffset)
@@ -1893,7 +1929,23 @@ namespace SehensWerte.Controls.Sehens
                 {
                     bool rebased = IsRebasedResult;
                     int length = m_DrawnSamples!.Length;
-                    int index = (int)Math.Floor((double)length * result.XRatio);
+                    double indexRatio = result.XRatio;
+                    if (m_LogHorizontal == LogHorizontalMode.Log)
+                    {
+                        var ext = DrawnExtents();
+                        double leftVal = ext.leftSampleNumberValue;
+                        double rightVal = ext.rightSampleNumberValue;
+                        if (rightVal > 0 && rightVal > leftVal)
+                        {
+                            double effectiveLeft = leftVal > 0 ? leftVal : rightVal * 0.01;
+                            PaintTraceBase.ProjectLog(rightVal, effectiveLeft, out var newMax, out var leftOutput);
+                            double output = leftOutput + result.XRatio * (newMax - leftOutput);
+                            double val = rightVal * Math.Pow(10.0, output - newMax);
+                            indexRatio = (val - leftVal) / (rightVal - leftVal);
+                            indexRatio = Math.Max(0.0, Math.Min(1.0, indexRatio));
+                        }
+                    }
+                    int index = (int)Math.Floor((double)length * indexRatio);
                     index = index < 0 ? 0 : ((index >= length) ? (length - 1) : index);
                     result.SampleAtX = m_DrawnSamples[index];
 

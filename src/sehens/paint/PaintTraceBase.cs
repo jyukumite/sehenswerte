@@ -50,6 +50,24 @@ namespace SehensWerte.Controls.Sehens
             }
         }
 
+        public static IEnumerable<double> GetLogPartitions(double low, double high)
+        {
+            if (low <= 0) low = high * 0.01;
+            if (low <= 0 || high <= 0 || low >= high) return Enumerable.Empty<double>();
+            var result = new List<double>();
+            double decade = Math.Pow(10.0, Math.Floor(Math.Log10(low)));
+            for (double d = decade / 10.0; d <= high * 10.0; d *= 10.0)
+            {
+                foreach (double m in new[] { 1.0, 2.0, 5.0 })
+                {
+                    double tick = d * m;
+                    if (tick >= low && tick <= high)
+                        result.Add(tick);
+                }
+            }
+            return result;
+        }
+
         public static IEnumerable<double> GetPartitions(double low, double high, int count)
         {
             bool reversed = false;
@@ -219,11 +237,18 @@ namespace SehensWerte.Controls.Sehens
         public virtual void PaintHorizontalAxis(Graphics graphics, TraceGroupDisplay info)
         {
             if (info.LeftSampleNumber > info.RightSampleNumber) return;
-            PaintGutterBottomPartition(
-                info,
-                graphics,
-                left: (double)(info.ShowHorizontalUnits ? info.LeftSampleNumberValue : info.LeftSampleNumber),
-                right: (double)(info.ShowHorizontalUnits ? info.RightSampleNumberValue : info.RightSampleNumber));
+            if (info.View0.IsLogX && info.ShowHorizontalUnits && info.RightSampleNumberValue > 0)
+            {
+                PaintGutterBottomPartitionLog(info, graphics, info.LeftSampleNumberValue, info.RightSampleNumberValue);
+            }
+            else
+            {
+                PaintGutterBottomPartition(
+                    info,
+                    graphics,
+                    left: (double)(info.ShowHorizontalUnits ? info.LeftSampleNumberValue : info.LeftSampleNumber),
+                    right: (double)(info.ShowHorizontalUnits ? info.RightSampleNumberValue : info.RightSampleNumber));
+            }
         }
 
         public virtual void PaintAxisTitleHorizontal(Graphics graphics, TraceGroupDisplay info)
@@ -281,7 +306,7 @@ namespace SehensWerte.Controls.Sehens
             foreach (double num in VerticalAxisPartition(info, partitionCount, out highestValue, out lowestValue))
             {
                 float y;
-                if (info.View0.LogVertical)
+                if (info.View0.IsLogY)
                 {
                     lowestValue = 0.0;
                     ProjectLog(highestValue, num, out var newMax, out var output);
@@ -378,7 +403,8 @@ namespace SehensWerte.Controls.Sehens
                             //}
                             if (draw)
                             {
-                                float y = (info.ProjectionArea.Top + info.ProjectionArea.Bottom) / 2;
+                                SizeF sizeF = graphics.MeasureString(feature.Text, font);
+                                float y = FeatureAnchorY(feature, info, sizeF);
                                 using (Matrix matrix2 = new Matrix(1f, 0f, 0f, 1f, 0f, 0f))
                                 {
                                     matrix2.Rotate(feature.Angle, MatrixOrder.Append);
@@ -386,7 +412,6 @@ namespace SehensWerte.Controls.Sehens
                                     try
                                     {
                                         graphics.Transform = matrix2;
-                                        SizeF sizeF = graphics.MeasureString(feature.Text, font);
                                         solidBrush.Color = feature.Colour ?? info.Skin.FeatureTextFont.Color;
                                         graphics.DrawString(feature.Text, font, solidBrush, (0f - sizeF.Width) / 2f, (0f - sizeF.Height) / 2f);
                                     }
@@ -457,6 +482,85 @@ namespace SehensWerte.Controls.Sehens
                 }
             }
             graphics.ResetClip();
+        }
+
+        // Returns the screen-space Y at which the text's bbox CENTER should sit.
+        //   Centre -- pixel-space centre of plot rectangle, ignores value range (legacy default).
+        //   Y      -- VerticalPosition as a literal Y value, projected through Y mapping.
+        //   Sample -- samples[SampleNumber], projected through Y mapping.
+        // Justify then shifts the bbox up/down by the rotated bbox height.
+        private static float FeatureAnchorY(TraceFeature feature, TraceGroupDisplay info, SizeF unrotatedSize)
+        {
+            float anchorY;
+            if (feature.VerticalAnchor == TraceFeature.VerticalAnchorMode.Centre)
+            {
+                anchorY = (info.ProjectionArea.Top + info.ProjectionArea.Bottom) / 2f;
+            }
+            else
+            {
+                double hi = info.View0.HighestValue;
+                double lo = info.View0.LowestValue;
+                if (hi <= lo)
+                {
+                    anchorY = (info.ProjectionArea.Top + info.ProjectionArea.Bottom) / 2f;
+                }
+                else
+                {
+                    double val;
+                    switch (feature.VerticalAnchor)
+                    {
+                        case TraceFeature.VerticalAnchorMode.Sample:
+                            {
+                                double[] samples = info.View0.Samples.InputSamplesAsDouble;
+                                int idx = feature.SampleNumber + info.ViewOffsetOverride;
+                                val = (idx >= 0 && idx < samples.Length) ? samples[idx] : lo + 0.5 * (hi - lo);
+                                break;
+                            }
+                        case TraceFeature.VerticalAnchorMode.Y:
+                        default:
+                            val = feature.VerticalPosition;
+                            break;
+                    }
+
+                    if (info.View0.IsLogY && hi > 0)
+                    {
+                        ProjectLog(hi, val, out var newMax, out var output);
+                        anchorY = (float)(info.ProjectionArea.Top + (newMax - output) * info.ProjectionArea.Height / newMax);
+                    }
+                    else
+                    {
+                        anchorY = (float)(info.ProjectionArea.Top + (hi - val) / (hi - lo) * info.ProjectionArea.Height);
+                    }
+                }
+            }
+
+            // Rotated bbox height in screen space. For angle 0 this is sizeF.Height; for +-90 it is sizeF.Width.
+            double radians = feature.Angle * Math.PI / 180.0;
+            float bboxHeight = (float)(Math.Abs(Math.Sin(radians)) * unrotatedSize.Width
+                                     + Math.Abs(Math.Cos(radians)) * unrotatedSize.Height);
+
+            float centerY;
+            switch (feature.VerticalJustify)
+            {
+                case TraceFeature.VerticalJustifyMode.Top: centerY = anchorY + bboxHeight / 2f; break;
+                case TraceFeature.VerticalJustifyMode.Bottom: centerY = anchorY - bboxHeight / 2f; break;
+                default: centerY = anchorY; break;
+            }
+
+            // Pull the bbox back inside the projection area so labels near the edges don't
+            // get clipped. If the text is taller than the plot, just centre it vertically.
+            float top = info.ProjectionArea.Top;
+            float bottom = info.ProjectionArea.Bottom;
+            if (bboxHeight >= bottom - top)
+            {
+                centerY = (top + bottom) / 2f;
+            }
+            else
+            {
+                if (centerY - bboxHeight / 2f < top) centerY = top + bboxHeight / 2f;
+                if (centerY + bboxHeight / 2f > bottom) centerY = bottom - bboxHeight / 2f;
+            }
+            return centerY;
         }
 
         protected void PaintPiP(TraceGroupDisplay info, Graphics graphics)
@@ -618,6 +722,37 @@ namespace SehensWerte.Controls.Sehens
                     view.Painted.ClickZones.Add(embed);
                 }
             }
+        }
+
+        protected void PaintGutterBottomPartitionLog(TraceGroupDisplay info, Graphics graphics, double left, double right)
+        {
+            using Font font = info.Skin.AxisTextFont.Font;
+            using Pen pen = new Pen(info.Skin.GraduationColour);
+            using Brush brush = info.Skin.AxisTextFont.Brush;
+            double effectiveLeft = left > 0 ? left : right * 0.01;
+            ProjectLog(right, effectiveLeft, out var newMax, out var leftOutput);
+            double span = newMax - leftOutput;
+            if (span <= 0) return;
+            float width = info.ProjectionArea.Width;
+            graphics.SetClip(new Rectangle(info.ProjectionArea.Left, info.ProjectionArea.Top, info.ProjectionArea.Width, info.BottomGutter.Bottom - info.ProjectionArea.Top));
+            float lastLabelRight = float.NegativeInfinity;
+            foreach (double value in GetLogPartitions(effectiveLeft, right))
+            {
+                ProjectLog(right, value, out _, out var output);
+                float x = (float)((output - leftOutput) / span * width);
+                if (x < 0 || x >= width) continue;
+                pen.DashStyle = System.Drawing.Drawing2D.DashStyle.Dash;
+                graphics.DrawLine(pen, x + info.ProjectionArea.Left, info.ProjectionArea.Bottom, x + info.ProjectionArea.Left, info.ProjectionArea.Top);
+                string text = ToHorizontalUnit(info, value);
+                SizeF sz = graphics.MeasureString(text, font);
+                float textLeft = info.ProjectionArea.Left + x - sz.Width / 2f;
+                if (textLeft > lastLabelRight)
+                {
+                    graphics.DrawString(text, font, brush, textLeft, info.BottomGutter.Top + 1);
+                    lastLabelRight = textLeft + sz.Width;
+                }
+            }
+            graphics.ResetClip();
         }
 
         protected void PaintGutterBottomPartition(TraceGroupDisplay info, Graphics graphics, double left, double right)

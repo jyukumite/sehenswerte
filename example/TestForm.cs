@@ -124,6 +124,60 @@ namespace SehensWerte
 
             [AutoEditor.DisplayOrder(5.6)]
             public int ControlDelayLen = 5;
+
+            // AutoEditor attribute demos. Consumed by ExampleAutoEditorDemo() below.
+
+            public class FilterSettings
+            {
+                [AutoEditor.DisplayName("Cutoff (Hz)")]
+                [AutoEditor.DisplayOrder(0)]
+                public double Cutoff = 1000;
+
+                [AutoEditor.DisplayName("Order")]
+                [AutoEditor.DisplayOrder(1)]
+                public int Order = 4;
+
+                [AutoEditor.DisplayName("Window")]
+                [AutoEditor.DisplayOrder(2)]
+                public WaveformGenerator.Waveforms Window = WaveformGenerator.Waveforms.Sine;
+            }
+
+            public class MarkerPoint
+            {
+                [AutoEditor.DisplayName("Time (s)")]
+                [AutoEditor.DisplayOrder(0)]
+                public double Time;
+
+                [AutoEditor.DisplayName("Label")]
+                [AutoEditor.DisplayOrder(1)]
+                public string Label = "";
+
+                public override string ToString() => $"{Label}@{Time:0.000}s";
+            }
+
+            [AutoEditor.DisplayOrder(6.0, "AutoEditor demo")]
+            [AutoEditor.InlineClass]
+            public FilterSettings InlineFilter = new FilterSettings();
+
+            [AutoEditor.DisplayOrder(6.1)]
+            [AutoEditor.DisplayName("Popup filter")]
+            [AutoEditor.SubEditor]
+            public FilterSettings PopupFilter = new FilterSettings();
+
+            [AutoEditor.DisplayOrder(6.2)]
+            [AutoEditor.DisplayName("Thresholds (dB)")]
+            [AutoEditor.ArrayEditor(AutoEditor.ArrayEditorAttribute.DisplayMode.Inline, itemLabelFormat: "  [{0}]")]
+            public double[] InlineThresholds = { -3.0, -6.0, -12.0 };
+
+            [AutoEditor.DisplayOrder(6.3)]
+            [AutoEditor.DisplayName("Markers")]
+            [AutoEditor.ArrayEditor(AutoEditor.ArrayEditorAttribute.DisplayMode.Inline, itemLabelFormat: "  marker {0}")]
+            public List<MarkerPoint> InlineMarkers = new List<MarkerPoint>
+            {
+                new MarkerPoint { Time = 0.10, Label = "start" },
+                new MarkerPoint { Time = 0.55, Label = "peak" },
+                new MarkerPoint { Time = 1.00, Label = "end" },
+            };
         }
 
         public void Run(SehensControl scope)
@@ -135,11 +189,128 @@ namespace SehensWerte
                 ExampleControllers(scope);
                 ExampleXY(scope);
                 ExampleXYZ(scope);
+                ExampleAutoEditorDemo(scope);
             }
             catch (Exception ex)
             {
                 OnLog?.Invoke(new Files.CsvLog.Entry(ex.ToString(), Files.CsvLog.Priority.Exception));
             }
+        }
+
+        // Drives traces from the AutoEditor-demo settings so edits in the [InlineClass] /
+        // [SubEditor] / [ArrayEditor] rows visibly change the scope on OnChanged.
+        private void ExampleAutoEditorDemo(SehensControl scope)
+        {
+            const double sps = 4000;
+            // 1.2 s of buffer so marker.Time up to 1.0 s still leaves room for the pulse width.
+            const int sampleCount = (int)(sps * 1.2);
+
+            scope["AE inline filter"].Update(SynthFilterSettings(m_Data.InlineFilter, sampleCount, sps), samplesPerSecond: sps);
+            scope["AE popup filter"].Update(SynthFilterSettings(m_Data.PopupFilter, sampleCount, sps), samplesPerSecond: sps);
+
+            // Stepped DC, one segment per threshold value.
+            var thresholds = m_Data.InlineThresholds;
+            var stepped = new double[sampleCount];
+            if (thresholds.Length > 0)
+            {
+                int slice = Math.Max(1, sampleCount / thresholds.Length);
+                for (int i = 0; i < sampleCount; i++)
+                    stepped[i] = thresholds[Math.Min(thresholds.Length - 1, i / slice)];
+            }
+            scope["AE thresholds"].Update(stepped, samplesPerSecond: sps);
+
+            // Rectangular pulses at marker.Time positions, wide enough to survive
+            // the scope's min/max decimation at any zoom level. The Label is rendered
+            // on the trace via TraceFeature so edits in the marker popup show up.
+            var marked = new double[sampleCount];
+            var features = new List<TraceFeature>();
+            int pulseWidth = (int)(sps * 0.02); // 20 ms
+            foreach (var marker in m_Data.InlineMarkers)
+            {
+                int start = (int)(marker.Time * sps);
+                int end = Math.Min(sampleCount, start + pulseWidth);
+                for (int i = Math.Max(0, start); i < end; i++) marked[i] = 1.0;
+                if (start >= 0 && start < sampleCount && !string.IsNullOrEmpty(marker.Label))
+                {
+                    // Anchor at the sample value so the label rides on the trace itself.
+                    features.Add(new TraceFeature
+                    {
+                        Type = TraceFeature.Feature.Text,
+                        SampleNumber = start,
+                        Text = marker.Label,
+                        VerticalAnchor = TraceFeature.VerticalAnchorMode.Sample,
+                    });
+                }
+            }
+            // Two extra Y-anchored labels at Y = 0.3 and Y = 0.7 so the anchor mode is
+            // visible alongside the Sample-anchored marker labels.
+            features.Add(new TraceFeature
+            {
+                Type = TraceFeature.Feature.Text,
+                SampleNumber = (int)(sps * 0.25),
+                Text = "y=0.3",
+                VerticalAnchor = TraceFeature.VerticalAnchorMode.Y,
+                VerticalPosition = 0.3,
+            });
+            features.Add(new TraceFeature
+            {
+                Type = TraceFeature.Feature.Text,
+                SampleNumber = (int)(sps * 0.75),
+                Text = "y=0.7",
+                VerticalAnchor = TraceFeature.VerticalAnchorMode.Y,
+                VerticalPosition = 0.7,
+            });
+            // Plain Text feature with all defaults (Y=0, Middle justify) to show the
+            // legacy centred placement.
+            features.Add(new TraceFeature
+            {
+                Type = TraceFeature.Feature.Text,
+                SampleNumber = (int)(sps * 0.05),
+                Text = "default",
+            });
+            // GutterText, Line, and Highlight cover the other non-handle feature types.
+            features.Add(new TraceFeature
+            {
+                Type = TraceFeature.Feature.GutterText,
+                SampleNumber = (int)(sps * 0.40),
+                Text = "gutter",
+            });
+            features.Add(new TraceFeature
+            {
+                Type = TraceFeature.Feature.Line,
+                SampleNumber = (int)(sps * 0.45),
+            });
+            features.Add(new TraceFeature
+            {
+                Type = TraceFeature.Feature.Highlight,
+                SampleNumber = (int)(sps * 0.60),
+                RightSampleNumber = (int)(sps * 0.65),
+            });
+            scope["AE markers"].Update(marked, samplesPerSecond: sps);
+            scope["AE markers"].InputFeatures = features;
+
+            scope.GroupViews(new[] { "AE inline filter", "AE popup filter", "AE thresholds", "AE markers" }, colour: true);
+        }
+
+        // Sum of fs.Order harmonics of fs.Window at fs.Cutoff Hz, 1/n amplitude weighting.
+        private static double[] SynthFilterSettings(Data.FilterSettings fs, int count, double sps)
+        {
+            int order = Math.Max(1, fs.Order);
+            var table = WaveformGenerator.List[fs.Window];
+            var result = new double[count];
+            for (int n = 1; n <= order; n++)
+            {
+                var harmonic = new ToneGenerator()
+                {
+                    FrequencyStart = fs.Cutoff * n,
+                    FrequencyEnd = fs.Cutoff * n,
+                    SamplesPerSecond = sps,
+                    WaveTable = table,
+                    Amplitude = 1.0 / n,
+                }.Generate(count);
+                for (int i = 0; i < count; i++) result[i] += harmonic[i];
+            }
+            return result;
         }
 
         // Lorenz attractor example

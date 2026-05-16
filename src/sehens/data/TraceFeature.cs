@@ -8,6 +8,23 @@ namespace SehensWerte.Controls.Sehens
             Highlight, LeftHandle, RightHandle, TriggerHandle,
         }
 
+        // Where the text's anchor Y comes from.
+        //   Centre - pixel-space centre of the plot rectangle. Ignores VerticalPosition.
+        //            Default; reproduces the legacy mid-trace placement.
+        //   Y      - value-space: VerticalPosition is a literal Y value, projected through
+        //            the painter's linear/log Y mapping.
+        //   Sample - value-space: the sample value at SampleNumber, projected through the
+        //            same Y mapping so the label rides the trace.
+        public enum VerticalAnchorMode { Centre, Y, Sample }
+
+        // Where the text's bounding box sits relative to that anchor Y.
+        //   Top    - bbox top edge at anchor (text extends downward in screen space).
+        //   Middle - bbox centred on anchor. Default, matches legacy behaviour.
+        //   Bottom - bbox bottom edge at anchor (text extends upward in screen space).
+        // For rotated text (e.g. Angle = -90, reading bottom-to-top), Top/Bottom refer to the
+        // rotated bbox edges in screen space, not to the first/last character of the string.
+        public enum VerticalJustifyMode { Top, Middle, Bottom }
+
         public Feature Type = Feature.Text;
         public int SampleNumber;
         public int RightSampleNumber;
@@ -16,6 +33,9 @@ namespace SehensWerte.Controls.Sehens
         public string Text = "";
         public Color? Colour; // null -> default colour
         public int Angle = -90; // -90 is vertical bottom to top
+        public VerticalAnchorMode VerticalAnchor = VerticalAnchorMode.Centre;
+        public double VerticalPosition = 0.0;
+        public VerticalJustifyMode VerticalJustify = VerticalJustifyMode.Middle;
         public Rectangle PaintedHitBox;
 
         public object Clone()
@@ -29,7 +49,10 @@ namespace SehensWerte.Controls.Sehens
                 RightUnixTime = RightUnixTime,
                 Text = Text,
                 Colour = Colour,
-                Angle = Angle
+                Angle = Angle,
+                VerticalAnchor = VerticalAnchor,
+                VerticalPosition = VerticalPosition,
+                VerticalJustify = VerticalJustify,
             };
         }
 

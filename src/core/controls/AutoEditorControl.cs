@@ -1,4 +1,5 @@
-﻿using System.Reflection;
+﻿using System.Collections;
+using System.Reflection;
 
 namespace SehensWerte.Controls
 {
@@ -10,6 +11,8 @@ namespace SehensWerte.Controls
         private Dictionary<AutoEditor.EditRow, object> m_StartValues = new Dictionary<AutoEditor.EditRow, object>();
         internal TableLayoutPanel? LayoutPanel;
         public int PreferredHeight => LayoutPanel?.GetRowHeights().Sum() ?? 0;
+        // tracks (memberInfo, source) -> last-seen IList count so the panel can rebuild when an array length changes
+        private Dictionary<(MemberInfo, object), int> m_ArrayLengths = new();
 
         public AutoEditorControl()
         {
@@ -22,6 +25,10 @@ namespace SehensWerte.Controls
         internal void RemoveDelegates()
         {
             m_Editor?.RemoveDelegates();
+            if (SourceData is AutoEditorBase ab)
+            {
+                ab.UpdateControls -= OnUpdateControlsRequested;
+            }
         }
 
         internal void Revert()
@@ -36,6 +43,10 @@ namespace SehensWerte.Controls
 
         public void Generate(object? sourceData)
         {
+            if (SourceData is AutoEditorBase oldBase)
+            {
+                oldBase.UpdateControls -= OnUpdateControlsRequested;
+            }
             if (LayoutPanel != null)
             {
                 LayoutPanel.Controls.Clear();
@@ -44,6 +55,14 @@ namespace SehensWerte.Controls
             if (sourceData != null)
             {
                 SourceData = sourceData;
+                // Subscribe before constructing AutoEditor so our length-mismatch check runs
+                // first when UpdateControls fires; we can rebuild before the static walker
+                // tries to read stale ObjectIndex values against a now-shorter list.
+                if (sourceData is AutoEditorBase ab)
+                {
+                    ab.UpdateControls -= OnUpdateControlsRequested;
+                    ab.UpdateControls += OnUpdateControlsRequested;
+                }
                 GenerateControls();
                 m_Editor = new AutoEditor(sourceData, Controls);
                 m_Editor.OnChanging = (Action<AutoEditor>)Delegate.Combine(m_Editor.OnChanging, new Action<AutoEditor>(OnChanging));
@@ -73,67 +92,206 @@ namespace SehensWerte.Controls
             LayoutPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 55f));
             LayoutPanel.RowStyles.Add(new RowStyle(SizeType.AutoSize));
 
-            List<string> names = new List<string>();
             if (SourceData != null)
             {
+                m_ArrayLengths.Clear();
                 var rows = new List<AutoEditor.EditRow>();
-                foreach (MemberInfo memberInfo in SourceData.GetType().GetMembers())
-                {
-                    if ((memberInfo as FieldInfo)?.FieldType == typeof(List<AutoEditor.ValueListEntry>))
-                    {
-                        var va = ((FieldInfo)memberInfo).GetValue(SourceData) as List<AutoEditor.ValueListEntry>;
-                        if (va != null)
-                        {
-                            for (int loop = 0; loop < va.Count; loop++)
-                            {
-                                rows.Add(new AutoEditor.EditRow(memberInfo, typeof(string))
-                                {
-                                    DisplayText = va[loop].Name,
-                                    ObjectIndex = loop,
-                                    DisplayOrder = va[loop].Order,
-                                });
-                            }
-                        }
-                    }
-                    else if (memberInfo is FieldInfo || memberInfo is PropertyInfo)
-                    {
-                        var order = AutoEditor.DisplayOrder(memberInfo);
-                        rows.Add(new AutoEditor.EditRow(memberInfo, memberInfo is FieldInfo ? ((FieldInfo)memberInfo).FieldType : ((PropertyInfo)memberInfo).PropertyType)
-                        {
-                            DisplayText = AutoEditor.DisplayName(memberInfo),
-                            ObjectIndex = null,
-                            DisplayOrder = order.order,
-                            GroupName = order.name,
-                        });
-                    }
-                }
+                CollectRows(SourceData, parentOrder: null, hostGroupName: null, visited: new HashSet<object>(), rows);
 
-                double prevDisplayOrder = double.NaN;
-                rows.OrderBy(row => row.DisplayOrder).ThenBy(row => row.DisplayText)
-                    .ForEach(row =>
+                var sorted = rows
+                    .OrderBy(r => r.ParentDisplayOrder ?? r.DisplayOrder)
+                    .ThenBy(r => r.ParentDisplayOrder.HasValue ? r.DisplayOrder : double.MinValue)
+                    .ThenBy(r => r.ObjectIndex ?? -1)
+                    .ThenBy(r => r.DisplayText)
+                    .ToList();
+
+                int prevPrimary = int.MinValue;
+                (int, int) prevKey = (int.MinValue, int.MinValue);
+                foreach (var row in sorted)
+                {
+                    int primary = (int)(row.ParentDisplayOrder ?? row.DisplayOrder);
+                    int secondary = row.ParentDisplayOrder.HasValue ? (int)row.DisplayOrder : int.MinValue;
+                    if (primary != prevPrimary)
                     {
-                        if ((int)row.DisplayOrder != (int)prevDisplayOrder)
-                        {
-                            string? groupName = rows
-                                .Where(x => (int)x.DisplayOrder == (int)row.DisplayOrder)
-                                .FirstOrDefault(x => x.GroupName != null)
-                                ?.GroupName;
-                            if (groupName != null && groupName.Length > 0)
+                        string? hostGroup = sorted
+                            .Where(x => (int)(x.ParentDisplayOrder ?? x.DisplayOrder) == primary)
+                            .Select(x => x.HostGroupName)
+                            .FirstOrDefault(g => !string.IsNullOrEmpty(g));
+                        if (!string.IsNullOrEmpty(hostGroup)) AddGroupNameRow(hostGroup!);
+                        prevPrimary = primary;
+                        prevKey = (int.MinValue, int.MinValue);
+                    }
+                    var key = (primary, secondary);
+                    if (key != prevKey)
+                    {
+                        string? groupName = sorted
+                            .Where(x =>
                             {
-                                AddGroupNameRow(groupName);
-                            }
-                            prevDisplayOrder = row.DisplayOrder;
-                        }
-                        GenerateControl(LayoutPanel, row);
-                    });
+                                int xp = (int)(x.ParentDisplayOrder ?? x.DisplayOrder);
+                                int xs = x.ParentDisplayOrder.HasValue ? (int)x.DisplayOrder : int.MinValue;
+                                return xp == primary && xs == secondary;
+                            })
+                            .FirstOrDefault(x => !string.IsNullOrEmpty(x.GroupName))
+                            ?.GroupName;
+                        if (!string.IsNullOrEmpty(groupName)) AddGroupNameRow(groupName!);
+                        prevKey = key;
+                    }
+                    GenerateControl(LayoutPanel, row);
+                }
 
                 AddFinalRow();
                 LayoutPanel?.ResumeLayout();
                 Controls.Add(LayoutPanel);
-                if (SourceData != null)
+                m_StartValues = AutoEditor.GetValueList(SourceData, rows);
+            }
+        }
+
+        // Walks members of `source` and emits EditRows. Recurses for [InlineClass]; expands arrays decorated
+        // with [ArrayEditor]. parentOrder/hostGroupName apply to all rows emitted from this call when source != SourceData.
+        private void CollectRows(object source, double? parentOrder, string? hostGroupName, HashSet<object> visited, List<AutoEditor.EditRow> rows)
+        {
+            bool isNested = parentOrder.HasValue;
+            foreach (MemberInfo memberInfo in source.GetType().GetMembers())
+            {
+                Type? memberType = AutoEditor.MemberType(memberInfo);
+                if (memberType == null) continue;
+
+                // [InlineClass] is allowed on otherwise-Hidden host fields; the host itself
+                // never renders as a row, so Hidden is moot for it. Check it before the Hidden filter.
+                if (AutoEditor.IsInlineClass(memberInfo))
                 {
-                    m_StartValues = AutoEditor.GetValueList(SourceData, rows);
+                    object? nested = memberInfo is FieldInfo fi ? fi.GetValue(source)
+                                  : ((PropertyInfo)memberInfo).GetValue(source, null);
+                    if (nested != null && !visited.Contains(nested))
+                    {
+                        var hostOrder = AutoEditor.DisplayOrder(memberInfo);
+                        visited.Add(nested);
+                        CollectRows(
+                            nested,
+                            parentOrder: parentOrder ?? hostOrder.order,
+                            hostGroupName: hostGroupName ?? hostOrder.name,
+                            visited,
+                            rows);
+                        visited.Remove(nested);
+                    }
+                    continue;
                 }
+
+                if (AutoEditor.IsHidden(memberInfo)) continue;
+
+                // existing back-compat path: List<ValueListEntry> always inlines as named rows
+                if (memberInfo is FieldInfo vleField && vleField.FieldType == typeof(List<AutoEditor.ValueListEntry>))
+                {
+                    var va = vleField.GetValue(source) as List<AutoEditor.ValueListEntry>;
+                    if (va != null)
+                    {
+                        m_ArrayLengths[(memberInfo, source)] = va.Count;
+                        for (int i = 0; i < va.Count; i++)
+                        {
+                            rows.Add(new AutoEditor.EditRow(memberInfo, typeof(string))
+                            {
+                                DisplayText = va[i].Name,
+                                ObjectIndex = i,
+                                DisplayOrder = va[i].Order,
+                                NestedSource = isNested ? source : null,
+                                ParentDisplayOrder = parentOrder,
+                                HostGroupName = hostGroupName,
+                            });
+                        }
+                    }
+                    continue;
+                }
+
+                if (!(memberInfo is FieldInfo || memberInfo is PropertyInfo)) continue;
+
+                var memberOrder = AutoEditor.DisplayOrder(memberInfo);
+
+                // [ArrayEditor] -- expand inline rows or emit a single SubForm button
+                var arrayAttr = AutoEditor.ArrayEditor(memberInfo);
+                if (arrayAttr != null && typeof(IList).IsAssignableFrom(memberType))
+                {
+                    Type elementType = AutoEditor.ElementType(memberType) ?? typeof(object);
+                    object? container = memberInfo is FieldInfo afi ? afi.GetValue(source)
+                                     : ((PropertyInfo)memberInfo).GetValue(source, null);
+
+                    if (arrayAttr.Mode == AutoEditor.ArrayEditorAttribute.DisplayMode.SubForm)
+                    {
+                        rows.Add(new AutoEditor.EditRow(memberInfo, memberType)
+                        {
+                            DisplayText = AutoEditor.DisplayName(memberInfo),
+                            DisplayOrder = memberOrder.order,
+                            GroupName = memberOrder.name,
+                            NestedSource = isNested ? source : null,
+                            ParentDisplayOrder = parentOrder,
+                            HostGroupName = hostGroupName,
+                            OpenArraySubForm = true,
+                        });
+                        continue;
+                    }
+
+                    // Inline mode
+                    if (container is IList list)
+                    {
+                        m_ArrayLengths[(memberInfo, source)] = list.Count;
+                        bool elementIsScalar = AutoEditor.IsScalarElementType(elementType);
+                        for (int i = 0; i < list.Count; i++)
+                        {
+                            rows.Add(new AutoEditor.EditRow(memberInfo, elementType)
+                            {
+                                DisplayText = string.Format(arrayAttr.ItemLabelFormat, i),
+                                ObjectIndex = i,
+                                // Children of inline arrays share the host's slot. Top-level arrays sort
+                                // by element order (0..N) inside the host's group: use memberOrder for primary,
+                                // and the element index for secondary so labels still group correctly.
+                                DisplayOrder = elementIsScalar ? memberOrder.order : memberOrder.order,
+                                GroupName = i == 0 ? memberOrder.name : null,
+                                NestedSource = isNested ? source : null,
+                                ParentDisplayOrder = parentOrder,
+                                HostGroupName = hostGroupName,
+                                OpenElementSubForm = !elementIsScalar,
+                            });
+                        }
+                    }
+                    continue;
+                }
+
+                // ordinary scalar / subeditor / pushbutton / enum / bool row
+                rows.Add(new AutoEditor.EditRow(memberInfo, memberType)
+                {
+                    DisplayText = AutoEditor.DisplayName(memberInfo),
+                    ObjectIndex = null,
+                    DisplayOrder = memberOrder.order,
+                    GroupName = memberOrder.name,
+                    NestedSource = isNested ? source : null,
+                    ParentDisplayOrder = parentOrder,
+                    HostGroupName = hostGroupName,
+                });
+            }
+        }
+
+        // Walk current source and detect any IList/ValueListEntry length that no longer matches what we cached.
+        // Returns true if a full rebuild is needed.
+        private bool ArrayLengthsChanged()
+        {
+            if (SourceData == null || m_ArrayLengths.Count == 0) return false;
+            foreach (var kv in m_ArrayLengths)
+            {
+                var (member, src) = kv.Key;
+                object? container = member is FieldInfo fi ? fi.GetValue(src)
+                                 : member is PropertyInfo pi ? pi.GetValue(src, null) : null;
+                int count = container is IList list ? list.Count
+                          : container is List<AutoEditor.ValueListEntry> vle ? vle.Count
+                          : -1;
+                if (count != kv.Value) return true;
+            }
+            return false;
+        }
+
+        private void OnUpdateControlsRequested()
+        {
+            if (ArrayLengthsChanged())
+            {
+                this.BeginInvokeIfRequired(() => Generate(SourceData));
             }
         }
 
@@ -229,7 +387,34 @@ namespace SehensWerte.Controls
             };
             try
             {
-                if (AutoEditor.IsSubEditor(row.MemberInfo))
+                if (row.OpenArraySubForm)
+                {
+                    var arrayAttr = AutoEditor.ArrayEditor(row.MemberInfo);
+                    Button button = new Button
+                    {
+                        Dock = DockStyle.Top,
+                        AutoSize = true,
+                        Tag = row,
+                        Text = arrayAttr?.ButtonCaption ?? "..."
+                    };
+                    tableLayout.Controls.Add(control, 0, ++tableLayout.RowCount);
+                    tableLayout.Controls.Add(button, 1, tableLayout.RowCount);
+                    button.Enabled = AutoEditor.IsEnabled(row.MemberInfo);
+                }
+                else if (row.OpenElementSubForm)
+                {
+                    Button button = new Button
+                    {
+                        Dock = DockStyle.Top,
+                        AutoSize = true,
+                        Tag = row,
+                        Text = "..."
+                    };
+                    tableLayout.Controls.Add(control, 0, ++tableLayout.RowCount);
+                    tableLayout.Controls.Add(button, 1, tableLayout.RowCount);
+                    button.Enabled = AutoEditor.IsEnabled(row.MemberInfo);
+                }
+                else if (AutoEditor.IsSubEditor(row.MemberInfo))
                 {
                     Button control2 = new Button
                     {

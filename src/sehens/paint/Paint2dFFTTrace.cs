@@ -21,7 +21,7 @@ namespace SehensWerte.Controls.Sehens
 
             int samplesPerFft;
             (var array, var recalculate) = info.View0.SnapshotProjection();
-            int fftsWide = Math.Min(array.Length / (info.View0.LogVertical ? 1024 : 256), 256);
+            int fftsWide = Math.Min(array.Length / (info.View0.IsLogY ? 1024 : 256), 256);
             if (recalculate && fftsWide > 0)
             {
                 int overlap = 2;
@@ -93,7 +93,7 @@ namespace SehensWerte.Controls.Sehens
                 m_CachedBitmap?.Dispose();
                 m_CachedBitmap = null;
 
-                if (info.View0.LogVertical)
+                if (info.View0.IsLogY)
                 {
                     LogVertical(bins, hzPerBucket, stride, ref bitmapPixelsPerBucket, ref pixels);
                 }
@@ -174,30 +174,7 @@ namespace SehensWerte.Controls.Sehens
 
         public override void PaintHorizontalAxis(Graphics graphics, TraceGroupDisplay info)
         {
-            if (info.LeftSampleNumber == info.RightSampleNumber) return;
-
-            double left = (info.ShowHorizontalUnits ? info.LeftSampleNumberValue : ((double)info.LeftSampleNumber));
-            double right = (info.ShowHorizontalUnits ? info.RightSampleNumberValue : ((double)(info.RightSampleNumber + 1)));
-            int partitionCount = info.ProjectionArea.Width * 16 / 1000;
-            double[] xValues = PaintTraceBase.GetPartitions(left, right, (partitionCount < 5) ? 5 : partitionCount).ToArray();
-
-            graphics.SetClip(new Rectangle(info.ProjectionArea.Left, info.ProjectionArea.Top, info.ProjectionArea.Width, info.BottomGutter.Bottom - info.ProjectionArea.Top));
-            using Font font = info.Skin.AxisTextFont.Font;
-            using Brush brush = info.Skin.AxisTextFont.Brush;
-            using Pen pen = new Pen(info.Skin.GraduationColour);
-            foreach (var xValue in xValues)
-            {
-                float width = info.ProjectionArea.Width;
-                float x = (float)((xValue - left) * (double)width / (right - left));
-                x = (x < 0f) ? 0f : ((x >= width) ? (width - 1f) : x);
-
-                string text = ToHorizontalUnit(info, xValue);
-                SizeF sizeF = graphics.MeasureString(text, font);
-                graphics.DrawLine(pen, x + info.ProjectionArea.Left, info.ProjectionArea.Bottom, x + info.ProjectionArea.Left, info.ProjectionArea.Top);
-                x -= sizeF.Width / 2f;
-                graphics.DrawString(text, font, brush, x + info.ProjectionArea.Left, info.BottomGutter.Top + 1);
-            }
-            graphics.ResetClip();
+            base.PaintHorizontalAxis(graphics, info);
         }
 
         public override void PaintAxisTitleHorizontal(Graphics graphics, TraceGroupDisplay info) { }

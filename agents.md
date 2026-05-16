@@ -80,6 +80,43 @@ src/
 | `DataGridControl` | `src/core/controls/DataGridControl.cs` | Filterable, sortable data grid with undo/replay stack and save/restore view state |
 | `BoundData` | `src/core/controls/DataGridBoundData.cs` | `IBindingList` backing store for `DataGridControl`; owns `UnfilteredData`, `FilteredData`, `SortKeys`, `UndoList` |
 | `DataGridControlHistory` | `src/core/controls/DataGridControlHistory.cs` | XML-serialisable snapshot history for `DataGridControl.SaveView` / `RestoreView` |
+| `PaintTraceBase` | `src/sehens/paint/PaintTraceBase.cs` | Base painter -- horizontal/vertical axis rendering, `ProjectLog`, partition helpers |
+| `Paint2dTrace` | `src/sehens/paint/Paint2dTrace.cs` | 2D line/polygon painter; owns the `Project2dCurves` resample/decimate pipeline |
+
+---
+
+## Painter Pipeline
+
+Each `TraceView` has a `Painter` (one of `Paint2dTrace`, `Paint2dFFTTrace`, `PaintXYTrace`, `PaintPiPTrace`) chosen from `PaintMode`. All derive from `PaintTraceBase`.
+
+- `PaintProjection` runs per repaint with a `TraceGroupDisplay` (geometry + axis extents).
+- `Project2dCurves` is the expensive resample/decimate step. It runs only when `SnapshotReprojectionRequired` is true and caches into `DrawnProjection1` / `DrawnProjection2` / `DrawnPolygon`.
+- To force a recompute, call `TraceView.RecalculateProjectionRequired()`. Any property that changes projection geometry (zoom, math type, log axes, paint mode) must call this in its setter.
+- `TraceGroupDisplay.LeftSampleNumberValue` / `RightSampleNumberValue` carry the X-axis values for the current view (Hz for FFT, seconds for time-with-rate, sample number otherwise). They come from `TraceView.DrawnExtents()` -- do not recompute from Nyquist or sample rate yourself.
+
+### Axis log scaling
+
+`PaintTraceBase.ProjectLog(maxInput, input, out newMax, out output, staves=2)` is the canonical log mapping. It compresses `staves` decades (default 2); values below `maxInput / 10^staves` clamp to 0. The inverse is `input = maxInput * 10^(output - newMax)`.
+
+`TraceView.LogVertical` is a 4-state enum `LogVerticalMode { Off, Log, dB10, dB20 }`:
+
+- `Off` -- linear values, linear pixel mapping.
+- `Log` -- linear values, **pixel-log** Y mapping via `ProjectLog`. Use case: linear-magnitude FFT where peaks span many orders of magnitude. Painters check this via `view.IsLogY`.
+- `dB10` / `dB20` -- values converted to `10*log10(v)` / `20*log10(v)` inside `ExecuteFft`; linear pixel mapping. The " dB" axis label suffix is gated by `view.IsLogarithmicY` (which means "value-domain dB", not pixel-log).
+
+`TraceView.LogHorizontal` is a 2-state enum `LogHorizontalMode { Off, Log }`. Painters check this via `view.IsLogX`.
+
+`MathTypes` only describes the math transform (`Normal`, `FFTMagnitude`, `FFTPhase`). dB conversion is orthogonal -- entirely driven by `LogVertical`. The legacy `FFT10Log10` / `FFT20Log10` values are gone; `SehensSave.View.TranslateLegacyTraceXml` rewrites old saved files into the new shape (`FFTMagnitude` + `LogVertical=dB10/dB20`, and the old `True/False` bool serialisations of `LogVertical` / `LogHorizontal` into `Log`/`Off`).
+
+The inset "V" and "H" buttons next to "FFT" (in `ContextMenus.AddTraceEmbeddedMenu`) cycle these enums per trace. The "FFT" button auto-sets `LogVertical = dB10` when entering FFT only if the user has not already picked a non-`Off` vertical mode.
+
+### Painter / mouse mapping invariant
+
+`TraceView.Measure(MouseEventArgs)` converts mouse X back to a sample index for hover labels. Its X-axis remap MUST match whatever transform the painter applied. If you add a non-linear X projection in a painter, mirror its inverse in `Measure` or hover labels will report the wrong frequency/time.
+
+### Axis painting
+
+`PaintTraceBase.PaintHorizontalAxis` already dispatches linear vs log (`PaintGutterBottomPartition` / `PaintGutterBottomPartitionLog`) and includes label-overlap skip logic. Painter subclasses should call `base.PaintHorizontalAxis(...)` rather than re-implementing tick layout.
 
 ---
 
@@ -112,6 +149,8 @@ Settings objects inherit `AutoEditorBase`. Decorate fields/properties with attri
 | `[AutoEditor.Password]` | Mask the TextBox content |
 | `[AutoEditor.PushButton("caption")]` | On a `bool` or delegate field, render as a clickable Button |
 | `[AutoEditor.SubEditor]` | Render a `...` button that opens an `AutoEditorForm` for the nested object |
+| `[AutoEditor.InlineClass]` | Flatten a nested class's fields directly into the parent panel at the host field's `[DisplayOrder]` slot. Child rows keep their own ordering/grouping/display names inside that slot. Alternative to `[SubEditor]` -- no button, no popup. |
+| `[AutoEditor.ArrayEditor(mode, itemLabelFormat?, buttonCaption?)]` | Editor for an `IList`/array field. `Inline` mode emits one row per element directly in the parent panel; `SubForm` mode emits one button that opens a popup. Scalar-typed elements render as their normal scalar control; class-typed elements render as a button-per-element opening a per-element subeditor. Default `itemLabelFormat` is `"[{0}]"`. Length changes between `UpdateControls` invocations trigger a panel rebuild. |
 
 Host a panel by adding an `AutoEditorControl` to your form and calling `Generate(sourceData)`.  
 `AutoEditorBase` exposes an `OnChanged` callback and an `UpdateControls` action for round-tripping between the UI and model.
@@ -124,6 +163,35 @@ Host a panel by adding an `AutoEditorControl` to your form and calling `Generate
 - Feed traces by writing samples through a `FilterOutput`, or by directly calling into `TraceData`.
 - `Scope.Import(path)` loads a previously saved state or trace file — hosts typically wire it to drag-drop or a command-line argument.
 - Right-click context menu is built from `ScopeContextMenu`; per-trace menus are in `src/sehens/ui/ContextMenus.cs`.
+
+---
+
+## Trace Annotations (TraceFeature)
+
+`TraceFeature` ([src/sehens/data/TraceFeature.cs](src/sehens/data/TraceFeature.cs)) is the canonical way to draw text, lines, highlights, and handles on a trace. Use this any time you want to put a label, vertical line, or shaded span at a specific sample on an existing trace -- do NOT invent a separate "label trace" or scope name encoding.
+
+Types (`TraceFeature.Feature`): `Text`, `GutterText`, `Line`, `Highlight`, `LeftHandle`, `RightHandle`, `TriggerHandle`.
+
+Per-feature fields: `SampleNumber` (anchor), `RightSampleNumber` (for spans), `UnixTime` / `RightUnixTime` (for YT traces), `Text`, `Colour` (`null` = skin default), `Angle` (`-90` = vertical bottom-to-top, the default).
+
+Vertical placement for `Text` features:
+- `VerticalAnchor = Centre` (default): pixel-space centre of the plot rectangle. Ignores `VerticalPosition`, value range, and Y scaling. Reproduces the legacy mid-trace placement.
+- `VerticalAnchor = Y`: value-space. `VerticalPosition` is a literal Y value, projected through the painter's linear/log Y mapping.
+- `VerticalAnchor = Sample`: value-space. The sample value at `SampleNumber`, projected through the same Y mapping, so the label rides the trace.
+- `VerticalJustify`: `Top` / `Middle` (default) / `Bottom` -- where the text bbox sits relative to the anchor Y. For rotated text (e.g. `Angle = -90`), `Top` / `Bottom` refer to the rotated bbox's screen-space edges, not to the first/last character of the string.
+- The painter clamps the bbox into the plot rectangle so labels near the edges aren't clipped.
+
+Features live on `TraceData`, not `TraceView`. `scope[name]` returns the `TraceData` -- so:
+
+```csharp
+scope["foo"].AddFeature(sampleNumber, "label");          // append one text feature
+scope["foo"].AddFeature(new TraceFeature { ... });        // append arbitrary feature
+scope["foo"].InputFeatures = listOfFeatures;              // replace (clears existing) + auto-sort
+```
+
+`InputFeatures = ...` is the right choice when a feature set is derived fresh each `Run()` -- it clears and re-sorts in one shot so re-runs are idempotent.
+
+Visibility is gated by `Scope.ShowTraceFeatures` (toggle in the right-click context menu). If features don't appear, check that flag before debugging anything else.
 
 ---
 

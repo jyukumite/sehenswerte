@@ -1218,7 +1218,7 @@ namespace SehensWerte.Controls.Sehens
         {
             EmbedFftLabel FftLabel(TraceView view)
             {
-                return view.MathType == TraceView.MathTypes.FFT10Log10 || view.MathType == TraceView.MathTypes.FFT20Log10
+                return view.MathType == TraceView.MathTypes.FFTMagnitude
                         ? EmbedFftLabel.FFT
                         : view.PaintMode == TraceView.PaintModes.FFT2D
                             ? EmbedFftLabel.FFT2D
@@ -1249,8 +1249,12 @@ namespace SehensWerte.Controls.Sehens
                 Clicked = (a) =>
                 {
                     EmbedFftLabel fft = (EmbedFftLabel)FftLabel(a.View).NextEnumValue();
-                    a.View.MathType = (fft == EmbedFftLabel.FFT) ? TraceView.MathTypes.FFT10Log10 : TraceView.MathTypes.Normal;
+                    a.View.MathType = (fft == EmbedFftLabel.FFT) ? TraceView.MathTypes.FFTMagnitude : TraceView.MathTypes.Normal;
                     a.View.PaintMode = (fft == EmbedFftLabel.FFT2D) ? TraceView.PaintModes.FFT2D : TraceView.PaintModes.PolygonDigital;
+                    if (fft == EmbedFftLabel.FFT && a.View.LogVertical == TraceView.LogVerticalMode.Off)
+                    {
+                        a.View.LogVertical = TraceView.LogVerticalMode.dB10;
+                    }
                     a.View.AutoRange();
                 },
                 GetStyle = (a) =>
@@ -1258,6 +1262,50 @@ namespace SehensWerte.Controls.Sehens
                     EmbedFftLabel fft = FftLabel(a.View);
                     a.Menu.Style = fft == EmbedFftLabel.Normal ? TraceViewEmbedText.Style.Normal : TraceViewEmbedText.Style.Selected;
                     a.Menu.Text = (fft == EmbedFftLabel.Normal ? EmbedFftLabel.FFT : fft).ToString();
+                }
+            });
+
+            embeddedContextMenu.Add(new ScopeContextMenu.EmbeddedMenu
+            {
+                Text = "LinV",
+                Sort = 11,
+                Style = TraceViewEmbedText.Style.Normal,
+                Clicked = (a) =>
+                {
+                    a.View.LogVertical = (TraceView.LogVerticalMode)a.View.LogVertical.NextEnumValue();
+                    a.View.AutoRange();
+                },
+                GetStyle = (a) =>
+                {
+                    a.Menu.Style = a.View.LogVertical == TraceView.LogVerticalMode.Off
+                        ? TraceViewEmbedText.Style.Normal
+                        : TraceViewEmbedText.Style.Selected;
+                    a.Menu.Text = a.View.LogVertical switch
+                    {
+                        TraceView.LogVerticalMode.Off => "LinV",
+                        TraceView.LogVerticalMode.Log => "LogV",
+                        TraceView.LogVerticalMode.dB10 => "10Log10",
+                        TraceView.LogVerticalMode.dB20 => "20Log10",
+                        _ => a.View.LogVertical.ToString(),
+                    };
+                }
+            });
+
+            embeddedContextMenu.Add(new ScopeContextMenu.EmbeddedMenu
+            {
+                Text = "LinH",
+                Sort = 12,
+                Style = TraceViewEmbedText.Style.Normal,
+                Clicked = (a) =>
+                {
+                    a.View.LogHorizontal = (TraceView.LogHorizontalMode)a.View.LogHorizontal.NextEnumValue();
+                },
+                GetStyle = (a) =>
+                {
+                    a.Menu.Style = a.View.LogHorizontal == TraceView.LogHorizontalMode.Off
+                        ? TraceViewEmbedText.Style.Normal
+                        : TraceViewEmbedText.Style.Selected;
+                    a.Menu.Text = a.View.LogHorizontal == TraceView.LogHorizontalMode.Log ? "LogH" : "LinH";
                 }
             });
 
@@ -1616,7 +1664,7 @@ namespace SehensWerte.Controls.Sehens
                 ShownText = ScopeContextMenu.MenuItem.TextDisplay.NoChange,
                 Clicked = (a) =>
                 {
-                    a.Views[0].MathType = a.Views[0].MathType == TraceView.MathTypes.Normal ? TraceView.MathTypes.FFT10Log10 : TraceView.MathTypes.Normal;
+                    a.Views[0].MathType = a.Views[0].MathType == TraceView.MathTypes.Normal ? TraceView.MathTypes.FFTMagnitude : TraceView.MathTypes.Normal;
                     a.Views[0].MathPhase = TraceView.CalculatePhases.BeforeZoom;
                     a.Views[0].AutoRange();
                 },
