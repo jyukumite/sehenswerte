@@ -96,7 +96,7 @@ namespace SehensWerte.Controls
             {
                 m_ArrayLengths.Clear();
                 var rows = new List<AutoEditor.EditRow>();
-                CollectRows(SourceData, parentOrder: null, hostGroupName: null, visited: new HashSet<object>(), rows);
+                CollectRows(SourceData, parentOrder: null, hostGroupName: null, visited: new HashSet<object>(), rows, ownerChain: null);
 
                 var sorted = rows
                     .OrderBy(r => r.ParentDisplayOrder ?? r.DisplayOrder)
@@ -148,9 +148,13 @@ namespace SehensWerte.Controls
 
         // Walks members of `source` and emits EditRows. Recurses for [InlineClass]; expands arrays decorated
         // with [ArrayEditor]. parentOrder/hostGroupName apply to all rows emitted from this call when source != SourceData.
-        private void CollectRows(object source, double? parentOrder, string? hostGroupName, HashSet<object> visited, List<AutoEditor.EditRow> rows)
+        // ownerChain is the [InlineClass] ancestor chain (innermost-out, excludes SourceData) used to fire
+        // OnChanged on every container in a cascade when a field is edited.
+        private void CollectRows(object source, double? parentOrder, string? hostGroupName, HashSet<object> visited, List<AutoEditor.EditRow> rows, IReadOnlyList<object>? ownerChain)
         {
             bool isNested = parentOrder.HasValue;
+            // Snapshot once per scope: rows in this CollectRows call share the same OwnerChain array.
+            object[]? chainSnapshot = (ownerChain != null && ownerChain.Count > 0) ? ownerChain.ToArray() : null;
             foreach (MemberInfo memberInfo in source.GetType().GetMembers())
             {
                 Type? memberType = AutoEditor.MemberType(memberInfo);
@@ -166,12 +170,16 @@ namespace SehensWerte.Controls
                     {
                         var hostOrder = AutoEditor.DisplayOrder(memberInfo);
                         visited.Add(nested);
+                        // Prepend `nested` so the chain stays innermost-out for the recursed scope.
+                        var nextChain = new List<object>((ownerChain?.Count ?? 0) + 1) { nested };
+                        if (ownerChain != null) nextChain.AddRange(ownerChain);
                         CollectRows(
                             nested,
                             parentOrder: parentOrder ?? hostOrder.order,
                             hostGroupName: hostGroupName ?? hostOrder.name,
                             visited,
-                            rows);
+                            rows,
+                            ownerChain: nextChain);
                         visited.Remove(nested);
                     }
                     continue;
@@ -194,6 +202,7 @@ namespace SehensWerte.Controls
                                 ObjectIndex = i,
                                 DisplayOrder = va[i].Order,
                                 NestedSource = isNested ? source : null,
+                                OwnerChain = chainSnapshot,
                                 ParentDisplayOrder = parentOrder,
                                 HostGroupName = hostGroupName,
                             });
@@ -222,6 +231,7 @@ namespace SehensWerte.Controls
                             DisplayOrder = memberOrder.order,
                             GroupName = memberOrder.name,
                             NestedSource = isNested ? source : null,
+                            OwnerChain = chainSnapshot,
                             ParentDisplayOrder = parentOrder,
                             HostGroupName = hostGroupName,
                             OpenArraySubForm = true,
@@ -246,6 +256,7 @@ namespace SehensWerte.Controls
                                 DisplayOrder = elementIsScalar ? memberOrder.order : memberOrder.order,
                                 GroupName = i == 0 ? memberOrder.name : null,
                                 NestedSource = isNested ? source : null,
+                                OwnerChain = chainSnapshot,
                                 ParentDisplayOrder = parentOrder,
                                 HostGroupName = hostGroupName,
                                 OpenElementSubForm = !elementIsScalar,
@@ -263,6 +274,7 @@ namespace SehensWerte.Controls
                     DisplayOrder = memberOrder.order,
                     GroupName = memberOrder.name,
                     NestedSource = isNested ? source : null,
+                    OwnerChain = chainSnapshot,
                     ParentDisplayOrder = parentOrder,
                     HostGroupName = hostGroupName,
                 });

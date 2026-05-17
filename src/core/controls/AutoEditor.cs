@@ -74,6 +74,8 @@ namespace SehensWerte.Controls
 
             // [InlineClass] children: resolve MemberInfo against this instead of SourceData.
             public object? NestedSource;
+            // [InlineClass] children: ancestor chain, innermost-out, excluding SourceData.
+            public object[]? OwnerChain;
             // [InlineClass] children: sort under the host field's DisplayOrder.
             public double? ParentDisplayOrder;
             // [InlineClass] children: host field's groupName, emitted once at block entry.
@@ -751,7 +753,7 @@ namespace SehensWerte.Controls
                     {
                         InvokeOnChanging();
                         list[idx] = parsed;
-                        InvokeOnChanged();
+                        InvokeOnChanged(row.OwnerChain);
                     }
                 }
             }
@@ -764,7 +766,7 @@ namespace SehensWerte.Controls
                 {
                     InvokeOnChanging();
                     fieldInfo.SetValue(source, obj);
-                    InvokeOnChanged();
+                    InvokeOnChanged(row.OwnerChain);
                 }
             }
             else if (row.MemberInfo is PropertyInfo)
@@ -781,21 +783,33 @@ namespace SehensWerte.Controls
                     catch (ArgumentException)
                     {
                     }
-                    InvokeOnChanged();
+                    InvokeOnChanged(row.OwnerChain);
                 }
             }
         }
 
-        private void InvokeOnChanged()
+        private void InvokeOnChanged(object[]? ownerChain = null)
         {
             if (m_UpdateRecursion == 0)
             {
                 if (Parent != null)
                 {
-                    Parent.InvokeOnChanged();
+                    Parent.InvokeOnChanged(ownerChain);
                 }
                 else
                 {
+                    if (ownerChain != null)
+                    {
+                        foreach (var o in ownerChain)
+                        {
+                            (o as AutoEditorBase)?.OnChanged?.Invoke();
+                        }
+                    }
+                    if (SourceData is AutoEditorBase sourceBase
+                        && (ownerChain == null || Array.IndexOf(ownerChain, SourceData) < 0))
+                    {
+                        sourceBase.OnChanged?.Invoke();
+                    }
                     GetEventHandler("OnChanged")?.Invoke(SourceData, new EventArgs());
                     OnChanged?.Invoke(this);
                 }
