@@ -24,6 +24,7 @@ namespace SehensWerte.Controls
                 Decimate,
                 Transpose,
                 SplitColumn,
+                MoveColumn,
             }
 
             public Operation Kind;
@@ -37,6 +38,11 @@ namespace SehensWerte.Controls
             public int Stride = 0; // Decimate: keep every Nth row
             public List<string> Values = new(); // HideRowsMatching/NotMatching
             public Func<string, IEnumerable<(string Header, string?[] Values)>>? SplitRecipe;
+            // MoveColumn: Column is the column that was moved.
+            // FromAfterColumn = previous left neighbour (where Undo puts it back).
+            // ToAfterColumn   = new left neighbour. Empty string = leftmost.
+            public string FromAfterColumn = "";
+            public string ToAfterColumn = "";
 
             public List<int> VisibleRows = new(); // Pre-op visible-row indices
             public List<DataGridControl.BoundDataRow>? VisibleRowRefs; // Direct row refs for fast undo path.

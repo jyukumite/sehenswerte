@@ -34,6 +34,7 @@ namespace SehensWerte.Controls
             public abstract void Set(int index, string? to);
             public abstract void InsertColumnValue(int index, string? value);
             public abstract void RemoveColumn(int index);
+            public abstract void MoveColumnValue(int from, int to);
 
             public void AppendColumnValue(string? value)
             {
@@ -156,6 +157,13 @@ namespace SehensWerte.Controls
                 }
             }
 
+            public override void MoveColumnValue(int from, int to)
+            {
+                Data.Move(from, to);
+                Colours?.Move(from, to);
+                Diffs?.Move(from, to);
+            }
+
             public BoundDataRowString(int index, string?[] sourceRow) : base(index)
             {
                 ResortIndex = index;
@@ -253,6 +261,13 @@ namespace SehensWerte.Controls
                     Array.Copy(Diffs, index + 1, shrunkDiffs, index, Diffs.Length - index - 1);
                     Diffs = shrunkDiffs;
                 }
+            }
+
+            public override void MoveColumnValue(int from, int to)
+            {
+                Data.Move(from, to);
+                Colours?.Move(from, to);
+                Diffs?.Move(from, to);
             }
 
             public BoundDataRowDouble(int index, double[] sourceRow) : base(index)
@@ -482,6 +497,58 @@ namespace SehensWerte.Controls
                 return true;
             }
 
+            // Move column so its new left-neighbour is newAfter (or leftmost if newAfter is empty)
+            public void MoveColumn(string column, string newAfter)
+            {
+                int from = ColumnNames.IndexOf(column);
+                if (from < 0) return;
+                int to = ComputeMoveTarget(from, newAfter);
+                if (to < 0 || from == to) return;
+                string oldAfter = from == 0 ? "" : ColumnNames[from - 1];
+                PushSnapshot(new DataGridControlHistory.Snapshot(DataGridControlHistory.Snapshot.Operation.MoveColumn)
+                {
+                    Column = column,
+                    FromAfterColumn = oldAfter,
+                    ToAfterColumn = newAfter
+                });
+                DoMove(from, to);
+            }
+
+            // Non-snapshotting reverse-move used by Undo.
+            private void MoveColumnAfter(string column, string newAfter)
+            {
+                int from = ColumnNames.IndexOf(column);
+                if (from < 0) return;
+                int to = ComputeMoveTarget(from, newAfter);
+                if (to < 0 || from == to) return;
+                DoMove(from, to);
+            }
+
+            // Translate "after this name" anchor into a post-removal insertion index.
+            // Returns -1 if newAfter is non-empty but doesn't exist, or refers to the
+            // moved column itself.
+            private int ComputeMoveTarget(int from, string newAfter)
+            {
+                if (newAfter == "") return 0;
+                int afterIdx = ColumnNames.IndexOf(newAfter);
+                if (afterIdx < 0 || afterIdx == from) return -1;
+                return afterIdx < from ? afterIdx + 1 : afterIdx;
+            }
+
+            private void DoMove(int from, int to)
+            {
+                if (from == to) return;
+                var name = ColumnNames[from];
+                ColumnNames.RemoveAt(from);
+                ColumnNames.Insert(to, name);
+                foreach (var row in UnfilteredData)
+                {
+                    row.MoveColumnValue(from, to);
+                }
+                RebuildGridColumns();
+                ListChanged?.Invoke(this, new ListChangedEventArgs(ListChangedType.Reset, 0));
+            }
+
             [MemberNotNull(nameof(CsvFileName), nameof(ColumnNames), nameof(UnfilteredData), nameof(FilteredData))]
             private void InitializeData<T>(IEnumerable<IEnumerable<T>> source, IEnumerable<string> columnNames, Func<int, IEnumerable<T>, BoundDataRow> createRowFunc)
             {
@@ -592,6 +659,10 @@ namespace SehensWerte.Controls
                 for (int loop = snap.AddedColumns.Count - 1; loop >= 0; loop--)
                 {
                     RemoveColumn(snap.AddedColumns[loop]);
+                }
+                if (snap.Kind == DataGridControlHistory.Snapshot.Operation.MoveColumn)
+                {
+                    MoveColumnAfter(snap.Column, snap.FromAfterColumn);
                 }
                 ReshowFiltered();
                 UpdateSortGlyphs();
@@ -937,7 +1008,7 @@ namespace SehensWerte.Controls
             private void HideRowsIf(Func<BoundDataRow, bool> predicate)
             {
                 if (FilteredData == null) return;
-                FilteredData.Where(predicate).ForEach(v=>v.Visible = false);
+                FilteredData.Where(predicate).ForEach(v => v.Visible = false);
                 Refilter();
             }
 
@@ -1390,6 +1461,9 @@ namespace SehensWerte.Controls
                             {
                                 SplitColumn(snap.Column, snap.SplitRecipe);
                             }
+                            break;
+                        case DataGridControlHistory.Snapshot.Operation.MoveColumn:
+                            MoveColumn(snap.Column, snap.ToAfterColumn);
                             break;
                         default:
                             OnLog?.Invoke(new CsvLog.Entry($"replay: unknown action {snap.Kind}", CsvLog.Priority.Warn));

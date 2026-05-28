@@ -26,6 +26,25 @@ namespace SehensWerte
             return retval;
         }
 
+        // Move the value at index 'from' to index 'to', shifting everything
+        public static void Move<T>(this T[]? arr, int from, int to)
+        {
+            if (arr == null) return;
+            if (from >= 0 && from < arr.Length && to >= 0 && to < arr.Length && from != to)
+            {
+                var v = arr[from];
+                if (from < to)
+                {
+                    Array.Copy(arr, from + 1, arr, from, to - from);
+                }
+                else
+                {
+                    Array.Copy(arr, to, arr, to + 1, from - to);
+                }
+                arr[to] = v;
+            }
+        }
+
         public static T[] Dequeue<T>(this Queue<T> queue, int count)
         {
             T[] result = new T[count];
@@ -299,6 +318,47 @@ namespace SehensWerte
     [TestClass]
     public class ListExtensionTest
     {
+        [TestMethod]
+        public void MoveTest()
+        {
+            {
+                // Forward move: intervening values shift left by one.
+                var arr = new[] { "A", "B", "C", "D", "E" };
+                arr.Move(1, 3);
+                CollectionAssert.AreEqual(new[] { "A", "C", "D", "B", "E" }, arr);
+            }
+            {
+                // Backward move: intervening values shift right by one.
+                var arr = new[] { "A", "B", "C", "D", "E" };
+                arr.Move(3, 1);
+                CollectionAssert.AreEqual(new[] { "A", "D", "B", "C", "E" }, arr);
+            }
+            {
+                // Full-range move.
+                var arr = new[] { 0, 1, 2, 3, 4 };
+                arr.Move(0, 4);
+                CollectionAssert.AreEqual(new[] { 1, 2, 3, 4, 0 }, arr);
+            }
+            {
+                // No-ops: same index, out-of-range indices, single element.
+                var arr = new[] { "A", "B", "C" };
+                arr.Move(1, 1);
+                arr.Move(-1, 1);
+                arr.Move(0, 5);
+                arr.Move(5, 0);
+                CollectionAssert.AreEqual(new[] { "A", "B", "C" }, arr);
+
+                var solo = new[] { 42 };
+                solo.Move(0, 0);
+                CollectionAssert.AreEqual(new[] { 42 }, solo);
+            }
+            {
+                // Null array must not throw.
+                int[]? nul = null;
+                nul.Move(0, 1);
+            }
+        }
+
         [TestMethod]
         public void ParallelSortTest()
         {

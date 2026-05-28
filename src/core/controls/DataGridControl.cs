@@ -62,6 +62,7 @@ namespace SehensWerte.Controls
         public int ToolTipPauseMilliseconds { get; set; } = 1500;
         public int ToolTipMaxLength { get; set; } = 1000;
         public bool ShowCellHints { get; set; } = true;
+        public bool AllowUserToOrderColumns { get; set; } = true;
 
         public string[]? MaskColumns { get; set; }
         public string MaskString { get; set; } = new string('\u2022', 5); // small dot
@@ -94,6 +95,12 @@ namespace SehensWerte.Controls
         private bool m_ResizingColumn = false;
         private string? m_ResizingColumnName;
         private bool m_ApplyingProgrammaticWidths = false;
+        private string? m_DraggingColumnName;
+        private int m_DraggingStartX = -1;
+        private int m_DraggingDropX = -1; // x of drop indicator, -1 = hidden
+        private string? m_LiveResizeColumn;
+        private int m_LiveResizeStartX = -1;
+        private int m_LiveResizeStartWidth = -1;
 
         protected override void Dispose(bool disposing)
         {
@@ -172,14 +179,117 @@ namespace SehensWerte.Controls
             this.Grid.CellMouseLeave += (s, e) => { HoverHide(); };
             this.Grid.ShowCellToolTips = false;
             this.Grid.CellToolTipTextNeeded += (s, e) => { e.ToolTipText = ""; };
+            // AllowUserToOrderColumns intentionally left off: WinForms' built-in
+            // column drag traps the mouse inside the header band. We do our own
+            // drop logic in MouseUp using the release X coordinate instead, so the
+            // user can hold the column header and move the mouse anywhere.
             this.Grid.ColumnWidthChanged += (s, e) =>
             {
                 if (m_ApplyingProgrammaticWidths) return;
                 m_ResizingColumn = true;
                 m_ResizingColumnName = e.Column.Name;
             };
+            this.Grid.MouseDown += (s, e) =>
+            {
+                if (e.Button != MouseButtons.Left) return;
+
+                const int resizeEdgeTolerance = 5;
+                for (int loop = 0; loop < Grid.Columns.Count; loop++)
+                {
+                    var rect = Grid.GetColumnDisplayRectangle(loop, false);
+                    if (rect.Width > 0 && Math.Abs(e.X - rect.Right) <= resizeEdgeTolerance)
+                    {
+                        var c = Grid.Columns[loop];
+                        if (c.Resizable != DataGridViewTriState.False)
+                        {
+                            m_LiveResizeColumn = c.Name;
+                            m_LiveResizeStartX = e.X;
+                            m_LiveResizeStartWidth = c.Width;
+                        }
+                        return;
+                    }
+                }
+                if (!AllowUserToOrderColumns) return;
+                var hit = Grid.HitTest(e.X, e.Y);
+                if (hit.Type != DataGridViewHitTestType.ColumnHeader) return;
+                if (hit.ColumnIndex < 0 || hit.ColumnIndex >= Grid.Columns.Count) return;
+                m_DraggingColumnName = Grid.Columns[hit.ColumnIndex].Name;
+                m_DraggingStartX = e.X;
+            };
+            this.Grid.MouseMove += (s, e) =>
+            {
+                if (m_LiveResizeColumn != null)
+                {
+                    if (Grid.Columns.Contains(m_LiveResizeColumn))
+                    {
+                        var c = Grid.Columns[m_LiveResizeColumn];
+                        int newWidth = Math.Max(c.MinimumWidth, m_LiveResizeStartWidth + (e.X - m_LiveResizeStartX));
+                        if (c.Width != newWidth)
+                        {
+                            m_ApplyingProgrammaticWidths = true;
+                            try { c.Width = newWidth; }
+                            finally { m_ApplyingProgrammaticWidths = false; }
+                        }
+                    }
+                    return;
+                }
+                if (m_DraggingColumnName == null) return;
+                if (m_ResizingColumn)
+                {
+                    // A resize has started under our drag — cancel the reorder.
+                    m_DraggingColumnName = null;
+                    m_DraggingStartX = -1;
+                    UpdateDropIndicator(-1);
+                    Grid.Cursor = Cursors.Default;
+                    return;
+                }
+                if (Math.Abs(e.X - m_DraggingStartX) < 5)
+                {
+                    UpdateDropIndicator(-1);
+                    return;
+                }
+                if (Grid.Cursor != Cursors.SizeWE) Grid.Cursor = Cursors.SizeWE;
+                if (!Grid.Columns.Contains(m_DraggingColumnName))
+                {
+                    UpdateDropIndicator(-1);
+                    return;
+                }
+                int srcDisplay = Grid.Columns[m_DraggingColumnName].DisplayIndex;
+                int dropDisplay = ColumnDisplayAtX(e.X);
+                if (dropDisplay < 0 || dropDisplay == srcDisplay)
+                {
+                    UpdateDropIndicator(-1);
+                    return;
+                }
+                var targetCol = ColumnAtDisplay(dropDisplay);
+                if (targetCol == null)
+                {
+                    UpdateDropIndicator(-1);
+                    return;
+                }
+                var rect = Grid.GetColumnDisplayRectangle(targetCol.Index, false);
+                UpdateDropIndicator(dropDisplay > srcDisplay ? rect.Right - 1 : rect.Left);
+            };
             this.Grid.MouseUp += (s, e) =>
             {
+                if (m_LiveResizeColumn != null)
+                {
+                    string name = m_LiveResizeColumn;
+                    m_LiveResizeColumn = null;
+                    m_LiveResizeStartX = -1;
+                    m_LiveResizeStartWidth = -1;
+                    m_ResizingColumn = false;
+                    m_ResizingColumnName = null;
+                    if (Grid.Columns.Contains(name))
+                    {
+                        DataGridBind?.PushSnapshot(new DataGridControlHistory.Snapshot(DataGridControlHistory.Snapshot.Operation.ColumnResize)
+                        {
+                            Column = name,
+                            Width = Grid.Columns[name].Width
+                        });
+                    }
+                    return;
+                }
                 if (m_ResizingColumn)
                 {
                     m_ResizingColumn = false;
@@ -192,6 +302,46 @@ namespace SehensWerte.Controls
                     });
                     m_ResizingColumnName = null;
                 }
+                if (m_DraggingColumnName != null)
+                {
+                    string movedName = m_DraggingColumnName;
+                    int startX = m_DraggingStartX;
+                    m_DraggingColumnName = null;
+                    m_DraggingStartX = -1;
+                    UpdateDropIndicator(-1);
+                    Grid.Cursor = Cursors.Default;
+
+                    // Small movement → treat as a sort click (handled by
+                    // IBindingList.ApplySort); push no move snapshot.
+                    if (Math.Abs(e.X - startX) < 5) return;
+                    if (!Grid.Columns.Contains(movedName)) return;
+
+                    int srcDisplay = Grid.Columns[movedName].DisplayIndex;
+                    int dropDisplay = ColumnDisplayAtX(e.X);
+                    if (dropDisplay < 0 || dropDisplay == srcDisplay) return;
+
+                    string newAfter;
+                    if (dropDisplay > srcDisplay)
+                    {
+                        // Dropping further right: the moved column ends up immediately
+                        // after the column at dropDisplay.
+                        newAfter = ColumnAtDisplay(dropDisplay)?.Name ?? "";
+                    }
+                    else
+                    {
+                        // Dropping further left: the moved column ends up immediately
+                        // before the column at dropDisplay (so its new left-neighbour
+                        // is the column at dropDisplay - 1, or "" if leftmost).
+                        newAfter = dropDisplay == 0 ? "" : ColumnAtDisplay(dropDisplay - 1)?.Name ?? "";
+                    }
+                    DataGridBind?.MoveColumn(movedName, newAfter);
+                }
+            };
+            this.Grid.Paint += (s, e) =>
+            {
+                if (m_DraggingDropX < 0) return;
+                using var pen = new Pen(Color.OrangeRed, 2);
+                e.Graphics.DrawLine(pen, m_DraggingDropX, 0, m_DraggingDropX, Grid.ClientSize.Height);
             };
             this.NullForeColor = this.Grid.ForeColor;
 
@@ -1216,6 +1366,52 @@ namespace SehensWerte.Controls
         public IEnumerable<string> GetColumnNames()
         {
             return DataGridBind?.ColumnNames ?? new List<string>();
+        }
+
+        private void UpdateDropIndicator(int newX)
+        {
+            if (newX == m_DraggingDropX) return;
+            if (m_DraggingDropX >= 0)
+            {
+                Grid.Invalidate(new Rectangle(m_DraggingDropX - 2, 0, 5, Grid.ClientSize.Height));
+            }
+            m_DraggingDropX = newX;
+            if (m_DraggingDropX >= 0)
+            {
+                Grid.Invalidate(new Rectangle(m_DraggingDropX - 2, 0, 5, Grid.ClientSize.Height));
+            }
+        }
+
+        // Find the DataGridViewColumn whose DisplayIndex == idx, or null if missing.
+        private DataGridViewColumn? ColumnAtDisplay(int idx)
+        {
+            foreach (DataGridViewColumn c in Grid.Columns)
+            {
+                if (c.DisplayIndex == idx) return c;
+            }
+            return null;
+        }
+
+        // Map a client X coordinate to a column display index. Drops past the
+        // rightmost column snap to the rightmost; drops left of the leftmost
+        // snap to the leftmost. -1 only if the grid has no columns.
+        private int ColumnDisplayAtX(int x)
+        {
+            int count = Grid.Columns.Count;
+            if (count == 0) return -1;
+            int leftDisplay = 0;
+            int rightDisplay = count - 1;
+            int leftX = int.MaxValue;
+            int rightX = int.MinValue;
+            for (int loop = 0; loop < count; loop++)
+            {
+                var rect = Grid.GetColumnDisplayRectangle(loop, false);
+                if (rect.Width == 0) continue;
+                if (rect.Left < leftX) { leftX = rect.Left; leftDisplay = Grid.Columns[loop].DisplayIndex; }
+                if (rect.Right > rightX) { rightX = rect.Right; rightDisplay = Grid.Columns[loop].DisplayIndex; }
+                if (x >= rect.Left && x < rect.Right) return Grid.Columns[loop].DisplayIndex;
+            }
+            return x < leftX ? leftDisplay : rightDisplay;
         }
 
         public void CollapseColumn(string column)
