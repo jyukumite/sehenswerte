@@ -79,7 +79,7 @@ src/
 | `StatsFilter` | `src/core/filters/StatsFilter.cs` | Rolling statistics (mean, variance, RMS) filter |
 | `DataGridControl` | `src/core/controls/DataGridControl.cs` | Filterable, sortable data grid with undo/replay stack and save/restore view state |
 | `BoundData` | `src/core/controls/DataGridBoundData.cs` | `IBindingList` backing store for `DataGridControl`; owns `UnfilteredData`, `FilteredData`, `SortKeys`, `UndoList` |
-| `DataGridControlHistory` | `src/core/controls/DataGridControlHistory.cs` | XML-serialisable snapshot history for `DataGridControl.SaveView` / `RestoreView` |
+| `DataGridControlHistory` | `src/core/controls/DataGridControlHistory.cs` | Snapshot history for `DataGridControl.SaveView` / `RestoreView` |
 | `PaintTraceBase` | `src/sehens/paint/PaintTraceBase.cs` | Base painter -- horizontal/vertical axis rendering, `ProjectLog`, partition helpers |
 | `Paint2dTrace` | `src/sehens/paint/Paint2dTrace.cs` | 2D line/polygon painter; owns the `Project2dCurves` resample/decimate pipeline |
 
@@ -212,14 +212,8 @@ accessor block if a use case needs more.
 
 ### SaveView / RestoreView
 
-```csharp
-DataGridControlHistory view = grid.SaveView();
-string xml = view.ToXml(); // ToXml/FromXml from StringExtensions.cs
-File.WriteAllText("view.xml", xml);
-
-DataGridControlHistory? loaded = File.ReadAllText("view.xml").FromXml<DataGridControlHistory>();
-if (loaded != null) grid.RestoreView(loaded);
-```
+`grid.SaveView()` returns a `DataGridControlHistory` snapshot; `grid.RestoreView(view)`
+replays it.
 
 ---
 

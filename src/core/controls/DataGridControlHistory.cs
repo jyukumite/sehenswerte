@@ -1,7 +1,6 @@
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using System.Collections.Generic;
 using System.ComponentModel;
-using System.Xml.Serialization;
 
 namespace SehensWerte.Controls
 {
@@ -9,32 +8,21 @@ namespace SehensWerte.Controls
     {
         public class Snapshot
         {
-            // The filter/sort/resize operation that produced this snapshot. Null only on
-            // the synthetic "current state" appended by SaveBoundState. Each history step
-            // stands alone: sort, column widths, and visibility are all implicit in the
-            // sequence of actions across history.
+            // The filter/sort/resize operation that produced this snapshot
             public FilterAction? Action { get; set; }
 
-            // Wire form (XML serialised) - original Index values from UnfilteredData,
-            // in display order of the snapshot.
+            // original Index values from UnfilteredData
             public List<int> VisibleRows { get; set; } = new();
 
-            // Runtime cache (not serialised) - direct row refs for fast undo. Populated
-            // when a snapshot is built from live data; null when loaded from XML until
-            // the first apply, which lazy-resolves and caches.
-            [XmlIgnore]
+            // direct row refs for fast undo
             public List<DataGridControl.BoundDataRow>? VisibleRowRefs;
 
-            // Pre-Transpose data stash (Action.Kind == Transpose only). Transpose
-            // replaces UnfilteredData with freshly built rows, so prior snapshots'
-            // VisibleRowRefs become orphaned. Undo restores these to bring the row
-            // identities back, keeping older Undo entries consistent.
-            // XmlIgnored - on XML restore the history is replayed from scratch,
-            // which rebuilds these naturally.
-            [XmlIgnore]
+            // Pre-Transpose data
             public List<DataGridControl.BoundDataRow>? PreTransposeUnfiltered;
-            [XmlIgnore]
             public List<string>? PreTransposeColumnNames;
+
+            // Column inserted by this action
+            public string? InsertedColumn;
         }
 
         // Records what user operation produced a Snapshot. Replay-safe because every
@@ -42,9 +30,6 @@ namespace SehensWerte.Controls
         // the same recipe can apply to a freshly loaded dataset with similar columns.
         public class FilterAction
         {
-            // Operation identifier dispatched by RestoreBoundState. XmlSerializer writes
-            // enum values by name so the on-the-wire form is e.g. <Kind>ShowAll</Kind>,
-            // human-readable and stable across renames within the codebase.
             public enum Operation
             {
                 None,
@@ -91,34 +76,6 @@ namespace SehensWerte.Controls
             };
             var cols = new List<string> { "Name", "Value" };
             return new DataGridControl.BoundData(rows, cols, _ => { });
-        }
-
-        [TestMethod]
-        public void XmlRoundTrip()
-        {
-            var state = new DataGridControlHistory();
-            state.History.Add(new DataGridControlHistory.Snapshot
-            {
-                VisibleRows = new List<int> { 0, 1, 2 },
-                Action = new DataGridControlHistory.FilterAction
-                {
-                    Kind = DataGridControlHistory.FilterAction.Operation.ApplySort,
-                    Column = "Name",
-                    Direction = ListSortDirection.Ascending,
-                }
-            });
-
-            string xml = state.ToXml();
-            var restored = xml.FromXml<DataGridControlHistory>();
-
-            Assert.IsNotNull(restored);
-            Assert.AreEqual(1, restored!.History.Count);
-            var snap = restored.History[0];
-            CollectionAssert.AreEqual(new List<int> { 0, 1, 2 }, snap.VisibleRows);
-            Assert.IsNotNull(snap.Action);
-            Assert.AreEqual(DataGridControlHistory.FilterAction.Operation.ApplySort, snap.Action!.Kind);
-            Assert.AreEqual("Name", snap.Action.Column);
-            Assert.AreEqual(ListSortDirection.Ascending, snap.Action.Direction);
         }
 
         [TestMethod]
@@ -179,35 +136,6 @@ namespace SehensWerte.Controls
             }
             // Oldest snapshot is the initial all-visible state
             Assert.AreEqual(3, bd.FilteredData.Count);
-        }
-
-        [TestMethod]
-        public void RestoreViaXmlRoundTrip()
-        {
-            // End-to-end: filter, save state, serialise to XML, load XML on a fresh
-            // BoundData with the same data, deserialise, restore, verify view matches.
-            var original = CreateTestData();
-            original.HideRowsMatching("Name", new[] { "a" });
-            original.HideRowsMatching("Name", new[] { "b" }); // only "c" visible
-            string xml = original.SaveBoundState().ToXml();
-
-            var fresh = CreateTestData();
-            Assert.AreEqual(3, fresh.FilteredData.Count);
-
-            var restored = xml.FromXml<DataGridControlHistory>();
-            Assert.IsNotNull(restored);
-            fresh.RestoreBoundState(restored!);
-
-            Assert.AreEqual(1, fresh.FilteredData.Count);
-            Assert.AreEqual("c", fresh.FilteredData[0].Column(0));
-
-            // Undo on the restored instance walks back through the saved history
-            int undoDepth = restored!.History.Count - 1;
-            for (int i = 0; i < undoDepth; i++)
-            {
-                fresh.Undo();
-            }
-            Assert.AreEqual(3, fresh.FilteredData.Count);
         }
 
         [TestMethod]
@@ -373,24 +301,6 @@ namespace SehensWerte.Controls
         }
 
         [TestMethod]
-        public void TransposeReplaysFromXml()
-        {
-            var original = CreateTestData();
-            original.Transpose();
-            string xml = original.SaveBoundState().ToXml();
-
-            var fresh = CreateTestData();
-            var loaded = xml.FromXml<DataGridControlHistory>();
-            Assert.IsNotNull(loaded);
-            fresh.RestoreBoundState(loaded!);
-
-            Assert.AreEqual(2, fresh.FilteredData.Count);
-            Assert.AreEqual("Name", fresh.FilteredData[0].Column(0));
-            Assert.AreEqual("a", fresh.FilteredData[0].Column(1));
-            Assert.AreEqual("Value", fresh.FilteredData[1].Column(0));
-        }
-
-        [TestMethod]
         public void ReplayOnDifferentData()
         {
             // The headline scenario: save a recipe of actions on one dataset, then
@@ -409,7 +319,7 @@ namespace SehensWerte.Controls
             // Sort by Name, then hide rows where Value matches "0".
             ((IBindingList)original).ApplySort(TypeDescriptor.GetProperties(typeof(DataGridControl.BoundDataRow))["col0"]!, ListSortDirection.Ascending);
             original.HideRowsMatching("Value", new[] { "0" });
-            string xml = original.SaveBoundState().ToXml();
+            var recipe = original.SaveBoundState();
 
             // Different rows, same column shape; one row also has Value="0".
             var fresh = new DataGridControl.BoundData(
@@ -421,9 +331,7 @@ namespace SehensWerte.Controls
                 },
                 new List<string> { "Name", "Value" }, _ => { });
 
-            var loaded = xml.FromXml<DataGridControlHistory>();
-            Assert.IsNotNull(loaded);
-            fresh.RestoreBoundState(loaded!);
+            fresh.RestoreBoundState(recipe);
 
             // Replay should have sorted by Name (alpha/bravo/charlie are already
             // alphabetical) and hidden the "0" row, leaving alpha and charlie.

@@ -1,3 +1,4 @@
+using Microsoft.VisualStudio.TestTools.UnitTesting;
 using SehensWerte.Files;
 using SehensWerte.Maths;
 using System.Collections;
@@ -14,12 +15,12 @@ namespace SehensWerte.Controls
     {
         public abstract class BoundDataRow
         {
-            public bool Visible = true;
-            public bool HideNot = false;
-            public int Index;
-            public int ResortIndex;
-            public Color?[]? Colours = null;
-            public StringDiff.Diffs?[]? Diffs = null;
+            internal bool Visible = true;
+            internal bool TempFlag = false;
+            internal int Index;
+            internal int ResortIndex;
+            internal Color?[]? Colours = null;
+            internal StringDiff.Diffs?[]? Diffs = null;
 
             public BoundDataRow(int index)
             {
@@ -31,21 +32,15 @@ namespace SehensWerte.Controls
             public abstract double ColumnDouble(int colIndex);
             public abstract int Count { get; }
             public abstract void Set(int index, string? to);
-            public abstract void AppendColumnValue(string? value);
+            public abstract void InsertColumnValue(int index, string? value);
+            public abstract void RemoveColumn(int index);
+
+            public void AppendColumnValue(string? value)
+            {
+                InsertColumnValue(Count, value);
+            }
 
             public abstract IComparer<BoundDataRow> GetSortComparer(int colIndex, ListSortDirection sortDirection);
-
-            protected void GrowCellMetadata()
-            {
-                if (Colours != null)
-                {
-                    Array.Resize(ref Colours, Colours.Length + 1);
-                }
-                if (Diffs != null)
-                {
-                    Array.Resize(ref Diffs, Diffs.Length + 1);
-                }
-            }
 
             //DataPropertyName = $"col{loop}",
             public String? col0 => Column(0); public String? col1 => Column(1); public String? col2 => Column(2); public String? col3 => Column(3);
@@ -114,12 +109,51 @@ namespace SehensWerte.Controls
                 CellDiffs(index, null);
             }
 
-            public override void AppendColumnValue(string? value)
+            public override void InsertColumnValue(int index, string? value)
             {
-                int oldLen = Data.Length;
-                Array.Resize(ref Data, oldLen + 1);
-                Data[oldLen] = value;
-                GrowCellMetadata();
+                int insertAt = Math.Clamp(index, 0, Data.Length);
+                var grown = new string?[Data.Length + 1];
+                Array.Copy(Data, 0, grown, 0, insertAt);
+                grown[insertAt] = value;
+                Array.Copy(Data, insertAt, grown, insertAt + 1, Data.Length - insertAt);
+                Data = grown;
+                if (Colours != null)
+                {
+                    var grownColours = new Color?[Colours.Length + 1];
+                    Array.Copy(Colours, 0, grownColours, 0, insertAt);
+                    Array.Copy(Colours, insertAt, grownColours, insertAt + 1, Colours.Length - insertAt);
+                    Colours = grownColours;
+                }
+                if (Diffs != null)
+                {
+                    var grownDiffs = new StringDiff.Diffs?[Diffs.Length + 1];
+                    Array.Copy(Diffs, 0, grownDiffs, 0, insertAt);
+                    Array.Copy(Diffs, insertAt, grownDiffs, insertAt + 1, Diffs.Length - insertAt);
+                    Diffs = grownDiffs;
+                }
+            }
+
+            public override void RemoveColumn(int index)
+            {
+                if (index < 0 || index >= Data.Length) return;
+                var shrunk = new string?[Data.Length - 1];
+                Array.Copy(Data, 0, shrunk, 0, index);
+                Array.Copy(Data, index + 1, shrunk, index, Data.Length - index - 1);
+                Data = shrunk;
+                if (Colours != null && index < Colours.Length)
+                {
+                    var shrunkColours = new Color?[Colours.Length - 1];
+                    Array.Copy(Colours, 0, shrunkColours, 0, index);
+                    Array.Copy(Colours, index + 1, shrunkColours, index, Colours.Length - index - 1);
+                    Colours = shrunkColours;
+                }
+                if (Diffs != null && index < Diffs.Length)
+                {
+                    var shrunkDiffs = new StringDiff.Diffs?[Diffs.Length - 1];
+                    Array.Copy(Diffs, 0, shrunkDiffs, 0, index);
+                    Array.Copy(Diffs, index + 1, shrunkDiffs, index, Diffs.Length - index - 1);
+                    Diffs = shrunkDiffs;
+                }
             }
 
             public BoundDataRowString(int index, string?[] sourceRow) : base(index)
@@ -174,12 +208,51 @@ namespace SehensWerte.Controls
                 CellDiffs(index, null);
             }
 
-            public override void AppendColumnValue(string? value)
+            public override void InsertColumnValue(int index, string? value)
             {
-                int oldLen = Data.Length;
-                Array.Resize(ref Data, oldLen + 1);
-                Data[oldLen] = value?.ToDouble(0) ?? 0;
-                GrowCellMetadata();
+                int insertAt = Math.Clamp(index, 0, Data.Length);
+                var grown = new double[Data.Length + 1];
+                Array.Copy(Data, 0, grown, 0, insertAt);
+                grown[insertAt] = value?.ToDouble(0) ?? 0;
+                Array.Copy(Data, insertAt, grown, insertAt + 1, Data.Length - insertAt);
+                Data = grown;
+                if (Colours != null)
+                {
+                    var grownColours = new Color?[Colours.Length + 1];
+                    Array.Copy(Colours, 0, grownColours, 0, insertAt);
+                    Array.Copy(Colours, insertAt, grownColours, insertAt + 1, Colours.Length - insertAt);
+                    Colours = grownColours;
+                }
+                if (Diffs != null)
+                {
+                    var grownDiffs = new StringDiff.Diffs?[Diffs.Length + 1];
+                    Array.Copy(Diffs, 0, grownDiffs, 0, insertAt);
+                    Array.Copy(Diffs, insertAt, grownDiffs, insertAt + 1, Diffs.Length - insertAt);
+                    Diffs = grownDiffs;
+                }
+            }
+
+            public override void RemoveColumn(int index)
+            {
+                if (index < 0 || index >= Data.Length) return;
+                var shrunk = new double[Data.Length - 1];
+                Array.Copy(Data, 0, shrunk, 0, index);
+                Array.Copy(Data, index + 1, shrunk, index, Data.Length - index - 1);
+                Data = shrunk;
+                if (Colours != null && index < Colours.Length)
+                {
+                    var shrunkColours = new Color?[Colours.Length - 1];
+                    Array.Copy(Colours, 0, shrunkColours, 0, index);
+                    Array.Copy(Colours, index + 1, shrunkColours, index, Colours.Length - index - 1);
+                    Colours = shrunkColours;
+                }
+                if (Diffs != null && index < Diffs.Length)
+                {
+                    var shrunkDiffs = new StringDiff.Diffs?[Diffs.Length - 1];
+                    Array.Copy(Diffs, 0, shrunkDiffs, 0, index);
+                    Array.Copy(Diffs, index + 1, shrunkDiffs, index, Diffs.Length - index - 1);
+                    Diffs = shrunkDiffs;
+                }
             }
 
             public BoundDataRowDouble(int index, double[] sourceRow) : base(index)
@@ -381,6 +454,34 @@ namespace SehensWerte.Controls
                 ListChanged?.Invoke(this, new ListChangedEventArgs(ListChangedType.Reset, 0));
             }
 
+            public void InsertColumn(string header, int index, IEnumerable<string?> values)
+            {
+                using var rowIter = UnfilteredData.GetEnumerator();
+                using var valIter = values.GetEnumerator();
+                while (rowIter.MoveNext())
+                {
+                    string? value = valIter.MoveNext() ? valIter.Current : null;
+                    rowIter.Current.InsertColumnValue(index, value);
+                }
+                ColumnNames.Insert(index, header);
+                RebuildGridColumns();
+                ListChanged?.Invoke(this, new ListChangedEventArgs(ListChangedType.Reset, 0));
+            }
+
+            public bool RemoveColumn(string header)
+            {
+                int idx = ColumnNames.IndexOf(header);
+                if (idx < 0) return false;
+                foreach (var row in UnfilteredData)
+                {
+                    row.RemoveColumn(idx);
+                }
+                ColumnNames.RemoveAt(idx);
+                RebuildGridColumns();
+                ListChanged?.Invoke(this, new ListChangedEventArgs(ListChangedType.Reset, 0));
+                return true;
+            }
+
             [MemberNotNull(nameof(CsvFileName), nameof(ColumnNames), nameof(UnfilteredData), nameof(FilteredData))]
             private void InitializeData<T>(IEnumerable<IEnumerable<T>> source, IEnumerable<string> columnNames, Func<int, IEnumerable<T>, BoundDataRow> createRowFunc)
             {
@@ -481,6 +582,10 @@ namespace SehensWerte.Controls
                 else
                 {
                     ApplyVisible(snap);
+                }
+                if (!string.IsNullOrEmpty(snap.InsertedColumn))
+                {
+                    RemoveColumn(snap.InsertedColumn);
                 }
                 ReshowFiltered();
                 UpdateSortGlyphs();
@@ -833,21 +938,13 @@ namespace SehensWerte.Controls
                 return FilteredData.Count - 1;
             }
 
+            // Does NOT push a snapshot
             public void HideRowsOtherThan(IEnumerable<int> selectedRows)
             {
                 if (FilteredData == null) return;
-                foreach (var v in selectedRows)
-                {
-                    IndexToRow[v].HideNot = true;
-                }
-                foreach (var v in FilteredData)
-                {
-                    if (!v.HideNot)
-                    {
-                        v.Visible = false;
-                    }
-                    v.HideNot = false;
-                }
+                UnfilteredData.ForEach(x => x.TempFlag = false);
+                selectedRows.ForEach(v => IndexToRow[v].TempFlag = true);
+                FilteredData.Where(v => !v.TempFlag).ForEach(v => v.Visible = false);
                 Refilter();
             }
 
@@ -855,10 +952,7 @@ namespace SehensWerte.Controls
             private void HideRowsIf(Func<BoundDataRow, bool> predicate)
             {
                 if (FilteredData == null) return;
-                foreach (var v in FilteredData.Where(predicate))
-                {
-                    v.Visible = false;
-                }
+                FilteredData.Where(predicate).ForEach(v=>v.Visible = false);
                 Refilter();
             }
 
@@ -988,8 +1082,19 @@ namespace SehensWerte.Controls
                     Kind = DataGridControlHistory.FilterAction.Operation.HideNotFirstUnique,
                     Column = column
                 });
-                // keep the first, hide the rest
                 int colIndex = ColumnNames.IndexOf(column);
+                if (colIndex < 0) return;
+
+                // count occurrences across currently-visible rows before we hide anything
+                var counts = new Dictionary<string, int>();
+                foreach (var row in FilteredData)
+                {
+                    var value = row.Column(colIndex) ?? "";
+                    counts.TryGetValue(value, out int c);
+                    counts[value] = c + 1;
+                }
+
+                // keep the first, hide the rest
                 var seen = new HashSet<string?>();
                 HideRowsIf(x =>
                 {
@@ -1001,6 +1106,27 @@ namespace SehensWerte.Controls
                     seen.Add(value);
                     return false;
                 });
+
+                // populate "<column> count" directly to the right of the uniqued column.
+                // hidden rows carry their count too, so Undo restores a still-meaningful view.
+                // If a column with that name already exists (repeated unique on the same
+                // column), leave it alone - Undo of *this* action shouldn't drop a column
+                // an earlier action installed.
+                string countHeader = column + " count";
+                if (!ColumnNames.Contains(countHeader))
+                {
+                    string? CountFor(BoundDataRow r)
+                    {
+                        return counts.TryGetValue(r.Column(colIndex) ?? "", out int c)
+                            ? c.ToString(CultureInfo.InvariantCulture)
+                            : null;
+                    }
+                    InsertColumn(countHeader, colIndex + 1, UnfilteredData.Select(CountFor));
+                    if (m_History.History.Count > 0)
+                    {
+                        m_History.History[^1].InsertedColumn = countHeader;
+                    }
+                }
             }
 
             public void HideRowsMatching(string column, IEnumerable<string?> rows)
@@ -1452,6 +1578,195 @@ EndFragment:{0003:D10}
                 result.AppendLine("</table>");
                 return result.ToString();
             }
+        }
+    }
+
+    [TestClass]
+    public class DataGridBoundDataTest
+    {
+        private static DataGridControl.BoundData Make(List<string> cols, params string?[][] rows)
+        {
+            var data = rows.Select(r => (IEnumerable<string?>)r.ToList()).ToList();
+            return new DataGridControl.BoundData(data, cols, _ => { });
+        }
+
+        [TestMethod]
+        public void InsertColumnPlacesHeaderAndShiftsValues()
+        {
+            var bd = Make(new() { "key", "val" },
+                new[] { "a", "1" },
+                new[] { "b", "2" });
+            bd.InsertColumn("mid", index: 1, values: new[] { "x", "y" });
+
+            CollectionAssert.AreEqual(new List<string> { "key", "mid", "val" }, bd.ColumnNames);
+            Assert.AreEqual("a", bd.UnfilteredData[0].Column(0));
+            Assert.AreEqual("x", bd.UnfilteredData[0].Column(1));
+            Assert.AreEqual("1", bd.UnfilteredData[0].Column(2));
+            Assert.AreEqual("y", bd.UnfilteredData[1].Column(1));
+        }
+
+        [TestMethod]
+        public void InsertColumnAtCountAppends()
+        {
+            var bd = Make(new() { "key", "val" }, new[] { "a", "1" });
+            bd.InsertColumn("tail", index: bd.ColumnNames.Count, values: new[] { "z" });
+
+            CollectionAssert.AreEqual(new List<string> { "key", "val", "tail" }, bd.ColumnNames);
+            Assert.AreEqual("z", bd.UnfilteredData[0].Column(2));
+        }
+
+        [TestMethod]
+        public void RemoveColumnDropsHeaderAndShiftsDataLeft()
+        {
+            var bd = Make(new() { "key", "val" },
+                new[] { "a", "1" },
+                new[] { "b", "2" });
+            bd.InsertColumn("mid", index: 1, values: new[] { "x", "y" });
+
+            bool removed = bd.RemoveColumn("mid");
+
+            Assert.IsTrue(removed);
+            CollectionAssert.AreEqual(new List<string> { "key", "val" }, bd.ColumnNames);
+            Assert.AreEqual("a", bd.UnfilteredData[0].Column(0));
+            Assert.AreEqual("1", bd.UnfilteredData[0].Column(1));
+        }
+
+        [TestMethod]
+        public void RemoveColumnReturnsFalseWhenMissing()
+        {
+            var bd = Make(new() { "key", "val" }, new[] { "a", "1" });
+            Assert.IsFalse(bd.RemoveColumn("nope"));
+            Assert.AreEqual(2, bd.ColumnNames.Count);
+        }
+
+        [TestMethod]
+        public void AppendColumnValueDelegatesToInsertAtEnd()
+        {
+            var bd = Make(new() { "key", "val" }, new[] { "a", "1" });
+            var row = bd.UnfilteredData[0];
+            int prev = row.Count;
+
+            row.AppendColumnValue("appended");
+
+            Assert.AreEqual(prev + 1, row.Count);
+            Assert.AreEqual("appended", row.Column(prev));
+            // existing values untouched
+            Assert.AreEqual("a", row.Column(0));
+            Assert.AreEqual("1", row.Column(1));
+        }
+
+        [TestMethod]
+        public void HideNotFirstUniqueInsertsCountColumnAndCollapsesDuplicates()
+        {
+            var bd = Make(new() { "key", "val" },
+                new[] { "a", "1" },
+                new[] { "b", "2" },
+                new[] { "a", "3" },
+                new[] { "a", "4" },
+                new[] { "b", "5" });
+
+            bd.HideNotFirstUnique("key");
+
+            CollectionAssert.AreEqual(new List<string> { "key", "key count", "val" }, bd.ColumnNames);
+            Assert.AreEqual(2, bd.FilteredData.Count);
+
+            Assert.AreEqual("a", bd.FilteredData[0].Column(0));
+            Assert.AreEqual("3", bd.FilteredData[0].Column(1));
+            Assert.AreEqual("1", bd.FilteredData[0].Column(2));
+
+            Assert.AreEqual("b", bd.FilteredData[1].Column(0));
+            Assert.AreEqual("2", bd.FilteredData[1].Column(1));
+            Assert.AreEqual("2", bd.FilteredData[1].Column(2));
+        }
+
+        [TestMethod]
+        public void HideNotFirstUniqueLeavesExistingCountColumnAlone()
+        {
+            var bd = Make(new() { "key", "val" },
+                new[] { "a", "1" },
+                new[] { "a", "2" },
+                new[] { "b", "3" });
+
+            bd.HideNotFirstUnique("key");
+            int afterFirst = bd.ColumnNames.Count;
+
+            bd.HideNotFirstUnique("key"); // already unique - no fresh column should appear
+
+            Assert.AreEqual(afterFirst, bd.ColumnNames.Count);
+            Assert.AreEqual(1, bd.ColumnNames.Count(c => c == "key count"));
+        }
+
+        [TestMethod]
+        public void UndoHideNotFirstUniqueRemovesCountColumn()
+        {
+            var bd = Make(new() { "key", "val" },
+                new[] { "a", "1" },
+                new[] { "a", "2" },
+                new[] { "b", "3" });
+
+            bd.HideNotFirstUnique("key");
+            Assert.IsTrue(bd.ColumnNames.Contains("key count"));
+
+            bd.Undo();
+
+            CollectionAssert.AreEqual(new List<string> { "key", "val" }, bd.ColumnNames);
+            Assert.AreEqual(3, bd.FilteredData.Count);
+            // row data shape restored - col(1) should be the original val again
+            Assert.AreEqual("1", bd.FilteredData[0].Column(1));
+            Assert.AreEqual("2", bd.FilteredData[1].Column(1));
+            Assert.AreEqual("3", bd.FilteredData[2].Column(1));
+        }
+
+        [TestMethod]
+        public void RedoHideNotFirstUniqueRestoresCountColumn()
+        {
+            var bd = Make(new() { "key", "val" },
+                new[] { "a", "1" },
+                new[] { "a", "2" },
+                new[] { "b", "3" });
+
+            bd.HideNotFirstUnique("key");
+            bd.Undo();
+            bd.Redo();
+
+            CollectionAssert.AreEqual(new List<string> { "key", "key count", "val" }, bd.ColumnNames);
+            Assert.AreEqual(2, bd.FilteredData.Count);
+            Assert.AreEqual("2", bd.FilteredData[0].Column(1)); // a appears 2x
+            Assert.AreEqual("1", bd.FilteredData[1].Column(1)); // b appears 1x
+        }
+
+        [TestMethod]
+        public void ColoursShiftWithInsertAndRemove()
+        {
+            var bd = Make(new() { "key", "val" }, new[] { "a", "1" });
+            var row = bd.UnfilteredData[0];
+            row.CellColour(1, Color.Red);
+
+            bd.InsertColumn("mid", index: 1, values: new[] { "x" });
+            // val moved from col 1 to col 2 - red should follow it
+            Assert.IsNotNull(row.Colours);
+            Assert.AreEqual(Color.Red, row.Colours![2]);
+            Assert.IsNull(row.Colours[1]);
+
+            bd.RemoveColumn("mid");
+            Assert.AreEqual(Color.Red, row.Colours![1]);
+        }
+
+        [TestMethod]
+        public void DiffsShiftWithInsertAndRemove()
+        {
+            var bd = Make(new() { "key", "val" }, new[] { "a", "1" });
+            var row = bd.UnfilteredData[0];
+            var marker = new StringDiff.Diffs { ("1", StringDiff.Diffs.Side.Left) };
+            row.CellDiffs(1, marker);
+
+            bd.InsertColumn("mid", index: 1, values: new[] { "x" });
+            Assert.IsNotNull(row.Diffs);
+            Assert.AreSame(marker, row.Diffs![2]);
+            Assert.IsNull(row.Diffs[1]);
+
+            bd.RemoveColumn("mid");
+            Assert.AreSame(marker, row.Diffs![1]);
         }
     }
 }
