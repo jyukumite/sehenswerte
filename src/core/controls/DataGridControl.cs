@@ -185,9 +185,8 @@ namespace SehensWerte.Controls
                     m_ResizingColumn = false;
                     var col = m_ResizingColumnName != null && Grid.Columns.Contains(m_ResizingColumnName)
                         ? Grid.Columns[m_ResizingColumnName] : null;
-                    DataGridBind?.PushSnapshot(new DataGridControlHistory.FilterAction
+                    DataGridBind?.PushSnapshot(new DataGridControlHistory.Snapshot(DataGridControlHistory.Snapshot.Operation.ColumnResize)
                     {
-                        Kind = DataGridControlHistory.FilterAction.Operation.ColumnResize,
                         Column = m_ResizingColumnName ?? "",
                         Width = col?.Width ?? 0
                     });
@@ -462,9 +461,8 @@ namespace SehensWerte.Controls
                 int newWidth = Math.Max(10, Math.Min(grid.Parent.Width - 20, maxWidth + 10));
                 widths.Dispose();
 
-                DataGridBind?.PushSnapshot(new DataGridControlHistory.FilterAction
+                DataGridBind?.PushSnapshot(new DataGridControlHistory.Snapshot(DataGridControlHistory.Snapshot.Operation.ColumnResize)
                 {
-                    Kind = DataGridControlHistory.FilterAction.Operation.ColumnResize,
                     Column = column.Name,
                     Width = newWidth
                 });
@@ -1141,6 +1139,14 @@ namespace SehensWerte.Controls
             UpdateStatusStrip();
         }
 
+        // Undoable "derive N columns from one source column" operation
+        public int SplitColumn(string sourceColumnName, Func<string, IEnumerable<(string Header, string?[] Values)>> emit)
+        {
+            int produced = DataGridBind?.SplitColumn(sourceColumnName, emit) ?? 0;
+            UpdateStatusStrip();
+            return produced;
+        }
+
         private void GridData_ListChanged(object? sender, ListChangedEventArgs e)
         {
             UpdateStatusStrip();
@@ -1216,9 +1222,8 @@ namespace SehensWerte.Controls
         {
             if (!Grid.Columns.Contains(column)) return;
             int newWidth = Grid.Columns[column].MinimumWidth;
-            DataGridBind?.PushSnapshot(new DataGridControlHistory.FilterAction
+            DataGridBind?.PushSnapshot(new DataGridControlHistory.Snapshot(DataGridControlHistory.Snapshot.Operation.ColumnResize)
             {
-                Kind = DataGridControlHistory.FilterAction.Operation.ColumnResize,
                 Column = column,
                 Width = newWidth
             });

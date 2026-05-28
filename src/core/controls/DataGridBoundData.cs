@@ -332,11 +332,11 @@ namespace SehensWerte.Controls
                 var result = new List<(string columnName, ListSortDirection direction)>();
                 foreach (var snap in m_History.History)
                 {
-                    if (snap.Action?.Kind == DataGridControlHistory.FilterAction.Operation.ApplySort)
+                    if (snap.Kind == DataGridControlHistory.Snapshot.Operation.ApplySort)
                     {
-                        string col = snap.Action.Column;
+                        string col = snap.Column;
                         result.RemoveAll(k => k.columnName == col);
-                        result.Add((col, snap.Action.Direction));
+                        result.Add((col, snap.Direction));
                     }
                 }
                 return result;
@@ -516,12 +516,14 @@ namespace SehensWerte.Controls
                 DataGridView grid = DataGrid.Grid;
 
                 var savedBackColor = new Dictionary<string, Color>();
+                var savedWidth = new Dictionary<string, int>();
                 foreach (DataGridViewColumn c in grid.Columns)
                 {
                     if (!c.DefaultCellStyle.BackColor.IsEmpty)
                     {
                         savedBackColor[c.Name] = c.DefaultCellStyle.BackColor;
                     }
+                    savedWidth[c.Name] = c.Width;
                 }
 
                 grid.DataSource = null;
@@ -539,6 +541,10 @@ namespace SehensWerte.Controls
                     if (savedBackColor.TryGetValue(col.Name, out var bg))
                     {
                         col.DefaultCellStyle.BackColor = bg;
+                    }
+                    if (savedWidth.TryGetValue(col.Name, out var w))
+                    {
+                        col.Width = w;
                     }
                     grid.Columns.Add(col);
                 }
@@ -572,9 +578,9 @@ namespace SehensWerte.Controls
                 m_History.History.RemoveAt(last);
                 m_RedoStack.History.Add(snap);
                 OnLog?.Invoke(new CsvLog.Entry(
-                    $"Undo: popped {Describe(snap.Action)} | buffer: {DescribeHistory()} | redo depth: {m_RedoStack.History.Count}",
+                    $"Undo: popped {Describe(snap)} | buffer: {DescribeHistory()} | redo depth: {m_RedoStack.History.Count}",
                     CsvLog.Priority.Debug));
-                bool wasTranspose = snap.Action?.Kind == DataGridControlHistory.FilterAction.Operation.Transpose;
+                bool wasTranspose = snap.Kind == DataGridControlHistory.Snapshot.Operation.Transpose;
                 if (wasTranspose)
                 {
                     UndoTranspose(snap);
@@ -583,23 +589,21 @@ namespace SehensWerte.Controls
                 {
                     ApplyVisible(snap);
                 }
-                if (!string.IsNullOrEmpty(snap.InsertedColumn))
+                for (int loop = snap.AddedColumns.Count - 1; loop >= 0; loop--)
                 {
-                    RemoveColumn(snap.InsertedColumn);
+                    RemoveColumn(snap.AddedColumns[loop]);
                 }
                 ReshowFiltered();
                 UpdateSortGlyphs();
 
                 const int defaultColumnWidth = 100;
                 var widths = new List<(string Name, int Width)>();
-                if (snap.Action?.Kind == DataGridControlHistory.FilterAction.Operation.ColumnResize)
+                if (snap.Kind == DataGridControlHistory.Snapshot.Operation.ColumnResize)
                 {
-                    string col = snap.Action.Column;
+                    string col = snap.Column;
                     var prior = m_History.History
-                        .Select(s => s.Action)
-                        .LastOrDefault(a => a != null
-                            && a.Kind == DataGridControlHistory.FilterAction.Operation.ColumnResize
-                            && a.Column == col);
+                        .LastOrDefault(s => s.Kind == DataGridControlHistory.Snapshot.Operation.ColumnResize
+                            && s.Column == col);
                     widths.Add((col, prior?.Width ?? defaultColumnWidth));
                 }
                 else if (wasTranspose)
@@ -610,10 +614,8 @@ namespace SehensWerte.Controls
                     foreach (var name in ColumnNames)
                     {
                         var prior = m_History.History
-                            .Select(s => s.Action)
-                            .LastOrDefault(a => a != null
-                                && a.Kind == DataGridControlHistory.FilterAction.Operation.ColumnResize
-                                && a.Column == name);
+                            .LastOrDefault(s => s.Kind == DataGridControlHistory.Snapshot.Operation.ColumnResize
+                                && s.Column == name);
                         widths.Add((name, prior?.Width ?? defaultColumnWidth));
                     }
                 }
@@ -631,21 +633,15 @@ namespace SehensWerte.Controls
                 int top = m_RedoStack.History.Count - 1;
                 var snap = m_RedoStack.History[top];
                 m_RedoStack.History.RemoveAt(top);
-                if (snap.Action == null)
-                {
-                    OnLog?.Invoke(new CsvLog.Entry("Redo: popped snapshot with null action, skipping", CsvLog.Priority.Debug));
-                    DataGrid?.UpdateButtons(this, EventArgs.Empty);
-                    return new List<(string, int)>();
-                }
                 OnLog?.Invoke(new CsvLog.Entry(
-                    $"Redo: dispatching {Describe(snap.Action)} | redo depth now: {m_RedoStack.History.Count}",
+                    $"Redo: dispatching {Describe(snap)} | redo depth now: {m_RedoStack.History.Count}",
                     CsvLog.Priority.Debug));
 
                 var widthsByColumn = new Dictionary<string, int>();
                 m_SuppressRedoClear = true;
                 try
                 {
-                    DispatchAction(snap.Action, widthsByColumn);
+                    DispatchAction(snap, widthsByColumn);
                 }
                 finally
                 {
@@ -680,35 +676,35 @@ namespace SehensWerte.Controls
                 Profile.Exit();
             }
 
-            public void PushSnapshot(DataGridControlHistory.FilterAction action)
+            public void PushSnapshot(DataGridControlHistory.Snapshot snap)
             {
-                var snap = MakeSnapshot(cacheRefs: true);
-                snap.Action = action;
+                snap.VisibleRows = FilteredData.Select(r => r.Index).ToList();
+                snap.VisibleRowRefs = FilteredData.ToList();
                 m_History.History.Add(snap);
                 if (!m_SuppressRedoClear)
                 {
                     m_RedoStack.History.Clear();
                 }
                 OnLog?.Invoke(new CsvLog.Entry(
-                    $"PushSnapshot: {Describe(action)} | buffer: {DescribeHistory()}",
+                    $"PushSnapshot: {Describe(snap)} | buffer: {DescribeHistory()}",
                     CsvLog.Priority.Debug));
                 DataGrid?.UpdateButtons(this, EventArgs.Empty);
             }
 
-            private static string Describe(DataGridControlHistory.FilterAction? a)
+            private static string Describe(DataGridControlHistory.Snapshot s)
             {
-                if (a == null) return "<null>";
-                var parts = new List<string> { a.Kind.ToString() };
-                if (!string.IsNullOrEmpty(a.Column)) parts.Add($"col={a.Column}");
-                if (a.Kind == DataGridControlHistory.FilterAction.Operation.ApplySort)
+                var parts = new List<string> { s.Kind.ToString() };
+                if (!string.IsNullOrEmpty(s.Column)) parts.Add($"col={s.Column}");
+                if (s.AddedColumns.Count > 0) parts.Add($"added=[{string.Join(",", s.AddedColumns)}]");
+                if (s.Kind == DataGridControlHistory.Snapshot.Operation.ApplySort)
                 {
-                    parts.Add($"dir={(a.Direction == ListSortDirection.Ascending ? "asc" : "desc")}");
+                    parts.Add($"dir={(s.Direction == ListSortDirection.Ascending ? "asc" : "desc")}");
                 }
-                if (!string.IsNullOrEmpty(a.Pattern)) parts.Add($"pat={a.Pattern}");
-                if (!string.IsNullOrEmpty(a.AnchorValue)) parts.Add($"anchor={a.AnchorValue}");
-                if (a.Row >= 0) parts.Add($"row={a.Row}");
-                if (a.Width >= 0) parts.Add($"w={a.Width}");
-                if (a.Values.Count > 0) parts.Add($"vals=[{string.Join(",", a.Values)}]");
+                if (!string.IsNullOrEmpty(s.Pattern)) parts.Add($"pat={s.Pattern}");
+                if (!string.IsNullOrEmpty(s.AnchorValue)) parts.Add($"anchor={s.AnchorValue}");
+                if (s.Row >= 0) parts.Add($"row={s.Row}");
+                if (s.Width >= 0) parts.Add($"w={s.Width}");
+                if (s.Values.Count > 0) parts.Add($"vals=[{string.Join(",", s.Values)}]");
                 return string.Join(" ", parts);
             }
 
@@ -716,21 +712,12 @@ namespace SehensWerte.Controls
             {
                 if (m_History.History.Count == 0) return "<empty>";
                 return string.Join(" | ", m_History.History
-                    .Select((s, i) => $"[{i}]{Describe(s.Action)}"));
-            }
-
-            private DataGridControlHistory.Snapshot MakeSnapshot(bool cacheRefs)
-            {
-                return new DataGridControlHistory.Snapshot
-                {
-                    VisibleRows = FilteredData.Select(r => r.Index).ToList(),
-                    VisibleRowRefs = cacheRefs ? FilteredData.ToList() : null
-                };
+                    .Select((s, i) => $"[{i}]{Describe(s)}"));
             }
 
             public void ShowAll()
             {
-                PushSnapshot(new DataGridControlHistory.FilterAction { Kind = DataGridControlHistory.FilterAction.Operation.ShowAll });
+                PushSnapshot(new DataGridControlHistory.Snapshot(DataGridControlHistory.Snapshot.Operation.ShowAll));
                 foreach (var v in UnfilteredData)
                 {
                     v.Visible = true;
@@ -840,9 +827,8 @@ namespace SehensWerte.Controls
             {
                 if (FilteredData == null || displayPos < 0 || displayPos >= FilteredData.Count) return;
                 var (column, anchorValue) = AnchorAt(displayPos);
-                PushSnapshot(new DataGridControlHistory.FilterAction
+                PushSnapshot(new DataGridControlHistory.Snapshot(DataGridControlHistory.Snapshot.Operation.HideRowsAbove)
                 {
-                    Kind = DataGridControlHistory.FilterAction.Operation.HideRowsAbove,
                     Column = column,
                     AnchorValue = anchorValue,
                     Row = displayPos
@@ -858,9 +844,8 @@ namespace SehensWerte.Controls
             {
                 if (FilteredData == null || displayPos < 0 || displayPos >= FilteredData.Count) return;
                 var (column, anchorValue) = AnchorAt(displayPos);
-                PushSnapshot(new DataGridControlHistory.FilterAction
+                PushSnapshot(new DataGridControlHistory.Snapshot(DataGridControlHistory.Snapshot.Operation.HideRowsBelow)
                 {
-                    Kind = DataGridControlHistory.FilterAction.Operation.HideRowsBelow,
                     Column = column,
                     AnchorValue = anchorValue,
                     Row = displayPos
@@ -959,9 +944,8 @@ namespace SehensWerte.Controls
             public void Decimate(int stride)
             {
                 if (stride < 2) return;
-                PushSnapshot(new DataGridControlHistory.FilterAction
+                PushSnapshot(new DataGridControlHistory.Snapshot(DataGridControlHistory.Snapshot.Operation.Decimate)
                 {
-                    Kind = DataGridControlHistory.FilterAction.Operation.Decimate,
                     Stride = stride
                 });
                 int counter = 0;
@@ -977,10 +961,7 @@ namespace SehensWerte.Controls
             {
                 var preUnfiltered = UnfilteredData;
                 var preColumnNames = ColumnNames;
-                PushSnapshot(new DataGridControlHistory.FilterAction
-                {
-                    Kind = DataGridControlHistory.FilterAction.Operation.Transpose
-                });
+                PushSnapshot(new DataGridControlHistory.Snapshot(DataGridControlHistory.Snapshot.Operation.Transpose));
                 var pushed = m_History.History[^1];
                 pushed.PreTransposeUnfiltered = preUnfiltered;
                 pushed.PreTransposeColumnNames = preColumnNames;
@@ -1077,9 +1058,8 @@ namespace SehensWerte.Controls
 
             public void HideNotFirstUnique(string column)
             {
-                PushSnapshot(new DataGridControlHistory.FilterAction
+                PushSnapshot(new DataGridControlHistory.Snapshot(DataGridControlHistory.Snapshot.Operation.HideNotFirstUnique)
                 {
-                    Kind = DataGridControlHistory.FilterAction.Operation.HideNotFirstUnique,
                     Column = column
                 });
                 int colIndex = ColumnNames.IndexOf(column);
@@ -1124,7 +1104,7 @@ namespace SehensWerte.Controls
                     InsertColumn(countHeader, colIndex + 1, UnfilteredData.Select(CountFor));
                     if (m_History.History.Count > 0)
                     {
-                        m_History.History[^1].InsertedColumn = countHeader;
+                        m_History.History[^1].AddedColumns.Add(countHeader);
                     }
                 }
             }
@@ -1132,9 +1112,8 @@ namespace SehensWerte.Controls
             public void HideRowsMatching(string column, IEnumerable<string?> rows)
             {
                 List<string?> strings = rows.Select(x => x?.ToLower()).ToList();
-                PushSnapshot(new DataGridControlHistory.FilterAction
+                PushSnapshot(new DataGridControlHistory.Snapshot(DataGridControlHistory.Snapshot.Operation.HideRowsMatching)
                 {
-                    Kind = DataGridControlHistory.FilterAction.Operation.HideRowsMatching,
                     Column = column,
                     Values = strings.Select(s => s ?? "").ToList()
                 });
@@ -1146,9 +1125,8 @@ namespace SehensWerte.Controls
             public void HideRowsNotMatching(string column, IEnumerable<string?> rows)
             {
                 List<string?> strings = rows.Select(x => x?.ToLower()).ToList();
-                PushSnapshot(new DataGridControlHistory.FilterAction
+                PushSnapshot(new DataGridControlHistory.Snapshot(DataGridControlHistory.Snapshot.Operation.HideRowsNotMatching)
                 {
-                    Kind = DataGridControlHistory.FilterAction.Operation.HideRowsNotMatching,
                     Column = column,
                     Values = strings.Select(s => s ?? "").ToList()
                 });
@@ -1159,9 +1137,8 @@ namespace SehensWerte.Controls
 
             public void ShowRowsMatchingRegex(string regex, string column)
             {
-                PushSnapshot(new DataGridControlHistory.FilterAction
+                PushSnapshot(new DataGridControlHistory.Snapshot(DataGridControlHistory.Snapshot.Operation.ShowRowsMatchingRegex)
                 {
-                    Kind = DataGridControlHistory.FilterAction.Operation.ShowRowsMatchingRegex,
                     Column = column,
                     Pattern = regex
                 });
@@ -1172,9 +1149,8 @@ namespace SehensWerte.Controls
 
             public void HideRowsMatchingRegex(string regex, string column)
             {
-                PushSnapshot(new DataGridControlHistory.FilterAction
+                PushSnapshot(new DataGridControlHistory.Snapshot(DataGridControlHistory.Snapshot.Operation.HideRowsMatchingRegex)
                 {
-                    Kind = DataGridControlHistory.FilterAction.Operation.HideRowsMatchingRegex,
                     Column = column,
                     Pattern = regex
                 });
@@ -1283,7 +1259,6 @@ namespace SehensWerte.Controls
             {
                 var state = new DataGridControlHistory();
                 state.History.AddRange(m_History.History);
-                state.History.Add(MakeSnapshot(cacheRefs: false));
                 return state;
             }
 
@@ -1299,8 +1274,7 @@ namespace SehensWerte.Controls
                 var widthsByColumn = new Dictionary<string, int>();
                 foreach (var snap in state.History)
                 {
-                    if (snap.Action == null) continue; // synthetic "current" tail entry
-                    DispatchAction(snap.Action, widthsByColumn);
+                    DispatchAction(snap, widthsByColumn);
                 }
                 return widthsByColumn.Select(kv => (kv.Key, kv.Value)).ToList();
             }
@@ -1343,34 +1317,34 @@ namespace SehensWerte.Controls
             }
 
             private void DispatchAction(
-                DataGridControlHistory.FilterAction action,
+                DataGridControlHistory.Snapshot snap,
                 Dictionary<string, int> widthsByColumn)
             {
                 try
                 {
-                    switch (action.Kind)
+                    switch (snap.Kind)
                     {
-                        case DataGridControlHistory.FilterAction.Operation.ShowAll:
+                        case DataGridControlHistory.Snapshot.Operation.ShowAll:
                             ShowAll();
                             break;
-                        case DataGridControlHistory.FilterAction.Operation.HideRowsMatching:
-                            HideRowsMatching(action.Column, action.Values);
+                        case DataGridControlHistory.Snapshot.Operation.HideRowsMatching:
+                            HideRowsMatching(snap.Column, snap.Values);
                             break;
-                        case DataGridControlHistory.FilterAction.Operation.HideRowsNotMatching:
-                            HideRowsNotMatching(action.Column, action.Values);
+                        case DataGridControlHistory.Snapshot.Operation.HideRowsNotMatching:
+                            HideRowsNotMatching(snap.Column, snap.Values);
                             break;
-                        case DataGridControlHistory.FilterAction.Operation.ShowRowsMatchingRegex:
-                            ShowRowsMatchingRegex(action.Pattern, action.Column);
+                        case DataGridControlHistory.Snapshot.Operation.ShowRowsMatchingRegex:
+                            ShowRowsMatchingRegex(snap.Pattern, snap.Column);
                             break;
-                        case DataGridControlHistory.FilterAction.Operation.HideRowsMatchingRegex:
-                            HideRowsMatchingRegex(action.Pattern, action.Column);
+                        case DataGridControlHistory.Snapshot.Operation.HideRowsMatchingRegex:
+                            HideRowsMatchingRegex(snap.Pattern, snap.Column);
                             break;
-                        case DataGridControlHistory.FilterAction.Operation.HideNotFirstUnique:
-                            HideNotFirstUnique(action.Column);
+                        case DataGridControlHistory.Snapshot.Operation.HideNotFirstUnique:
+                            HideNotFirstUnique(snap.Column);
                             break;
-                        case DataGridControlHistory.FilterAction.Operation.HideRowsAbove:
+                        case DataGridControlHistory.Snapshot.Operation.HideRowsAbove:
                             {
-                                int pos = ResolveReplayPosition(action.Column, action.AnchorValue, action.Row);
+                                int pos = ResolveReplayPosition(snap.Column, snap.AnchorValue, snap.Row);
                                 if (pos < 0)
                                 {
                                     OnLog?.Invoke(new CsvLog.Entry($"replay HideRowsAbove: cannot resolve anchor", CsvLog.Priority.Warn));
@@ -1381,9 +1355,9 @@ namespace SehensWerte.Controls
                                 }
                                 break;
                             }
-                        case DataGridControlHistory.FilterAction.Operation.HideRowsBelow:
+                        case DataGridControlHistory.Snapshot.Operation.HideRowsBelow:
                             {
-                                int pos = ResolveReplayPosition(action.Column, action.AnchorValue, action.Row);
+                                int pos = ResolveReplayPosition(snap.Column, snap.AnchorValue, snap.Row);
                                 if (pos < 0)
                                 {
                                     OnLog?.Invoke(new CsvLog.Entry($"replay HideRowsBelow: cannot resolve anchor", CsvLog.Priority.Warn));
@@ -1394,28 +1368,64 @@ namespace SehensWerte.Controls
                                 }
                                 break;
                             }
-                        case DataGridControlHistory.FilterAction.Operation.ApplySort:
-                            SortByColumn(action.Column, action.Direction);
+                        case DataGridControlHistory.Snapshot.Operation.ApplySort:
+                            SortByColumn(snap.Column, snap.Direction);
                             break;
-                        case DataGridControlHistory.FilterAction.Operation.ColumnResize:
-                            widthsByColumn[action.Column] = action.Width;
-                            PushSnapshot(action);
+                        case DataGridControlHistory.Snapshot.Operation.ColumnResize:
+                            widthsByColumn[snap.Column] = snap.Width;
+                            PushSnapshot(snap);
                             break;
-                        case DataGridControlHistory.FilterAction.Operation.Decimate:
-                            Decimate(action.Stride);
+                        case DataGridControlHistory.Snapshot.Operation.Decimate:
+                            Decimate(snap.Stride);
                             break;
-                        case DataGridControlHistory.FilterAction.Operation.Transpose:
+                        case DataGridControlHistory.Snapshot.Operation.Transpose:
                             Transpose();
                             break;
+                        case DataGridControlHistory.Snapshot.Operation.SplitColumn:
+                            if (snap.SplitRecipe == null)
+                            {
+                                OnLog?.Invoke(new CsvLog.Entry($"replay SplitColumn: no recipe for '{snap.Column}'", CsvLog.Priority.Warn));
+                            }
+                            else
+                            {
+                                SplitColumn(snap.Column, snap.SplitRecipe);
+                            }
+                            break;
                         default:
-                            OnLog?.Invoke(new CsvLog.Entry($"replay: unknown action {action.Kind}", CsvLog.Priority.Warn));
+                            OnLog?.Invoke(new CsvLog.Entry($"replay: unknown action {snap.Kind}", CsvLog.Priority.Warn));
                             break;
                     }
                 }
                 catch (Exception ex)
                 {
-                    OnLog?.Invoke(new CsvLog.Entry($"replay {action.Kind} failed: {ex.Message}", CsvLog.Priority.Warn));
+                    OnLog?.Invoke(new CsvLog.Entry($"replay {snap.Kind} failed: {ex.Message}", CsvLog.Priority.Warn));
                 }
+            }
+
+            // Insert one or more derived columns immediately after the source column.
+            public int SplitColumn(string sourceColumnName, Func<string, IEnumerable<(string Header, string?[] Values)>> emit)
+            {
+                int sourceColIndex = ColumnNames.IndexOf(sourceColumnName);
+                if (sourceColIndex < 0)
+                {
+                    OnLog?.Invoke(new CsvLog.Entry($"SplitColumn: no column '{sourceColumnName}'", CsvLog.Priority.Warn));
+                    return 0;
+                }
+                var produced = emit(sourceColumnName).ToList();
+                var snap = new DataGridControlHistory.Snapshot(DataGridControlHistory.Snapshot.Operation.SplitColumn)
+                {
+                    Column = sourceColumnName,
+                    SplitRecipe = emit
+                };
+                PushSnapshot(snap);
+                int insertAt = sourceColIndex + 1;
+                foreach (var col in produced)
+                {
+                    InsertColumn(col.Header, insertAt, col.Values);
+                    snap.AddedColumns.Add(col.Header);
+                    insertAt++;
+                }
+                return produced.Count;
             }
 
             public void SortByColumn(string column, ListSortDirection direction = ListSortDirection.Ascending)
@@ -1426,9 +1436,8 @@ namespace SehensWerte.Controls
                     OnLog?.Invoke(new CsvLog.Entry($"SortByColumn: no column {column}", CsvLog.Priority.Warn));
                     return;
                 }
-                PushSnapshot(new DataGridControlHistory.FilterAction
+                PushSnapshot(new DataGridControlHistory.Snapshot(DataGridControlHistory.Snapshot.Operation.ApplySort)
                 {
-                    Kind = DataGridControlHistory.FilterAction.Operation.ApplySort,
                     Column = column,
                     Direction = direction
                 });

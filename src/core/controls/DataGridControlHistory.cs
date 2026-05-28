@@ -1,4 +1,5 @@
 using Microsoft.VisualStudio.TestTools.UnitTesting;
+using System;
 using System.Collections.Generic;
 using System.ComponentModel;
 
@@ -8,31 +9,8 @@ namespace SehensWerte.Controls
     {
         public class Snapshot
         {
-            // The filter/sort/resize operation that produced this snapshot
-            public FilterAction? Action { get; set; }
-
-            // original Index values from UnfilteredData
-            public List<int> VisibleRows { get; set; } = new();
-
-            // direct row refs for fast undo
-            public List<DataGridControl.BoundDataRow>? VisibleRowRefs;
-
-            // Pre-Transpose data
-            public List<DataGridControl.BoundDataRow>? PreTransposeUnfiltered;
-            public List<string>? PreTransposeColumnNames;
-
-            // Column inserted by this action
-            public string? InsertedColumn;
-        }
-
-        // Records what user operation produced a Snapshot. Replay-safe because every
-        // identifier is by column NAME and string value rather than by row index, so
-        // the same recipe can apply to a freshly loaded dataset with similar columns.
-        public class FilterAction
-        {
             public enum Operation
             {
-                None,
                 ShowAll,
                 ApplySort,
                 HideRowsMatching,
@@ -45,22 +23,31 @@ namespace SehensWerte.Controls
                 ColumnResize,
                 Decimate,
                 Transpose,
+                SplitColumn,
             }
 
-            public Operation Kind { get; set; } = Operation.None;
-            public string Column { get; set; } = "";
-            public ListSortDirection Direction { get; set; } = ListSortDirection.Ascending; // ApplySort
-            public string Pattern { get; set; } = "";   // regex
-            public string AnchorValue { get; set; } = ""; // HideRowsAbove/Below: cell value at click time
-            public int Row { get; set; } = -1;            // HideRowsAbove/Below positional fallback
-            public int Width { get; set; } = -1;          // ColumnResize
-            public int Stride { get; set; } = 0;          // Decimate: keep every Nth row
-            public List<string> Values { get; set; } = new(); // HideRowsMatching/NotMatching
+            public Operation Kind;
+            public string Column = "";
+            public List<string> AddedColumns = new();
+            public ListSortDirection Direction = ListSortDirection.Ascending; // ApplySort
+            public string Pattern = "";   // regex
+            public string AnchorValue = ""; // HideRowsAbove/Below: cell value at click time
+            public int Row = -1; // HideRowsAbove/Below positional fallback
+            public int Width = -1; // ColumnResize
+            public int Stride = 0; // Decimate: keep every Nth row
+            public List<string> Values = new(); // HideRowsMatching/NotMatching
+            public Func<string, IEnumerable<(string Header, string?[] Values)>>? SplitRecipe;
+
+            public List<int> VisibleRows = new(); // Pre-op visible-row indices
+            public List<DataGridControl.BoundDataRow>? VisibleRowRefs; // Direct row refs for fast undo path.
+            public List<DataGridControl.BoundDataRow>? PreTransposeUnfiltered;
+            public List<string>? PreTransposeColumnNames;
+
+            public Snapshot(Operation kind) { Kind = kind; }
         }
 
-        // Full history oldest-first; last entry is the current state.
-        // Callers can replay forward or step back via Undo() after RestoreView().
-        public List<Snapshot> History { get; set; } = new();
+        // Full history oldest-first; last entry is the most recent op.
+        public List<Snapshot> History = new();
     }
 
     [TestClass]
@@ -79,14 +66,13 @@ namespace SehensWerte.Controls
         }
 
         [TestMethod]
-        public void SaveViewContainsCurrent()
+        public void SaveViewContainsInitialAction()
         {
             var bd = CreateTestData();
             var state = bd.SaveBoundState();
-            // Must include at least the current state as the last entry
+            // Constructor runs ShowAll, so history is non-empty.
             Assert.IsTrue(state.History.Count >= 1);
-            // Current state shows all 3 rows
-            Assert.AreEqual(3, state.History[^1].VisibleRows.Count);
+            Assert.AreEqual(3, bd.FilteredData.Count);
         }
 
         [TestMethod]
@@ -100,8 +86,8 @@ namespace SehensWerte.Controls
             var state = bd.SaveBoundState();
             // The filter pushed one snapshot, so history grows by 1
             Assert.AreEqual(before + 1, state.History.Count);
-            // Current state (last entry) shows only the 2 non-b rows
-            Assert.AreEqual(2, state.History[^1].VisibleRows.Count);
+            // Live view shows only the 2 non-b rows
+            Assert.AreEqual(2, bd.FilteredData.Count);
         }
 
         [TestMethod]
@@ -127,8 +113,8 @@ namespace SehensWerte.Controls
 
             bd.RestoreBoundState(state);
 
-            // UndoList holds (History.Count - 1) entries; undo each one
-            int undoDepth = state.History.Count - 1;
+            // Undo each replayed action.
+            int undoDepth = state.History.Count;
             for (int i = 0; i < undoDepth; i++)
             {
                 var widths = bd.Undo();
