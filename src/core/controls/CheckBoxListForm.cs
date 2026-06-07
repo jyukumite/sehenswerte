@@ -9,7 +9,7 @@ namespace SehensWerte.Controls
         private Button ButtonAll;
         private Button ButtonNone;
         private Label LabelText;
-        private CheckedListBox ListBox;
+        private OwnerDrawCheckedListBox ListBox;
 
         private readonly Dictionary<string, bool> CheckedState = new();
         private string FilterText = "";
@@ -109,7 +109,7 @@ namespace SehensWerte.Controls
             ButtonCancel = new Button();
             ButtonAll = new Button();
             ButtonNone = new Button();
-            ListBox = new CheckedListBox();
+            ListBox = new OwnerDrawCheckedListBox();
             SuspendLayout();
 
             LabelText.AutoSize = true;
@@ -120,8 +120,7 @@ namespace SehensWerte.Controls
             ListBox.FormattingEnabled = true;
             ListBox.TabIndex = 0;
             ListBox.CheckOnClick = true;
-            ListBox.DrawMode = DrawMode.OwnerDrawFixed;
-            ListBox.DrawItem += ListBox_DrawItem;
+            ListBox.DrawItemOverride = ListBox_DrawItem;
             ListBox.KeyPress += ListBox_KeyPress;
             ListBox.ItemCheck += (s, e) =>
             {
@@ -266,29 +265,39 @@ namespace SehensWerte.Controls
             }
         }
 
-        private void ListBox_DrawItem(object? sender, DrawItemEventArgs e)
+        private void ListBox_DrawItem(DrawItemEventArgs e)
         {
-            e.DrawBackground();
-            if (e.Index < 0) return;
+            if (e.Index < 0)
+            {
+                e.DrawBackground();
+                return;
+            }
 
             string text = (string?)ListBox.Items[e.Index] ?? "";
             bool selected = (e.State & DrawItemState.Selected) != 0;
 
-            // checkbox glyph at the left
-            int cbSize = Math.Min(e.Bounds.Height - 2, 16);
-            int cbTop = e.Bounds.Top + (e.Bounds.Height - cbSize) / 2;
-            var cbRect = new Rectangle(e.Bounds.Left + 2, cbTop, cbSize, cbSize);
-            ButtonState bs = ListBox.GetItemChecked(e.Index)
-                ? ButtonState.Checked
-                : ButtonState.Normal;
-            ControlPaint.DrawCheckBox(e.Graphics, cbRect, bs);
+            // themed checkbox glyph at the left (CheckBoxRenderer matches the native Windows visual style)
+            System.Windows.Forms.VisualStyles.CheckBoxState cbState = ListBox.GetItemChecked(e.Index)
+                ? System.Windows.Forms.VisualStyles.CheckBoxState.CheckedNormal
+                : System.Windows.Forms.VisualStyles.CheckBoxState.UncheckedNormal;
+            Size cbSize = CheckBoxRenderer.GetGlyphSize(e.Graphics, cbState);
+            var cbLocation = new Point(e.Bounds.Left + 2, e.Bounds.Top + (e.Bounds.Height - cbSize.Height) / 2);
+            float x = cbLocation.X + cbSize.Width + 4;
+
+            // modern style: checkbox sits on the normal background; only the text area gets the selection highlight
+            e.Graphics.FillRectangle(SystemBrushes.Window, e.Bounds);
+            if (selected)
+            {
+                var highlightRect = Rectangle.FromLTRB((int)x - 2, e.Bounds.Top, e.Bounds.Right, e.Bounds.Bottom);
+                e.Graphics.FillRectangle(SystemBrushes.Highlight, highlightRect);
+            }
+            CheckBoxRenderer.DrawCheckBox(e.Graphics, cbLocation, cbState);
 
             // text with matched-substring highlight
-            float x = cbRect.Right + 4;
             float y = e.Bounds.Top + (e.Bounds.Height - e.Font!.Height) / 2f;
             Font font = e.Font!;
             Brush normalBrush = selected ? SystemBrushes.HighlightText : Brushes.Black;
-            Brush highlightBrush = selected ? SystemBrushes.HighlightText : Brushes.Blue;
+            Brush highlightBrush = Brushes.Blue;
             StringFormat format = StringFormat.GenericTypographic;
             format.FormatFlags |= StringFormatFlags.MeasureTrailingSpaces;
 
@@ -320,8 +329,6 @@ namespace SehensWerte.Controls
                     e.Graphics.DrawString(after, font, normalBrush, x, y, format);
                 }
             }
-
-            e.DrawFocusRectangle();
 
             float measure(string t)
             {
@@ -363,6 +370,25 @@ namespace SehensWerte.Controls
             input.CheckedSelection = new List<string>(checkedSelection);
             input.ShowDialog();
             return (input.ResultButton == DialogResult.OK) ? input.CheckedSelection : null;
+        }
+
+        // CheckedListBox owner-draws internally and never raises the DrawItem event, so subclass and override
+        // OnDrawItem to paint ourselves (checkbox glyph + filter-match highlight). base is not called.
+        private sealed class OwnerDrawCheckedListBox : CheckedListBox
+        {
+            public Action<DrawItemEventArgs>? DrawItemOverride;
+
+            protected override void OnDrawItem(DrawItemEventArgs e)
+            {
+                if (DrawItemOverride != null)
+                {
+                    DrawItemOverride(e);
+                }
+                else
+                {
+                    base.OnDrawItem(e);
+                }
+            }
         }
     }
 }

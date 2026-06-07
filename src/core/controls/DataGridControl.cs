@@ -485,7 +485,7 @@ namespace SehensWerte.Controls
                     this.ColumnsButton,
                     this.SaveCsvButton,
                     this.LoadCsvButton});
-            this.StatusStrip.LayoutStyle = System.Windows.Forms.ToolStripLayoutStyle.HorizontalStackWithOverflow;
+            this.StatusStrip.LayoutStyle = System.Windows.Forms.ToolStripLayoutStyle.Flow;
             this.StatusStrip.Location = new System.Drawing.Point(0, 1037);
             this.StatusStrip.Name = "StatusStrip";
             this.StatusStrip.Padding = new System.Windows.Forms.Padding(18, 0, 1, 0);
@@ -529,16 +529,16 @@ namespace SehensWerte.Controls
             this.HideSelectedStatus.Name = "HideSelectedStatus";
             this.HideSelectedStatus.ShowDropDownArrow = false;
             this.HideSelectedStatus.Size = new System.Drawing.Size(166, 38);
-            this.HideSelectedStatus.Text = "Hide &Selected";
-            this.HideSelectedStatus.ToolTipText = "Hide the rows you have selected (Alt+S)";
+            this.HideSelectedStatus.Text = "Hide Selected";
+            this.HideSelectedStatus.ToolTipText = "Hide the rows you have selected";
             this.HideSelectedStatus.Click += new System.EventHandler(this.HideSelectedStatus_Click);
             this.HideSelectedStatus.BackColor = prettyColours ? Color.FromArgb(216, 242, 178) : SystemColors.Control;
 
             this.HideUnselectedStatus.Name = "HideUnselectedStatus";
             this.HideUnselectedStatus.ShowDropDownArrow = false;
             this.HideUnselectedStatus.Size = new System.Drawing.Size(193, 38);
-            this.HideUnselectedStatus.Text = "Hide &Unselected";
-            this.HideUnselectedStatus.ToolTipText = "Hide every row except the ones you have selected (Alt+U)";
+            this.HideUnselectedStatus.Text = "Hide Unselected";
+            this.HideUnselectedStatus.ToolTipText = "Hide every row except the ones you have selected";
             this.HideUnselectedStatus.Click += new System.EventHandler(this.HideUnselectedStatus_Click);
             this.HideUnselectedStatus.BackColor = prettyColours ? Color.FromArgb(216, 242, 178) : SystemColors.Control;
 
@@ -577,16 +577,16 @@ namespace SehensWerte.Controls
             this.HideMatchCellStatus.Name = "HideMatchCellStatus";
             this.HideMatchCellStatus.ShowDropDownArrow = false;
             this.HideMatchCellStatus.Size = new System.Drawing.Size(142, 38);
-            this.HideMatchCellStatus.Text = "Hide Match";
-            this.HideMatchCellStatus.ToolTipText = "Hide rows whose value in this column matches the selected cell(s)";
+            this.HideMatchCellStatus.Text = "Hide &Match";
+            this.HideMatchCellStatus.ToolTipText = "Hide rows whose value in this column matches the selected cell(s) (Alt+M)";
             this.HideMatchCellStatus.Click += new System.EventHandler(this.HideMatchCellStatus_Click);
             this.HideMatchCellStatus.BackColor = prettyColours ? Color.FromArgb(242, 216, 178) : SystemColors.Control;
 
             this.HideUnmatchCellStatus.Name = "HideUnmatchCellStatus";
             this.HideUnmatchCellStatus.ShowDropDownArrow = false;
             this.HideUnmatchCellStatus.Size = new System.Drawing.Size(171, 38);
-            this.HideUnmatchCellStatus.Text = "Hide Unmatch";
-            this.HideUnmatchCellStatus.ToolTipText = "Hide rows whose value in this column differs from the selected cell(s)";
+            this.HideUnmatchCellStatus.Text = "Hide &Unmatch";
+            this.HideUnmatchCellStatus.ToolTipText = "Hide rows whose value in this column differs from the selected cell(s) (Alt+U)";
             this.HideUnmatchCellStatus.Click += new System.EventHandler(this.HideUnmatchCellStatus_Click);
             this.HideUnmatchCellStatus.BackColor = prettyColours ? Color.FromArgb(242, 216, 178) : SystemColors.Control;
 
@@ -722,6 +722,18 @@ namespace SehensWerte.Controls
                 e.Handled = true;
                 e.SuppressKeyPress = true;
             }
+            else if (!inEdit && e.Control && (e.KeyCode == Keys.Oemplus || e.KeyCode == Keys.Add))
+            {
+                AdjustGridFontSize(+1f);
+                e.Handled = true;
+                e.SuppressKeyPress = true;
+            }
+            else if (!inEdit && e.Control && (e.KeyCode == Keys.OemMinus || e.KeyCode == Keys.Subtract))
+            {
+                AdjustGridFontSize(-1f);
+                e.Handled = true;
+                e.SuppressKeyPress = true;
+            }
             else if (Grid.CurrentCell != null)
             {
                 var ee = new DataGridControlCellKeyDownEventArgs()
@@ -732,6 +744,30 @@ namespace SehensWerte.Controls
                 };
                 CellKeyDown.Invoke(this, ee);
                 e.SuppressKeyPress = ee.SuppressKeyPress;
+            }
+        }
+
+        private float m_CellFontDelta = 0f; // Ctrl+'+' / Ctrl+'-' zoom the cell text
+
+        private void AdjustGridFontSize(float delta)
+        {
+            float baseSize = (Grid.DefaultCellStyle.Font ?? Grid.Font).Size;
+            float next = Math.Clamp(m_CellFontDelta + delta, 6f - baseSize, 72f - baseSize);
+            if (next == m_CellFontDelta) return;
+            m_CellFontDelta = next;
+            Grid.Invalidate();
+        }
+
+        private Font ScaledCellFont(Font baseFont, bool italic)
+        {
+            if (m_CellFontDelta == 0f && !italic)
+            {
+                return baseFont;
+            }
+            else
+            {
+                float size = Math.Clamp(baseFont.Size + m_CellFontDelta, 6f, 72f);
+                return new Font(baseFont.FontFamily, size, italic ? baseFont.Style | FontStyle.Italic : baseFont.Style);
             }
         }
 
@@ -747,9 +783,13 @@ namespace SehensWerte.Controls
                 int padding = grid.ColumnHeadersDefaultCellStyle.Padding.Left
                                   + grid.ColumnHeadersDefaultCellStyle.Padding.Right;
 
-                Font font = grid.ColumnHeadersDefaultCellStyle.Font;
-                SizeF headerTextSize = TextRenderer.MeasureText(column.HeaderText, font);
+                Font headerFont = grid.ColumnHeadersDefaultCellStyle.Font;
+                SizeF headerTextSize = TextRenderer.MeasureText(column.HeaderText, headerFont);
                 int headerWidth = (int)Math.Ceiling(headerTextSize.Width) + padding;
+
+                Font baseCellFont = column.InheritedStyle.Font;
+                float cellFontSize = Math.Clamp(baseCellFont.Size + m_CellFontDelta, 6f, 72f);
+                using Font cellFont = new Font(baseCellFont.FontFamily, cellFontSize, baseCellFont.Style);
 
                 ThreadLocal<(Graphics g, int m)> widths = new ThreadLocal<(Graphics g, int m)>(() =>
                     (Graphics.FromImage(new Bitmap(1, 1)), headerWidth), trackAllValues: true
@@ -759,7 +799,7 @@ namespace SehensWerte.Controls
                     if (str != null)
                     {
                         Graphics g = widths.Value.g;
-                        SizeF textSize = g.MeasureString(str, font);
+                        SizeF textSize = g.MeasureString(str, cellFont);
                         int width = (int)Math.Ceiling(textSize.Width) + padding;
                         widths.Value = (g, Math.Max(widths.Value.m, width));
                     }
@@ -1201,7 +1241,7 @@ namespace SehensWerte.Controls
             bool masked = !isNull && realText != "" && (MaskColumns?.Contains(colName) ?? false);
             string displayText = masked ? MaskString : realText;
 
-            Font cellFont = isNull ? new Font(e.CellStyle.Font, FontStyle.Italic) : e.CellStyle.Font;
+            Font cellFont = ScaledCellFont(e.CellStyle.Font, isNull);
             Color textColor = isNull ? NullForeColor : e.CellStyle.ForeColor;
             StringFormat stringFormat = new StringFormat
             {
@@ -1270,7 +1310,7 @@ namespace SehensWerte.Controls
                 {
                     try
                     {
-                        e.Graphics.DrawString("???", new Font(e.CellStyle.Font, FontStyle.Italic), textBrush, textBounds, stringFormat);
+                        e.Graphics.DrawString("Cell content too large", new Font(e.CellStyle.Font, FontStyle.Italic), textBrush, textBounds, stringFormat);
                     }
                     catch { }
                 }
