@@ -198,11 +198,14 @@ namespace SehensWerte.Controls
         private string? m_LiveResizeColumn;
         private int m_LiveResizeStartX = -1;
         private int m_LiveResizeStartWidth = -1;
+        private readonly Dictionary<(string FamilyName, float Size, FontStyle Style), Font> m_CellFontCache = new();
+        private readonly Dictionary<int, SolidBrush> m_SolidBrushCache = new();
 
         protected override void Dispose(bool disposing)
         {
             if (disposing)
             {
+                ClearPaintCaches();
             }
             base.Dispose(disposing);
         }
@@ -755,20 +758,65 @@ namespace SehensWerte.Controls
             float next = Math.Clamp(m_CellFontDelta + delta, 6f - baseSize, 72f - baseSize);
             if (next == m_CellFontDelta) return;
             m_CellFontDelta = next;
+            ClearCellFontCache();
             Grid.Invalidate();
         }
 
-        private Font ScaledCellFont(Font baseFont, bool italic)
+        private Font GetCellFont(Font baseFont, bool italic)
         {
+            // immeasurable speedup, but improved cleanup/dispose
+            Font font = baseFont;
             if (m_CellFontDelta == 0f && !italic)
             {
-                return baseFont;
+                return font;
             }
             else
             {
                 float size = Math.Clamp(baseFont.Size + m_CellFontDelta, 6f, 72f);
-                return new Font(baseFont.FontFamily, size, italic ? baseFont.Style | FontStyle.Italic : baseFont.Style);
+                FontStyle style = italic ? baseFont.Style | FontStyle.Italic : baseFont.Style;
+                var key = (baseFont.FontFamily.Name, size, style);
+                if (m_CellFontCache.TryGetValue(key, out Font? cachedFont) && cachedFont != null)
+                {
+                    font = cachedFont;
+                }
+                else
+                {
+                    font = new Font(baseFont.FontFamily, size, style);
+                    m_CellFontCache[key] = font;
+                }
             }
+            return font;
+        }
+
+        private SolidBrush GetSolidBrush(Color color)
+        {
+            // immeasurable speedup, but improved cleanup/dispose
+            int key = color.ToArgb();
+            if (!m_SolidBrushCache.TryGetValue(key, out SolidBrush? brush))
+            {
+                brush = new SolidBrush(color);
+                m_SolidBrushCache[key] = brush;
+            }
+            return brush;
+        }
+
+        private void ClearCellFontCache()
+        {
+            foreach (Font font in m_CellFontCache.Values)
+            {
+                font.Dispose();
+            }
+            m_CellFontCache.Clear();
+        }
+
+        private void ClearPaintCaches()
+        {
+            ClearCellFontCache();
+            foreach (SolidBrush brush in m_SolidBrushCache.Values)
+            {
+                brush.Dispose();
+            }
+            m_SolidBrushCache.Clear();
         }
 
 
@@ -1216,6 +1264,19 @@ namespace SehensWerte.Controls
         {
             if (e.RowIndex < 0 || e.ColumnIndex < 0) return;
 
+            //Profile?.Enter("Grid_CellPainting");
+            try
+            {
+                PaintGridCell(e);
+            }
+            finally
+            {
+                //Profile?.Exit("Grid_CellPainting");
+            }
+        }
+
+        private void PaintGridCell(DataGridViewCellPaintingEventArgs e)
+        {
             bool selected = e.State.HasFlag(DataGridViewElementStates.Selected);
             e.PaintBackground(e.CellBounds, selected);
             e.Paint(e.ClipBounds, DataGridViewPaintParts.Border);
@@ -1226,12 +1287,12 @@ namespace SehensWerte.Controls
                 var b = a?.Colours?[e.ColumnIndex];
                 if (b != null)
                 {
-                    e.Graphics.FillRectangle(new SolidBrush(b.Value), e.CellBounds);
+                    e.Graphics.FillRectangle(GetSolidBrush(b.Value), e.CellBounds);
                 }
                 Color? hl = MatchHighlight(e.Value?.ToString());
                 if (hl != null)
                 {
-                    e.Graphics.FillRectangle(new SolidBrush(hl.Value), e.CellBounds);
+                    e.Graphics.FillRectangle(GetSolidBrush(hl.Value), e.CellBounds);
                 }
             }
 
@@ -1241,9 +1302,9 @@ namespace SehensWerte.Controls
             bool masked = !isNull && realText != "" && (MaskColumns?.Contains(colName) ?? false);
             string displayText = masked ? MaskString : realText;
 
-            Font cellFont = ScaledCellFont(e.CellStyle.Font, isNull);
+            Font cellFont = GetCellFont(e.CellStyle.Font, isNull);
             Color textColor = isNull ? NullForeColor : e.CellStyle.ForeColor;
-            StringFormat stringFormat = new StringFormat
+            using StringFormat stringFormat = new StringFormat
             {
                 Trimming = StringTrimming.EllipsisCharacter,
                 FormatFlags = NumericGrid ? StringFormatFlags.NoWrap : 0
@@ -1280,21 +1341,22 @@ namespace SehensWerte.Controls
                 e.Handled = true;
                 return;
             }
-            Region originalClip = e.Graphics.Clip.Clone();
-            e.Graphics.SetClip(e.CellBounds, System.Drawing.Drawing2D.CombineMode.Intersect);
-
-            StringDiff.Diffs? diff = null;
-            if (!selected && !masked && DataGridBind?.FilteredData.Count > e.RowIndex)
+            using Region originalClip = e.Graphics.Clip.Clone();
+            try
             {
-                diff = DataGridBind.FilteredData[e.RowIndex]?.Diffs?[e.ColumnIndex];
-                if (diff != null && diff.LeftText != displayText)
+                e.Graphics.SetClip(e.CellBounds, System.Drawing.Drawing2D.CombineMode.Intersect);
+
+                StringDiff.Diffs? diff = null;
+                if (!selected && !masked && DataGridBind?.FilteredData.Count > e.RowIndex)
                 {
-                    diff = null;
+                    diff = DataGridBind.FilteredData[e.RowIndex]?.Diffs?[e.ColumnIndex];
+                    if (diff != null && diff.LeftText != displayText)
+                    {
+                        diff = null;
+                    }
                 }
-            }
 
-            using (SolidBrush textBrush = new SolidBrush(textColor))
-            {
+                SolidBrush textBrush = GetSolidBrush(textColor);
                 try
                 {
                     if (diff == null)
@@ -1310,18 +1372,21 @@ namespace SehensWerte.Controls
                 {
                     try
                     {
-                        e.Graphics.DrawString("Cell content too large", new Font(e.CellStyle.Font, FontStyle.Italic), textBrush, textBounds, stringFormat);
+                        e.Graphics.DrawString("Cell content too large", GetCellFont(e.CellStyle.Font, true), textBrush, textBounds, stringFormat);
                     }
                     catch { }
                 }
             }
-            e.Graphics.Clip = originalClip;
+            finally
+            {
+                e.Graphics.Clip = originalClip;
+            }
             e.Handled = true;
         }
 
         private static readonly Color DiffChangedForeColor = Color.Red;
 
-        private static void DrawDiffString(Graphics g, StringDiff.Diffs diff, Font font, SolidBrush textBrush, RectangleF textBounds, StringFormat baseFormat)
+        private void DrawDiffString(Graphics g, StringDiff.Diffs diff, Font font, SolidBrush textBrush, RectangleF textBounds, StringFormat baseFormat)
         {
             string leftText = diff.LeftText;
             g.DrawString(leftText, font, textBrush, textBounds, baseFormat);
@@ -1379,8 +1444,8 @@ namespace SehensWerte.Controls
                 }
             }
 
-            using SolidBrush brush = new SolidBrush(DiffChangedForeColor);
-            Region savedClip = g.Clip;
+            SolidBrush brush = GetSolidBrush(DiffChangedForeColor);
+            using Region savedClip = g.Clip;
             try
             {
                 g.IntersectClip(union);
@@ -1399,7 +1464,7 @@ namespace SehensWerte.Controls
             {
                 //var index = (e.RowIndex + 1).ToString();
                 int index = ((BoundDataRow)grid.Rows[e.RowIndex].DataBoundItem).Index + 1;
-                var centerFormat = new StringFormat()
+                using StringFormat centerFormat = new StringFormat()
                 {
                     Alignment = StringAlignment.Center,
                     LineAlignment = StringAlignment.Center
