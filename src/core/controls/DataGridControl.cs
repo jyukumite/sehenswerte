@@ -85,6 +85,8 @@ namespace SehensWerte.Controls
         private ToolStripDropDownButton UniqueCellStatus;
         private ToolStripDropDownButton DecimateCellStatus;
         private ToolStripDropDownButton TransposeGrid;
+        private ToolStripDropDownButton HighlightButton;
+        private ToolStripDropDownButton ColumnsButton;
         private ToolStripDropDownButton SaveCsvButton;
         private ToolStripDropDownButton LoadCsvButton;
         private System.Windows.Forms.ToolTip HoverTip;
@@ -95,6 +97,101 @@ namespace SehensWerte.Controls
         private bool m_ResizingColumn = false;
         private string? m_ResizingColumnName;
         private bool m_ApplyingProgrammaticWidths = false;
+
+        // cells containing one of these substrings get a coloured background
+        private readonly List<(string Text, Color Color)> m_Highlights = new();
+        private (string Text, Color Color)? m_PreviewHighlight = null;
+        private static readonly Color[] HighlightPalette = new[]
+        {
+            Color.FromArgb(255, 245, 157),  // yellow
+            Color.FromArgb(178, 235, 178),  // green
+            Color.FromArgb(178, 218, 245),  // blue
+            Color.FromArgb(245, 196, 224),  // pink
+            Color.FromArgb(245, 196, 178),  // salmon
+            Color.FromArgb(218, 198, 245),  // lavender
+            Color.FromArgb(178, 245, 232),  // cyan
+            Color.FromArgb(245, 232, 178),  // khaki
+        };
+
+        private Color NextHighlightColor()
+        {
+            return HighlightPalette[m_Highlights.Count % HighlightPalette.Length];
+        }
+
+        // Apply a highlight (used both by user OK and by redo). Does NOT push history.
+        internal void AddHighlightInternal(string text)
+        {
+            if (string.IsNullOrEmpty(text)) return;
+            m_Highlights.Add((text, NextHighlightColor()));
+            Grid.Invalidate();
+        }
+
+        // Drop all highlights (used when replay rebuilds the set from history).
+        internal void ClearHighlightsInternal()
+        {
+            m_Highlights.Clear();
+            Grid.Invalidate();
+        }
+
+        // Pop the most recently added highlight (used by undo). Undo is LIFO, so the
+        // last entry is always the one being undone - no need to search by text.
+        internal void RemoveLastHighlightInternal()
+        {
+            if (m_Highlights.Count == 0) return;
+            m_Highlights.RemoveAt(m_Highlights.Count - 1);
+            Grid.Invalidate();
+        }
+
+        private Color? MatchHighlight(string? cellText)
+        {
+            if (string.IsNullOrEmpty(cellText)) return null;
+            // Most recent committed highlight wins on overlap, then preview.
+            for (int loop = m_Highlights.Count - 1; loop >= 0; loop--)
+            {
+                if (cellText.Contains(m_Highlights[loop].Text, StringComparison.OrdinalIgnoreCase))
+                {
+                    return m_Highlights[loop].Color;
+                }
+            }
+            if (m_PreviewHighlight is { } prev && cellText.Contains(prev.Text, StringComparison.OrdinalIgnoreCase))
+            {
+                return prev.Color;
+            }
+            return null;
+        }
+
+        // Scroll the first cell (top-to-bottom, left-to-right) containing the substring
+        // into view, so the live highlight preview jumps to the first match as you type.
+        private void ScrollFirstHighlightIntoView(string text)
+        {
+            if (string.IsNullOrEmpty(text) || DataGridBind == null) return;
+            var rows = DataGridBind.FilteredData;
+            int colCount = DataGridBind.ColumnNames.Count;
+            for (int r = 0; r < rows.Count; r++)
+            {
+                for (int c = 0; c < colCount; c++)
+                {
+                    var value = rows[r].Column(c);
+                    if (string.IsNullOrEmpty(value)
+                        || !value.Contains(text, StringComparison.OrdinalIgnoreCase)) continue;
+                    try
+                    {
+                        string colName = DataGridBind.ColumnNames[c];
+                        int colIndex = Grid.Columns.Contains(colName) ? Grid.Columns[colName].Index : -1;
+                        if (Grid.GetRowDisplayRectangle(r, false).IsEmpty)
+                        {
+                            Grid.FirstDisplayedScrollingRowIndex = r;
+                        }
+                        if (colIndex >= 0 && Grid.GetColumnDisplayRectangle(colIndex, false).IsEmpty)
+                        {
+                            Grid.FirstDisplayedScrollingColumnIndex = colIndex;
+                        }
+                    }
+                    catch { }
+                    return;
+                }
+            }
+        }
         private string? m_DraggingColumnName;
         private int m_DraggingStartX = -1;
         private int m_DraggingDropX = -1; // x of drop indicator, -1 = hidden
@@ -108,6 +205,21 @@ namespace SehensWerte.Controls
             {
             }
             base.Dispose(disposing);
+        }
+
+        // Make Alt+<mnemonic> on any status-strip button (e.g. &Columns, &Show All) work when the grid has focus
+        protected override bool ProcessMnemonic(char charCode)
+        {
+            foreach (ToolStripItem item in StatusStrip.Items)
+            {
+                if (!item.Enabled || !item.Visible) continue;
+                if (Control.IsMnemonic(charCode, item.Text ?? ""))
+                {
+                    item.PerformClick();
+                    return true;
+                }
+            }
+            return base.ProcessMnemonic(charCode);
         }
 
         public static implicit operator DataGridView(DataGridControl d) => d.Grid; // helper, perhaps confusing and undiscoverable
@@ -150,6 +262,8 @@ namespace SehensWerte.Controls
             this.UniqueCellStatus = new System.Windows.Forms.ToolStripDropDownButton();
             this.DecimateCellStatus = new System.Windows.Forms.ToolStripDropDownButton();
             this.TransposeGrid = new System.Windows.Forms.ToolStripDropDownButton();
+            this.HighlightButton = new System.Windows.Forms.ToolStripDropDownButton();
+            this.ColumnsButton = new System.Windows.Forms.ToolStripDropDownButton();
             this.SaveCsvButton = new System.Windows.Forms.ToolStripDropDownButton();
             this.LoadCsvButton = new System.Windows.Forms.ToolStripDropDownButton();
 
@@ -351,7 +465,7 @@ namespace SehensWerte.Controls
             this.HoverHideTimer.Tick += (s, e) => { HoverHide(); };
 
             this.StatusStrip.ImageScalingSize = new System.Drawing.Size(24, 24);
-            this.StatusStrip.Items.AddRange(new System.Windows.Forms.ToolStripItem[] {
+            this.StatusStrip.Items.AddRange(new System.Windows.Forms.ToolStripItem[] { // right to left
                     this.StatusFilterText,
                     this.ShowAllStatus,
                     this.UndoFilterStatus,
@@ -367,6 +481,8 @@ namespace SehensWerte.Controls
                     this.UniqueCellStatus,
                     this.DecimateCellStatus,
                     this.TransposeGrid,
+                    this.HighlightButton,
+                    this.ColumnsButton,
                     this.SaveCsvButton,
                     this.LoadCsvButton});
             this.StatusStrip.LayoutStyle = System.Windows.Forms.ToolStripLayoutStyle.HorizontalStackWithOverflow;
@@ -376,6 +492,8 @@ namespace SehensWerte.Controls
             this.StatusStrip.RightToLeft = System.Windows.Forms.RightToLeft.Yes;
             this.StatusStrip.Size = new System.Drawing.Size(1720, 42);
             this.StatusStrip.SizingGrip = false;
+            // StatusStrip defaults this to false (unlike ToolStrip), so button ToolTipText never shows.
+            this.StatusStrip.ShowItemToolTips = true;
             this.StatusStrip.TabIndex = 13;
             this.StatusStrip.Text = "WindowStatusStrip";
 
@@ -386,7 +504,8 @@ namespace SehensWerte.Controls
             this.ShowAllStatus.Name = "ShowAllStatus";
             this.ShowAllStatus.ShowDropDownArrow = false;
             this.ShowAllStatus.Size = new System.Drawing.Size(110, 38);
-            this.ShowAllStatus.Text = "&Show All";
+            this.ShowAllStatus.Text = "Show All";
+            this.ShowAllStatus.ToolTipText = "Clear all filters and bring every hidden row back into view";
             this.ShowAllStatus.Click += new System.EventHandler(this.ShowAllStatus_Click);
             this.ShowAllStatus.BackColor = prettyColours ? Color.FromArgb(216, 208, 242) : SystemColors.Control;
 
@@ -394,6 +513,7 @@ namespace SehensWerte.Controls
             this.UndoFilterStatus.ShowDropDownArrow = false;
             this.UndoFilterStatus.Size = new System.Drawing.Size(76, 38);
             this.UndoFilterStatus.Text = "Undo";
+            this.UndoFilterStatus.ToolTipText = "Undo the last filter, sort, or layout change (Ctrl+Z)";
             this.UndoFilterStatus.Click += new System.EventHandler(this.UndoFilterStatus_Click);
             this.UndoFilterStatus.BackColor = prettyColours ? Color.FromArgb(216, 208, 242) : SystemColors.Control;
 
@@ -401,6 +521,7 @@ namespace SehensWerte.Controls
             this.RedoFilterStatus.ShowDropDownArrow = false;
             this.RedoFilterStatus.Size = new System.Drawing.Size(76, 38);
             this.RedoFilterStatus.Text = "Redo";
+            this.RedoFilterStatus.ToolTipText = "Reapply the change you just undid (Ctrl+Y / Ctrl+Shift+Z)";
             this.RedoFilterStatus.Visible = false;
             this.RedoFilterStatus.Click += new System.EventHandler(this.RedoFilterStatus_Click);
             this.RedoFilterStatus.BackColor = prettyColours ? Color.FromArgb(216, 208, 242) : SystemColors.Control;
@@ -408,7 +529,8 @@ namespace SehensWerte.Controls
             this.HideSelectedStatus.Name = "HideSelectedStatus";
             this.HideSelectedStatus.ShowDropDownArrow = false;
             this.HideSelectedStatus.Size = new System.Drawing.Size(166, 38);
-            this.HideSelectedStatus.Text = "&Hide Selected";
+            this.HideSelectedStatus.Text = "Hide &Selected";
+            this.HideSelectedStatus.ToolTipText = "Hide the rows you have selected (Alt+S)";
             this.HideSelectedStatus.Click += new System.EventHandler(this.HideSelectedStatus_Click);
             this.HideSelectedStatus.BackColor = prettyColours ? Color.FromArgb(216, 242, 178) : SystemColors.Control;
 
@@ -416,20 +538,23 @@ namespace SehensWerte.Controls
             this.HideUnselectedStatus.ShowDropDownArrow = false;
             this.HideUnselectedStatus.Size = new System.Drawing.Size(193, 38);
             this.HideUnselectedStatus.Text = "Hide &Unselected";
+            this.HideUnselectedStatus.ToolTipText = "Hide every row except the ones you have selected (Alt+U)";
             this.HideUnselectedStatus.Click += new System.EventHandler(this.HideUnselectedStatus_Click);
             this.HideUnselectedStatus.BackColor = prettyColours ? Color.FromArgb(216, 242, 178) : SystemColors.Control;
 
             this.HideAboveStatus.Name = "HideAboveStatus";
             this.HideAboveStatus.ShowDropDownArrow = false;
             this.HideAboveStatus.Size = new System.Drawing.Size(143, 38);
-            this.HideAboveStatus.Text = "Hide &Above";
+            this.HideAboveStatus.Text = "Hide Above";
+            this.HideAboveStatus.ToolTipText = "Hide all rows above the selected row";
             this.HideAboveStatus.Click += new System.EventHandler(this.HideAboveStatus_Click);
             this.HideAboveStatus.BackColor = prettyColours ? Color.FromArgb(178, 242, 216) : SystemColors.Control;
 
             this.HideBelowStatus.Name = "HideBelowStatus";
             this.HideBelowStatus.ShowDropDownArrow = false;
             this.HideBelowStatus.Size = new System.Drawing.Size(139, 38);
-            this.HideBelowStatus.Text = "Hide &Below";
+            this.HideBelowStatus.Text = "Hide Below";
+            this.HideBelowStatus.ToolTipText = "Hide all rows below the selected row";
             this.HideBelowStatus.Click += new System.EventHandler(this.HideBelowStatus_Click);
             this.HideBelowStatus.BackColor = prettyColours ? Color.FromArgb(178, 242, 216) : SystemColors.Control;
 
@@ -437,6 +562,7 @@ namespace SehensWerte.Controls
             this.HideByRegexStatus.ShowDropDownArrow = false;
             this.HideByRegexStatus.Size = new System.Drawing.Size(139, 38);
             this.HideByRegexStatus.Text = "Regex Hide";
+            this.HideByRegexStatus.ToolTipText = "Hide rows whose cell in the selected column matches a regex";
             this.HideByRegexStatus.Click += new System.EventHandler(this.HideByRegexStatus_Click);
             this.HideByRegexStatus.BackColor = prettyColours ? Color.FromArgb(242, 232, 178) : SystemColors.Control;
 
@@ -444,6 +570,7 @@ namespace SehensWerte.Controls
             this.ShowByRegexStatus.ShowDropDownArrow = false;
             this.ShowByRegexStatus.Size = new System.Drawing.Size(147, 38);
             this.ShowByRegexStatus.Text = "Regex Show";
+            this.ShowByRegexStatus.ToolTipText = "Show only rows whose cell in the selected column matches a regex (Ctrl+F)";
             this.ShowByRegexStatus.Click += new System.EventHandler(this.ShowByRegexStatus_Click);
             this.ShowByRegexStatus.BackColor = prettyColours ? Color.FromArgb(242, 232, 178) : SystemColors.Control;
 
@@ -451,6 +578,7 @@ namespace SehensWerte.Controls
             this.HideMatchCellStatus.ShowDropDownArrow = false;
             this.HideMatchCellStatus.Size = new System.Drawing.Size(142, 38);
             this.HideMatchCellStatus.Text = "Hide Match";
+            this.HideMatchCellStatus.ToolTipText = "Hide rows whose value in this column matches the selected cell(s)";
             this.HideMatchCellStatus.Click += new System.EventHandler(this.HideMatchCellStatus_Click);
             this.HideMatchCellStatus.BackColor = prettyColours ? Color.FromArgb(242, 216, 178) : SystemColors.Control;
 
@@ -458,34 +586,55 @@ namespace SehensWerte.Controls
             this.HideUnmatchCellStatus.ShowDropDownArrow = false;
             this.HideUnmatchCellStatus.Size = new System.Drawing.Size(171, 38);
             this.HideUnmatchCellStatus.Text = "Hide Unmatch";
+            this.HideUnmatchCellStatus.ToolTipText = "Hide rows whose value in this column differs from the selected cell(s)";
             this.HideUnmatchCellStatus.Click += new System.EventHandler(this.HideUnmatchCellStatus_Click);
             this.HideUnmatchCellStatus.BackColor = prettyColours ? Color.FromArgb(242, 216, 178) : SystemColors.Control;
 
             this.UniqueCellStatus.Name = "UniqueCellStatus";
             this.UniqueCellStatus.ShowDropDownArrow = false;
             this.UniqueCellStatus.Size = new System.Drawing.Size(171, 38);
-            this.UniqueCellStatus.Text = "Unique";
+            this.UniqueCellStatus.Text = "Uni&que";
+            this.UniqueCellStatus.ToolTipText = "Hide duplicate rows, keeping the first of each value in this column (Alt+Q)";
             this.UniqueCellStatus.Click += new System.EventHandler(this.UniqueCellStatus_Click);
             this.UniqueCellStatus.BackColor = prettyColours ? Color.FromArgb(242, 196, 208) : SystemColors.Control;
 
             this.DecimateCellStatus.Name = "DecimateCellStatus";
             this.DecimateCellStatus.ShowDropDownArrow = false;
             this.DecimateCellStatus.Size = new System.Drawing.Size(171, 38);
-            this.DecimateCellStatus.Text = "Decimate";
+            this.DecimateCellStatus.Text = "&Decimate";
+            this.DecimateCellStatus.ToolTipText = "Thin the view to every 10th visible row, hiding the rest (Alt+D)";
             this.DecimateCellStatus.Click += new System.EventHandler(this.DecimateCellStatus_Click);
             this.DecimateCellStatus.BackColor = prettyColours ? Color.FromArgb(242, 196, 208) : SystemColors.Control;
 
             this.TransposeGrid.Name = "TransposeGrid";
             this.TransposeGrid.ShowDropDownArrow = false;
             this.TransposeGrid.Size = new System.Drawing.Size(171, 38);
-            this.TransposeGrid.Text = "Transpose";
+            this.TransposeGrid.Text = "&Transpose";
+            this.TransposeGrid.ToolTipText = "Swap rows and columns; click again to switch back (Alt+T)";
             this.TransposeGrid.Click += new System.EventHandler(this.TransposeGrid_Click);
             this.TransposeGrid.BackColor = prettyColours ? Color.FromArgb(242, 196, 208) : SystemColors.Control;
+
+            this.HighlightButton.Name = "HighlightButton";
+            this.HighlightButton.ShowDropDownArrow = false;
+            this.HighlightButton.Size = new System.Drawing.Size(140, 38);
+            this.HighlightButton.Text = "&Highlight";
+            this.HighlightButton.ToolTipText = "Colour any cell containing a substring you type; repeat to stack colours (Alt+H)";
+            this.HighlightButton.Click += new System.EventHandler(this.HighlightButton_Click);
+            this.HighlightButton.BackColor = prettyColours ? Color.FromArgb(255, 240, 180) : SystemColors.Control;
+
+            this.ColumnsButton.Name = "ColumnsButton";
+            this.ColumnsButton.ShowDropDownArrow = false;
+            this.ColumnsButton.Size = new System.Drawing.Size(140, 38);
+            this.ColumnsButton.Text = "&Columns";
+            this.ColumnsButton.ToolTipText = "Pick which columns are shown or hidden (Alt+C)";
+            this.ColumnsButton.Click += new System.EventHandler(this.ColumnsButton_Click);
+            this.ColumnsButton.BackColor = prettyColours ? Color.FromArgb(216, 232, 218) : SystemColors.Control;
 
             this.SaveCsvButton.Name = "SaveCsv";
             this.SaveCsvButton.ShowDropDownArrow = false;
             this.SaveCsvButton.Size = new System.Drawing.Size(171, 38);
             this.SaveCsvButton.Text = "Save";
+            this.SaveCsvButton.ToolTipText = "Save the currently visible rows and columns to a CSV file (Ctrl+S)";
             this.SaveCsvButton.Click += new System.EventHandler(this.SaveCsv_Click);
             this.SaveCsvButton.BackColor = prettyColours ? Color.FromArgb(218, 216, 232) : SystemColors.Control;
 
@@ -493,6 +642,7 @@ namespace SehensWerte.Controls
             this.LoadCsvButton.ShowDropDownArrow = false;
             this.LoadCsvButton.Size = new System.Drawing.Size(171, 38);
             this.LoadCsvButton.Text = "Load";
+            this.LoadCsvButton.ToolTipText = "Load a CSV file into the grid (Ctrl+O)";
             this.LoadCsvButton.Click += new System.EventHandler(this.LoadCsv_Click);
             this.LoadCsvButton.BackColor = prettyColours ? Color.FromArgb(218, 216, 232) : SystemColors.Control;
 
@@ -557,6 +707,18 @@ namespace SehensWerte.Controls
             else if (!inEdit && e.Control && e.KeyCode == Keys.F)
             {
                 ShowByRegexStatus_Click(this, EventArgs.Empty);
+                e.Handled = true;
+                e.SuppressKeyPress = true;
+            }
+            else if (!inEdit && e.Control && e.KeyCode == Keys.S && !e.Shift)
+            {
+                SaveCsv_Click(this, EventArgs.Empty);
+                e.Handled = true;
+                e.SuppressKeyPress = true;
+            }
+            else if (!inEdit && e.Control && e.KeyCode == Keys.O && !e.Shift)
+            {
+                LoadCsv_Click(this, EventArgs.Empty);
                 e.Handled = true;
                 e.SuppressKeyPress = true;
             }
@@ -901,6 +1063,81 @@ namespace SehensWerte.Controls
             }, "Transpose grid");
         }
 
+        private void HighlightButton_Click(object? sender, EventArgs e)
+        {
+            this.ExceptionToMessagebox(() =>
+            {
+                if (DataGridBind == null) return;
+
+                var color = NextHighlightColor();
+                var form = new InputFieldForm
+                {
+                    Title = "Highlight",
+                    Prompt = "Substring to highlight (any cell that contains it):",
+                };
+                form.PreviewChanged += (text) =>
+                {
+                    m_PreviewHighlight = string.IsNullOrEmpty(text) ? null : (text, color);
+                    ScrollFirstHighlightIntoView(text);
+                    Grid.Invalidate();
+                };
+                form.ShowDialog(this);
+
+                m_PreviewHighlight = null;
+                if (form.Result == DialogResult.OK && !string.IsNullOrEmpty(form.ResultString))
+                {
+                    DataGridBind.PushSnapshot(new DataGridControlHistory.Snapshot(DataGridControlHistory.Snapshot.Operation.Highlight)
+                    {
+                        Pattern = form.ResultString,
+                    });
+                    AddHighlightInternal(form.ResultString);
+                }
+                Grid.Invalidate();
+            }, "Highlight");
+        }
+
+        private void ColumnsButton_Click(object? sender, EventArgs e)
+        {
+            this.ExceptionToMessagebox(() =>
+            {
+                if (DataGridBind == null) return;
+
+                var allCols = DataGridBind.ColumnNames.ToList();
+                if (allCols.Count == 0) return;
+
+                var visible = allCols.Where(c => !IsColumnCollapsed(c)).ToList();
+
+                var form = new CheckBoxListForm();
+                form.Title = "Columns";
+                form.Prompt = "Tick columns to show; Enter or OK scrolls to the topmost match.";
+                form.Selection = allCols;
+                form.CheckedSelection = visible;
+                form.ShowDialog();
+                if (form.Result != DialogResult.OK) return;
+
+                var nowChecked = new HashSet<string>(form.CheckedSelection);
+                foreach (var col in allCols)
+                {
+                    bool wantVisible = nowChecked.Contains(col);
+                    bool isCollapsed = IsColumnCollapsed(col);
+                    if (wantVisible && isCollapsed)
+                    {
+                        ExpandColumn(col);
+                    }
+                    else if (!wantVisible && !isCollapsed)
+                    {
+                        CollapseColumn(col);
+                    }
+                }
+
+                var topmost = form.TopmostItem;
+                if (topmost != null)
+                {
+                    ScrollColumnIntoView(topmost);
+                }
+            }, "Columns");
+        }
+
         private SaveFileDialog m_SaveFileDialog = new SaveFileDialog();
         private void SaveCsv_Click(object? sender, EventArgs e)
         {
@@ -950,6 +1187,11 @@ namespace SehensWerte.Controls
                 if (b != null)
                 {
                     e.Graphics.FillRectangle(new SolidBrush(b.Value), e.CellBounds);
+                }
+                Color? hl = MatchHighlight(e.Value?.ToString());
+                if (hl != null)
+                {
+                    e.Graphics.FillRectangle(new SolidBrush(hl.Value), e.CellBounds);
                 }
             }
 
@@ -1142,6 +1384,12 @@ namespace SehensWerte.Controls
             int showing = DataGridBind?.FilteredData.Count ?? 0;
             StatusFilterText.Text = (showing == total) ? $"{total}rows" : $"{showing}/{total}";
             StatusFilterText.Visible = true;
+
+            // Transpose turns rows into columns; the col0..col99 binding caps display at 100.
+            TransposeGrid.Enabled = showing <= 100;
+            TransposeGrid.ToolTipText = TransposeGrid.Enabled
+                ? "Swap rows and columns; click again to switch back (Alt+T)"
+                : "Disabled: transpose would create more than 100 columns";
         }
 
 
@@ -1431,6 +1679,45 @@ namespace SehensWerte.Controls
             finally
             {
                 m_ApplyingProgrammaticWidths = false;
+            }
+        }
+
+        public void ExpandColumn(string column, int width = 100)
+        {
+            if (!Grid.Columns.Contains(column)) return;
+            DataGridBind?.PushSnapshot(new DataGridControlHistory.Snapshot(DataGridControlHistory.Snapshot.Operation.ColumnResize)
+            {
+                Column = column,
+                Width = width
+            });
+            m_ApplyingProgrammaticWidths = true;
+            try
+            {
+                Grid.Columns[column].Width = width;
+            }
+            finally
+            {
+                m_ApplyingProgrammaticWidths = false;
+            }
+        }
+
+        public bool IsColumnCollapsed(string column)
+        {
+            if (!Grid.Columns.Contains(column)) return false;
+            var c = Grid.Columns[column];
+            return c.Width <= c.MinimumWidth;
+        }
+
+        public void ScrollColumnIntoView(string column)
+        {
+            if (!Grid.Columns.Contains(column)) return;
+            try
+            {
+                Grid.FirstDisplayedScrollingColumnIndex = Grid.Columns[column].Index;
+            }
+            catch
+            {
+                // Index can be invalid mid-rebind; ignore.
             }
         }
 

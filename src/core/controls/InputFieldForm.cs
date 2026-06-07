@@ -34,6 +34,8 @@ namespace SehensWerte.Controls
         public DialogResult Result => ResultButton;
         public string ResultString => EditResult.Text;
 
+        public event Action<string>? PreviewChanged;
+
         public string DefaultResponse { set { EditResult.Text = value; EditResult.SelectAll(); } }
         public bool Password
         {
@@ -69,6 +71,8 @@ namespace SehensWerte.Controls
                     }
                 }
             };
+
+            EditResult.TextChanged += (sender, e) => PreviewChanged?.Invoke(EditResult.Text);
 
             EditResult.Pasting += (sender, e) =>
             {

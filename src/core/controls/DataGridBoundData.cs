@@ -656,6 +656,10 @@ namespace SehensWerte.Controls
                 {
                     ApplyVisible(snap);
                 }
+                if (snap.Kind == DataGridControlHistory.Snapshot.Operation.Highlight)
+                {
+                    DataGrid?.RemoveLastHighlightInternal();
+                }
                 for (int loop = snap.AddedColumns.Count - 1; loop >= 0; loop--)
                 {
                     RemoveColumn(snap.AddedColumns[loop]);
@@ -1354,6 +1358,7 @@ namespace SehensWerte.Controls
             {
                 m_History.History.Clear();
                 m_RedoStack.History.Clear();
+                DataGrid?.ClearHighlightsInternal();
                 foreach (var v in UnfilteredData)
                 {
                     v.Visible = true;
@@ -1452,6 +1457,12 @@ namespace SehensWerte.Controls
                         case DataGridControlHistory.Snapshot.Operation.Transpose:
                             Transpose();
                             break;
+                        case DataGridControlHistory.Snapshot.Operation.Highlight:
+                            {
+                                DataGrid?.AddHighlightInternal(snap.Pattern);
+                                PushSnapshot(snap);
+                                break;
+                            }
                         case DataGridControlHistory.Snapshot.Operation.SplitColumn:
                             if (snap.SplitRecipe == null)
                             {

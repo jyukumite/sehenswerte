@@ -25,13 +25,14 @@ namespace SehensWerte.Controls
                 Transpose,
                 SplitColumn,
                 MoveColumn,
+                Highlight,
             }
 
             public Operation Kind;
             public string Column = "";
             public List<string> AddedColumns = new();
             public ListSortDirection Direction = ListSortDirection.Ascending; // ApplySort
-            public string Pattern = "";   // regex
+            public string Pattern = "";   // regex / Highlight substring
             public string AnchorValue = ""; // HideRowsAbove/Below: cell value at click time
             public int Row = -1; // HideRowsAbove/Below positional fallback
             public int Width = -1; // ColumnResize
