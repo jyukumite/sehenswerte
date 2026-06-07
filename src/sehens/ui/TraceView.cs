@@ -204,6 +204,7 @@ namespace SehensWerte.Controls.Sehens
             XYCurve,
             XYZProjection,
             FFT2D,
+            Spectral,
         }
         private PaintModes m_PaintMode = PaintModes.PolygonDigital;
         [XmlSave]
@@ -216,6 +217,9 @@ namespace SehensWerte.Controls.Sehens
                 if (m_PaintMode == value) return;
                 lock (Samples.DataLock)
                 {
+                    // Spectral forces its own FFT window (see ExecuteFft)
+                    bool spectralChanged = (m_PaintMode == PaintModes.Spectral) != (value == PaintModes.Spectral);
+
                     m_PaintMode = value;
                     ClearPeakHold();
                     switch (m_PaintMode)
@@ -231,8 +235,13 @@ namespace SehensWerte.Controls.Sehens
                         case PaintModes.PolygonDigital:
                         case PaintModes.PolygonContinuous:
                         case PaintModes.PeakHold:
+                        case PaintModes.Spectral:
                         case PaintModes.Points:
                         case PaintModes.PointsIfChanged: Painter = new Paint2dTrace(); break;
+                    }
+                    if (spectralChanged)
+                    {
+                        BeforeZoomCalculateRequired();
                     }
                     RecalculateProjectionRequired();
                     Scope.ViewNeedsRepaint(this);
@@ -300,17 +309,23 @@ namespace SehensWerte.Controls.Sehens
         private double m_XYZZoom = 1.0;
         private double m_XYZPan = 0.0;
 
-        [XmlSave] [AutoEditor.Hidden]
+        [XmlSave]
+        [AutoEditor.Hidden]
         public double XYXZoom { get => m_XYXZoom; set { double v = Math.Max(1e-6, Math.Min(1.0, value)); if (m_XYXZoom != v) { m_XYXZoom = v; Scope?.ViewNeedsRepaint(this); } } }
-        [XmlSave] [AutoEditor.Hidden]
+        [XmlSave]
+        [AutoEditor.Hidden]
         public double XYXPan { get => m_XYXPan; set { double v = Math.Max(0.0, Math.Min(1.0, value)); if (m_XYXPan != v) { m_XYXPan = v; Scope?.ViewNeedsRepaint(this); } } }
-        [XmlSave] [AutoEditor.Hidden]
+        [XmlSave]
+        [AutoEditor.Hidden]
         public double XYYZoom { get => m_XYYZoom; set { double v = Math.Max(1e-6, Math.Min(1.0, value)); if (m_XYYZoom != v) { m_XYYZoom = v; Scope?.ViewNeedsRepaint(this); } } }
-        [XmlSave] [AutoEditor.Hidden]
+        [XmlSave]
+        [AutoEditor.Hidden]
         public double XYYPan { get => m_XYYPan; set { double v = Math.Max(0.0, Math.Min(1.0, value)); if (m_XYYPan != v) { m_XYYPan = v; Scope?.ViewNeedsRepaint(this); } } }
-        [XmlSave] [AutoEditor.Hidden]
+        [XmlSave]
+        [AutoEditor.Hidden]
         public double XYZZoom { get => m_XYZZoom; set { double v = Math.Max(1e-6, Math.Min(1.0, value)); if (m_XYZZoom != v) { m_XYZZoom = v; Scope?.ViewNeedsRepaint(this); } } }
-        [XmlSave] [AutoEditor.Hidden]
+        [XmlSave]
+        [AutoEditor.Hidden]
         public double XYZPan { get => m_XYZPan; set { double v = Math.Max(0.0, Math.Min(1.0, value)); if (m_XYZPan != v) { m_XYZPan = v; Scope?.ViewNeedsRepaint(this); } } }
 
         public bool IsXYMode =>
@@ -540,7 +555,7 @@ namespace SehensWerte.Controls.Sehens
             {
                 if (m_AudioAfterFilter == value) return;
                 m_AudioAfterFilter = value;
-                if (IsPlaying) 
+                if (IsPlaying)
                 {
                     StartPlayback();
                 }
@@ -1726,9 +1741,13 @@ namespace SehensWerte.Controls.Sehens
                 m_Fft = new Fftw(input.Length);
             }
             m_FftInputBins = input.Length;
-            if (FftWindow != SampleWindow.WindowType.Rectangular)
+            // Tukey window to suppress edge-discontinuity leakage.
+            SampleWindow.WindowType window = m_PaintMode == PaintModes.Spectral && FftWindow == SampleWindow.WindowType.Rectangular
+                ? SampleWindow.WindowType.FrontBackQuarterRaisedCosine
+                : FftWindow;
+            if (window != SampleWindow.WindowType.Rectangular)
             {
-                input = input.ElementProduct(SampleWindow.GenerateWindow(input.Length, FftWindow));
+                input = input.ElementProduct(SampleWindow.GenerateWindow(input.Length, window));
             }
             m_Fft.ExecuteForward(input);
             double[] result;

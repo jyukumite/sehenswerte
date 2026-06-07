@@ -332,32 +332,64 @@ namespace SehensWerte.Controls.Sehens
                 Project2dCurves(samples, info.View0, info.ProjectionArea, info.View0.HighestValue, info.View0.LowestValue, info.LeftSampleNumberValue, info.RightSampleNumberValue);
             }
 
-            bool dots = info.View0.PaintMode == TraceView.PaintModes.Points || info.View0.PaintMode == TraceView.PaintModes.PointsIfChanged;
-            if (DrawnPolygon != null && !dots && DrawnPolygon.Length > 0)
+            if (info.View0.PaintMode == TraceView.PaintModes.Spectral)
             {
-                using Brush brush = new SolidBrush(InterpolateColour(info.Skin.BackgroundColour, info.View0.Colour, 0, 1));
+                PaintSpectral(info, graphics);
+                PaintPiP(info, graphics);
+            }
+            else
+            {
+                bool dots = info.View0.PaintMode == TraceView.PaintModes.Points || info.View0.PaintMode == TraceView.PaintModes.PointsIfChanged;
+                if (DrawnPolygon != null && !dots && DrawnPolygon.Length > 0)
+                {
+                    using Brush brush = new SolidBrush(InterpolateColour(info.Skin.BackgroundColour, info.View0.Colour, 0, 1));
+                    graphics.FillPolygon(brush, DrawnPolygon);
+                }
+
+                Color color = dots ? InterpolateColour(info.View0.Colour, info.Skin.BackgroundColour, 0, 1) : info.View0.Colour;
+                if (dots && DotDrawPoints != null)
+                {
+                    using Pen pen = LinePen(color, info);
+                    using Brush brush = new SolidBrush(info.View0.Colour);
+                    PaintTraceBase.PaintFilledCircles(graphics, brush, DotDrawPoints!.ToArray(), 4f);
+                }
+                else if (DrawnProjection1 != null && DrawnProjection2 != null)
+                {
+                    using Pen pen = new Pen(color, width: 1);
+                    PaintProjection(DrawnProjection1, graphics, pen);
+                    PaintProjection(DrawnProjection2, graphics, pen);
+                }
+                else if (DrawnProjection1 != null)
+                {
+                    using Pen pen = LinePen(color, info);
+                    PaintProjection(DrawnProjection1, graphics, pen);
+                }
+                PaintPiP(info, graphics);
+            }
+        }
+
+        private void PaintSpectral(TraceGroupDisplay info, Graphics graphics)
+        {
+            if (DrawnPolygon == null || DrawnPolygon.Length < 3) return;
+
+            // vertical gradient in the projection rectangle - green at the bottom, blue at the top.
+            var rect = new RectangleF(
+                info.ProjectionArea.Left, info.ProjectionArea.Top,
+                Math.Max(1, info.ProjectionArea.Width), Math.Max(1, info.ProjectionArea.Height));
+            using (var brush = new LinearGradientBrush(rect, SpectralFillTop, SpectralFillBottom, LinearGradientMode.Vertical))
+            {
+                brush.WrapMode = WrapMode.TileFlipXY; // avoid the edge sliver
                 graphics.FillPolygon(brush, DrawnPolygon);
             }
 
-            Color color = dots ? InterpolateColour(info.View0.Colour, info.Skin.BackgroundColour, 0, 1) : info.View0.Colour;
-            if (dots && DotDrawPoints != null)
+            if (DrawnProjection1 != null && DrawnProjection1.Length > 1)
             {
-                using Pen pen = LinePen(color, info);
-                using Brush brush = new SolidBrush(info.View0.Colour);
-                PaintTraceBase.PaintFilledCircles(graphics, brush, DotDrawPoints!.ToArray(), 4f);
-            }
-            else if (DrawnProjection1 != null && DrawnProjection2 != null)
-            {
-                using Pen pen = new Pen(color, width: 1);
+                var prevSmoothing = graphics.SmoothingMode;
+                graphics.SmoothingMode = SmoothingMode.AntiAlias;
+                using var pen = new Pen(SpectralCapColour, 1f);
                 PaintProjection(DrawnProjection1, graphics, pen);
-                PaintProjection(DrawnProjection2, graphics, pen);
+                graphics.SmoothingMode = prevSmoothing;
             }
-            else if (DrawnProjection1 != null)
-            {
-                using Pen pen = LinePen(color, info);
-                PaintProjection(DrawnProjection1, graphics, pen);
-            }
-            PaintPiP(info, graphics);
         }
 
         private void PaintProjectionYT(TraceGroupDisplay info, Graphics graphics)
@@ -602,6 +634,18 @@ namespace SehensWerte.Controls.Sehens
                 DrawnProjection1 = null;
                 DrawnProjection2 = null;
             }
+            else if (currentTraceMode == TraceView.PaintModes.Spectral)
+            {
+                // Audacity-style filled spectral display
+                // a slightly smoothed max envelope along the top, filled down to the bottom of the window.
+                PaintSamples = samples;
+                PaintMode = (width < samples.Length) ? TraceView.PaintModes.Max : currentTraceMode;
+                PointF[] envelope = (width < samples.Length) ? Projection2d() : Projection2dNormal();
+                SmoothEnvelope(envelope, SpectralSmoothPixels);
+                DrawnProjection1 = envelope;
+                DrawnProjection2 = null;
+                DrawnPolygon = SpectralPolygon(envelope);
+            }
             else if (currentTraceMode == TraceView.PaintModes.PeakHold)
             {
                 PaintSamples = ((trace.PeakHoldMinDrawn == null) ? samples : trace.PeakHoldMinDrawn);
@@ -647,6 +691,41 @@ namespace SehensWerte.Controls.Sehens
                     DotDrawPoints = ProjectionDots(View?.PaintMode == TraceView.PaintModes.PointsIfChanged);
                 }
             }
+        }
+
+        private static readonly Color SpectralFillBottom = Color.FromArgb(0, 200, 0); // green at the window bottom
+        private static readonly Color SpectralFillTop = Color.FromArgb(0, 60, 220); // blue at the window top
+        private static readonly Color SpectralCapColour = Color.FromArgb(150, 225, 90, 90); // semi-transparent red cap line
+        private const int SpectralSmoothPixels = 2; // half-width of the envelope smoothing window, in pixels
+
+        // Box smoothing of the envelope's Y values (pixel space) while preserving max peaks.
+        private static void SmoothEnvelope(PointF[] points, int halfWidth)
+        {
+            if (halfWidth <= 0 || points.Length < 3) return;
+            float[] smoothed = new float[points.Length];
+            for (int loop = 0; loop < points.Length; loop++)
+            {
+                int from = Math.Max(0, loop - halfWidth);
+                int to = Math.Min(points.Length - 1, loop + halfWidth);
+                float sum = 0f;
+                for (int j = from; j <= to; j++) sum += points[j].Y;
+                smoothed[loop] = sum / (to - from + 1);
+            }
+            for (int loop = 0; loop < points.Length; loop++)
+            {
+                points[loop] = new PointF(points[loop].X, smoothed[loop]);
+            }
+        }
+
+        private PointF[]? SpectralPolygon(PointF[] envelope)
+        {
+            if (envelope.Length < 2) return null;
+            float bottom = PaintProjectionArea.Bottom;
+            var result = new List<PointF>(envelope.Length + 2);
+            result.AddRange(envelope);
+            result.Add(new PointF(envelope[envelope.Length - 1].X, bottom));
+            result.Add(new PointF(envelope[0].X, bottom));
+            return result.ToArray();
         }
 
         private List<PointF>? ProjectionDots(bool removeDuplicates)
