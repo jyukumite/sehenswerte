@@ -1853,7 +1853,8 @@ namespace SehensWerte.Controls.Sehens
                 {
                     string viewName = type.ToString() + "(" + string.Join(",", a.Views.Select(x => x.Samples.Name)) + ")";
                     TraceView view = a.Scope.EnsureView(viewName);
-                    view.CalculatedParameter = data ?? new TraceView.CalculatedTraceData();
+                    // Clone so each calculated trace gets its own parameter instance, not the data template
+                    view.CalculatedParameter = data?.Clone() ?? new TraceView.CalculatedTraceData();
                     view.Samples.InputSamplesPerSecond = a.Views[0].Samples.InputSamplesPerSecond;
                     view.CalculatedSourceViews = a.Views.ToList();
                     view.CalculateType = type;

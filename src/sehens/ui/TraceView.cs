@@ -1019,6 +1019,7 @@ namespace SehensWerte.Controls.Sehens
 
         public class CalculatedTraceData // XML Serialised
         {
+            public CalculatedTraceData Clone() => (CalculatedTraceData)MemberwiseClone();
         }
 
         public class CalculatedTraceDataOneDouble : CalculatedTraceData // XML Serialised
@@ -1049,7 +1050,13 @@ namespace SehensWerte.Controls.Sehens
 
         public class CalculatedTraceDataCount : CalculatedTraceData // XML Serialised
         {
+            [AutoEditor.DisplayName("Sample count")]
             public int Count = 100;
+
+            // Resample: if > 0, resample to this rate (Hz) over the source's duration and set the
+            // output trace rate, taking precedence over Count. 0 = resample by Count (default).
+            [AutoEditor.DisplayName("Sample rate (Hz)")]
+            public double SamplesPerSecond = 0.0;
         }
 
         public class CalculatedTraceDataOrder : CalculatedTraceData // XML Serialised
@@ -1956,10 +1963,8 @@ namespace SehensWerte.Controls.Sehens
                         double rightVal = ext.rightSampleNumberValue;
                         if (rightVal > 0 && rightVal > leftVal)
                         {
-                            double effectiveLeft = leftVal > 0 ? leftVal : rightVal * 0.01;
-                            PaintTraceBase.ProjectLog(rightVal, effectiveLeft, out var newMax, out var leftOutput);
-                            double output = leftOutput + result.XRatio * (newMax - leftOutput);
-                            double val = rightVal * Math.Pow(10.0, output - newMax);
+                            double effectiveLeft = PaintTraceBase.LogHEffectiveLeft(leftVal, rightVal, length);
+                            double val = PaintTraceBase.LogHFractionToValue(result.XRatio, effectiveLeft, rightVal);
                             indexRatio = (val - leftVal) / (rightVal - leftVal);
                             indexRatio = Math.Max(0.0, Math.Min(1.0, indexRatio));
                         }
@@ -2291,7 +2296,21 @@ value=" + string.Format(VerticalUnitFormat, Clicks[0].SampleAtX.ToStringRound(5,
 
                 case CalculatedTypes.Resample:
                     exact(1);
-                    result = sourceTraces[0].Resample(((TraceView.CalculatedTraceDataCount)CalculatedParameter).Count);
+                    {
+                        var resample = (TraceView.CalculatedTraceDataCount)CalculatedParameter;
+                        double srcSps = CalculatedSourceViews[0].Samples.InputSamplesPerSecond;
+                        int newLength;
+                        if (resample.SamplesPerSecond > 0 && srcSps > 0)
+                        {
+                            newLength = (int)Math.Round(sourceTraces[0].Length * resample.SamplesPerSecond / srcSps);
+                            m_Samples.InputSamplesPerSecond = resample.SamplesPerSecond;
+                        }
+                        else
+                        {
+                            newLength = resample.Count;
+                        }
+                        result = sourceTraces[0].Resample(Math.Max(1, newLength));
+                    }
                     break;
             }
             return result;

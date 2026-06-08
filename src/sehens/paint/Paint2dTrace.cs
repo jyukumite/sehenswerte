@@ -1,3 +1,5 @@
+using Microsoft.VisualStudio.TestTools.UnitTesting;
+using SehensWerte.Generators;
 using SehensWerte.Maths;
 using System.Drawing.Drawing2D;
 
@@ -760,22 +762,14 @@ namespace SehensWerte.Controls.Sehens
 
         private bool UseLogH => View?.IsLogX == true && PaintRightHValue > 0;
 
-        // Returns (leftOutput, newMax) for the current H range
-        private (double leftOutput, double newMax) LogHBounds()
-        {
-            double effectiveLeft = PaintLeftHValue > 0 ? PaintLeftHValue : PaintRightHValue * 0.01;
-            ProjectLog(PaintRightHValue, effectiveLeft, out double nm, out double lo);
-            return (lo, nm);
-        }
-
-        // Pixel (0..width-1) -> fractional sample index via inverse log projection.
+        // Pixel (0..width-1) -> fractional sample index via the inverse log-H mapping. The axis
+        // spans the full data extent [effectiveLeft, right]; see PaintTraceBase.LogHEffectiveLeft.
         private double LogPixelToFracSampleIndex(int loop, int width, int length)
         {
-            var (leftOutput, newMax) = LogHBounds();
-            double output = leftOutput + (double)loop / width * (newMax - leftOutput);
-            double val = PaintRightHValue * Math.Pow(10.0, output - newMax);
             double range = PaintRightHValue - PaintLeftHValue;
             if (range <= 0) return 0.0;
+            double effectiveLeft = LogHEffectiveLeft(PaintLeftHValue, PaintRightHValue, length);
+            double val = LogHFractionToValue((double)loop / width, effectiveLeft, PaintRightHValue);
             return (val - PaintLeftHValue) / range * (length - 1);
         }
 
@@ -792,11 +786,8 @@ namespace SehensWerte.Controls.Sehens
             double range = PaintRightHValue - PaintLeftHValue;
             if (range <= 0) return 0;
             double val = PaintLeftHValue + (double)sampleIndex / Math.Max(1, length - 1) * range;
-            ProjectLog(PaintRightHValue, val, out var newMax, out var output);
-            var (leftOutput, _) = LogHBounds();
-            double span = newMax - leftOutput;
-            if (span <= 0) return 0;
-            return (int)((output - leftOutput) / span * PaintProjectionArea.Width);
+            double effectiveLeft = LogHEffectiveLeft(PaintLeftHValue, PaintRightHValue, length);
+            return (int)(LogHValueToFraction(val, effectiveLeft, PaintRightHValue) * PaintProjectionArea.Width);
         }
 
         private PointF[] Projection2d()
@@ -933,6 +924,211 @@ namespace SehensWerte.Controls.Sehens
             DrawnYT = null;
             DrawnProjection1 = null;
             DrawnProjection2 = null;
+        }
+    }
+
+    [TestClass]
+    public class LogHorizontalLeftEdgeTests
+    {
+        private struct Case
+        {
+            public double SamplesPerSecond;
+            public int FftSize;     // N
+            public int TargetBin;   // bin we steer the generated tone onto (bin-aligned, no leakage)
+            public string Note;
+        }
+
+        // Drives the real Project2dCurves log-H path for one generated tone and reports whether the
+        // peak made it into the drawn polygon, at which pixel, and what Hz the axis assigns there.
+        private static (bool drawnHasPeak, int peakBin, int peakPixel, int expectedPixel, int bins, double peakHz, double axisHzAtPeak)
+            RunCase(SehensControl scope, Case c)
+        {
+            double nyquist = c.SamplesPerSecond / 2.0;
+            double peakHz = (double)c.TargetBin * c.SamplesPerSecond / c.FftSize; // bin-aligned
+
+            // "use generator": a real tone -> real FFT magnitude, same as the scope's FFT trace.
+            var tone = new ToneGenerator
+            {
+                SamplesPerSecond = c.SamplesPerSecond,
+                FrequencyStart = peakHz,
+                FrequencyEnd = peakHz,
+                Amplitude = 1.0,
+            };
+            double[] signal = tone.Generate(c.FftSize);
+
+            double[] spectrum;
+            using (var fft = new Fftw(c.FftSize))
+            {
+                fft.ExecuteForward(signal);
+                spectrum = fft.SpectralMagnitude; // length = bins, bin k -> k*sps/N Hz
+            }
+            int bins = spectrum.Length;
+
+            int peakBin = 0;
+            double peakValue = double.NegativeInfinity;
+            for (int i = 0; i < bins; i++)
+            {
+                if (spectrum[i] > peakValue) { peakValue = spectrum[i]; peakBin = i; }
+            }
+
+            // Configure a real view exactly as an un-zoomed FFT trace: log horizontal, left H = 0.
+            var data = new TraceData($"loghtest_{c.SamplesPerSecond}_{c.FftSize}_{c.TargetBin}");
+            var view = new TraceView(scope, data, data.Name)
+            {
+                LogHorizontal = TraceView.LogHorizontalMode.Log,
+                PaintMode = TraceView.PaintModes.PolygonDigital,
+            };
+
+            // width < bins forces the Min/Max bucketing path used for dense FFT traces.
+            const int width = 100;
+            const int height = 100;
+            var area = new RectangleF(0f, 0f, width, height);
+            Assert.IsTrue(width < bins, "test must exercise the down-sampling (min/max) projection path");
+
+            var paint = new Paint2dTrace();
+            paint.Project2dCurves(spectrum, view, area, highestValue: peakValue, lowestValue: 0.0,
+                leftHValue: 0.0, rightHValue: nyquist);
+
+            // The peak value projects to the top of the area (y == 0). DrawnProjection2 is the Max
+            // envelope, one point per pixel with X == left + loop; the pixel holding the peak is the
+            // one with minimum y. If the peak bin were dropped, the tallest thing drawn would be a
+            // near-zero bin and the min y would sit near the bottom (height).
+            var maxEnv = paint.DrawnProjection2 ?? paint.DrawnProjection1 ?? new PointF[0];
+            int peakPixel = -1;
+            float minY = float.PositiveInfinity;
+            for (int i = 0; i < maxEnv.Length; i++)
+            {
+                if (maxEnv[i].Y < minY) { minY = maxEnv[i].Y; peakPixel = i; }
+            }
+            double drawnMaxValue = peakValue * (1.0 - minY / height);
+            bool drawnHasPeak = drawnMaxValue >= 0.5 * peakValue;
+
+            // Expected pixel from a closed-form log mapping computed by hand, independent of the
+            // LogHValueToFraction/LogHFractionToValue maps under test. Uses the same left-edge rule
+            // (first bin, capped to the decade limit) so it stays correct whether or not the cap
+            // engages: frac = log10(peakHz / effLeft) / log10(right / effLeft).
+            double effLeft = Math.Max(nyquist / (bins - 1),
+                nyquist * Math.Pow(10.0, -PaintTraceBase.LogHorizontalMaxDecades));
+            int expectedPixel = peakHz <= effLeft ? 0
+                : (int)((Math.Log10(peakHz) - Math.Log10(effLeft)) / (Math.Log10(nyquist) - Math.Log10(effLeft)) * width);
+
+            // The Hz the axis (gutter labels + hover readout, same shared helper) assigns to the
+            // peak's pixel.
+            double axisHzAtPeak = peakPixel < 0 ? 0.0
+                : PaintTraceBase.LogHFractionToValue((peakPixel + 0.5) / width, effLeft, nyquist);
+
+            data.Close();
+            return (drawnHasPeak, peakBin, peakPixel, expectedPixel, bins, peakHz, axisHzAtPeak);
+        }
+
+        [TestMethod]
+        public void LowPeakStaysVisibleOnLogHorizontalAxis()
+        {
+            var cases = new List<Case>
+            {
+                // The exact field report: 100 Hz @ 24 kHz. Used to drop at large N; must now show.
+                new Case { SamplesPerSecond = 24000, FftSize = 512,  TargetBin = 2,  Note = "~100Hz@24k N=512" },
+                new Case { SamplesPerSecond = 24000, FftSize = 8192, TargetBin = 34, Note = "~100Hz@24k N=8192 (was DROPPED)" },
+
+                // Old floor-bin straddles at several FFT sizes - all must show now.
+                new Case { SamplesPerSecond = 24000, FftSize = 1024, TargetBin = 4,  Note = "N=1024 (old floor 5)" },
+                new Case { SamplesPerSecond = 24000, FftSize = 1024, TargetBin = 5,  Note = "N=1024" },
+                new Case { SamplesPerSecond = 24000, FftSize = 2048, TargetBin = 9,  Note = "N=2048 (old floor 10)" },
+                new Case { SamplesPerSecond = 24000, FftSize = 2048, TargetBin = 10, Note = "N=2048" },
+                new Case { SamplesPerSecond = 24000, FftSize = 4096, TargetBin = 19, Note = "N=4096 (old floor 20)" },
+                new Case { SamplesPerSecond = 24000, FftSize = 4096, TargetBin = 20, Note = "N=4096" },
+                new Case { SamplesPerSecond = 24000, FftSize = 8192, TargetBin = 39, Note = "N=8192 (old floor 40)" },
+                new Case { SamplesPerSecond = 24000, FftSize = 8192, TargetBin = 40, Note = "N=8192" },
+
+                // Different sample rates, same N.
+                new Case { SamplesPerSecond = 8000,  FftSize = 4096, TargetBin = 19, Note = "8k  N=4096" },
+                new Case { SamplesPerSecond = 8000,  FftSize = 4096, TargetBin = 25, Note = "8k  N=4096" },
+                new Case { SamplesPerSecond = 44100, FftSize = 4096, TargetBin = 19, Note = "44k1 N=4096" },
+                new Case { SamplesPerSecond = 44100, FftSize = 4096, TargetBin = 21, Note = "44k1 N=4096" },
+                new Case { SamplesPerSecond = 48000, FftSize = 2048, TargetBin = 3,  Note = "48k N=2048" },
+                new Case { SamplesPerSecond = 48000, FftSize = 2048, TargetBin = 200,Note = "48k N=2048 (mid band)" },
+
+                // Smallest representable bins.
+                new Case { SamplesPerSecond = 24000, FftSize = 256,  TargetBin = 1,  Note = "N=256 bin 1" },
+                new Case { SamplesPerSecond = 24000, FftSize = 512,  TargetBin = 1,  Note = "N=512 bin 1 (was DROPPED)" },
+
+                // High peaks.
+                new Case { SamplesPerSecond = 24000, FftSize = 8192, TargetBin = 4000, Note = "near nyquist" },
+                new Case { SamplesPerSecond = 16000, FftSize = 1024, TargetBin = 400,  Note = "mid band" },
+            };
+
+            var scope = new SehensControl();
+            var report = new System.Text.StringBuilder();
+            report.AppendLine();
+            report.AppendLine($"  sps     N     peakBin  bins   peakHz   drawn  pixel  expect  axisHz  note");
+
+            int missing = 0, mispositioned = 0, wrongHz = 0;
+            foreach (var c in cases)
+            {
+                var r = RunCase(scope, c);
+                if (!r.drawnHasPeak) missing++;
+                if (r.drawnHasPeak && Math.Abs(r.peakPixel - r.expectedPixel) > 2) mispositioned++;
+                // axis frequency under the peak should match the peak's frequency (within ~1 pixel,
+                // which on this log axis is a small ratio).
+                if (r.drawnHasPeak && (r.axisHzAtPeak / r.peakHz > 1.25 || r.peakHz / r.axisHzAtPeak > 1.25)) wrongHz++;
+                report.AppendLine(
+                    $"  {c.SamplesPerSecond,-6} {c.FftSize,-5} {r.peakBin,6} {r.bins,6} {r.peakHz,8:0.0}   " +
+                    $"{(r.drawnHasPeak ? "yes" : "NO "),-5} {r.peakPixel,5} {r.expectedPixel,6} {r.axisHzAtPeak,7:0.0}  {c.Note}");
+            }
+
+            System.Diagnostics.Trace.WriteLine(report.ToString());
+
+            // Every generated peak (bin >= 1) is on screen now - nothing dropped off the left.
+            Assert.AreEqual(0, missing, "peaks dropped off the left edge:" + report);
+            // ...each lands at the expected log-axis pixel (forward/inverse maps agree)...
+            Assert.AreEqual(0, mispositioned, "peak drawn at the wrong log-axis pixel:" + report);
+            // ...and the frequency the axis prints under the peak matches the peak's frequency.
+            Assert.AreEqual(0, wrongHz, "axis frequency under the peak disagrees with the peak frequency:" + report);
+        }
+
+        [TestMethod]
+        public void FieldCase100HzAt24kHzN8192IsVisible()
+        {
+            // Explicit regression guard for the reported case, kept separate from the table.
+            var scope = new SehensControl();
+            var r = RunCase(scope, new Case { SamplesPerSecond = 24000, FftSize = 8192, TargetBin = 34, Note = "field" });
+            Assert.IsTrue(r.drawnHasPeak, $"100 Hz @ 24 kHz (N=8192) must be visible; peakBin={r.peakBin}, bins={r.bins}");
+            Assert.IsTrue(Math.Abs(r.peakPixel - r.expectedPixel) <= 2,
+                $"100 Hz @ 24 kHz drawn at pixel {r.peakPixel}, expected ~{r.expectedPixel}");
+            // The axis must print ~the peak's frequency under the peak (not a different number).
+            Assert.IsTrue(r.axisHzAtPeak / r.peakHz <= 1.25 && r.peakHz / r.axisHzAtPeak <= 1.25,
+                $"axis shows {r.axisHzAtPeak:0.0} Hz under a {r.peakHz:0.0} Hz peak");
+        }
+
+        [TestMethod]
+        public void LogHorizontalCapsTheVisibleSpan()
+        {
+            // A wide spectrum (here ~4.5 decades full extent) is capped to LogHorizontalMaxDecades
+            // down from the right edge so the useful band isn't squashed; content further left is
+            // off-screen, exactly like a log axis that starts at its left edge.
+            const double sps = 20000.0;   // right edge = nyquist = 10 kHz
+            const int n = 65536;
+            double nyquist = sps / 2.0;
+            double binWidth = sps / n;
+            int bins = Fftw.SampleCountToBinCount(n);
+
+            double effLeft = PaintTraceBase.LogHEffectiveLeft(0.0, nyquist, bins);
+            double expectedCap = nyquist * Math.Pow(10.0, -PaintTraceBase.LogHorizontalMaxDecades);
+            Assert.IsTrue(Math.Abs(effLeft - expectedCap) < 1e-6,
+                $"left edge {effLeft:0.###} Hz should be the {PaintTraceBase.LogHorizontalMaxDecades}-decade cap {expectedCap:0.###} Hz, not the {nyquist / (bins - 1):0.###} Hz first bin");
+
+            var scope = new SehensControl();
+            // A peak comfortably inside the window (100 Hz) is shown; one below the capped left
+            // edge (a third of the edge frequency) is off-screen.
+            int binInside = (int)Math.Round(100.0 / binWidth);
+            int binBelow = Math.Max(1, (int)(effLeft / binWidth / 3));
+            var inside = RunCase(scope, new Case { SamplesPerSecond = sps, FftSize = n, TargetBin = binInside, Note = "inside window" });
+            var below = RunCase(scope, new Case { SamplesPerSecond = sps, FftSize = n, TargetBin = binBelow, Note = "below left edge" });
+
+            Assert.IsTrue(inside.drawnHasPeak,
+                $"peak at {inside.peakHz:0.0} Hz (inside the {PaintTraceBase.LogHorizontalMaxDecades}-decade window) should be drawn");
+            Assert.IsFalse(below.drawnHasPeak,
+                $"peak at {below.peakHz:0.00} Hz (below the {effLeft:0.##} Hz left edge) should be off-screen");
         }
     }
 }
