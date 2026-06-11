@@ -465,7 +465,7 @@ namespace SehensWerte.Controls.Sehens
             graphics.DrawString(text, font, brush, Width - (int)sizeF.Width - 3, Height - (int)sizeF.Height - 3);
         }
 
-        internal Bitmap ScreenshotToBitmap(Skin skin, int? singleGroup)
+        internal Bitmap ScreenshotToBitmap(Skin skin, List<TraceView>? singleGroup)
         {
             Skin prevActiveSkin = Scope.ActiveSkin;
             Scope.ActiveSkin = skin;
@@ -476,8 +476,7 @@ namespace SehensWerte.Controls.Sehens
                 var copyPaintedGroup = PaintedTraces;
                 PaintedTraces = Scope.GetPaintedTraces(
                     selectedOnly: skin!.ExportTraces == Skin.TraceSelections.SelectedTraces,
-                    groupStart: singleGroup ?? 0,
-                    groupMax: singleGroup == null ? int.MaxValue : 1);
+                    singleGroup: singleGroup);
 
                 Rectangle rectangle = new Rectangle(0, 0, Scope.ActiveSkin.TraceWidth, PaintedTraces.VisibleTraceGroupList.Count * Scope.ActiveSkin.TraceHeight);
                 Bitmap? result = null;

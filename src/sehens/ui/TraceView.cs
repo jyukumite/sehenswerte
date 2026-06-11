@@ -1134,7 +1134,6 @@ namespace SehensWerte.Controls.Sehens
         {
             public int TraceIndex; // index of this trace within the group
             public int GroupIndex; // index number of this group, counting visible groups only
-            public int RawGroupIndex; // index into the full m_ViewGroups list, including hidden groups
             public int GroupCount = 1; // number of groups
 
             public List<TraceView> Group = new List<TraceView>();
