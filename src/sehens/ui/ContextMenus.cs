@@ -1212,17 +1212,20 @@ namespace SehensWerte.Controls.Sehens
             });
         }
 
-        private enum EmbedFftLabel { Normal, FFT, FFT2D }
+        private enum EmbedFftLabel { Normal, FFT, Spectral, FFT2D }
 
         private static void AddTraceEmbeddedMenu(List<ScopeContextMenu.EmbeddedMenu> embeddedContextMenu)
         {
             EmbedFftLabel FftLabel(TraceView view)
             {
-                return view.MathType == TraceView.MathTypes.FFTMagnitude
-                        ? EmbedFftLabel.FFT
-                        : view.PaintMode == TraceView.PaintModes.FFT2D
-                            ? EmbedFftLabel.FFT2D
-                            : EmbedFftLabel.Normal;
+                // Spectral is an FFTMagnitude trace too, so test it before the plain-FFT check.
+                return view.PaintMode == TraceView.PaintModes.Spectral
+                        ? EmbedFftLabel.Spectral
+                        : view.MathType == TraceView.MathTypes.FFTMagnitude
+                            ? EmbedFftLabel.FFT
+                            : view.PaintMode == TraceView.PaintModes.FFT2D
+                                ? EmbedFftLabel.FFT2D
+                                : EmbedFftLabel.Normal;
             }
 
             embeddedContextMenu.Add(new ScopeContextMenu.EmbeddedMenu
@@ -1249,9 +1252,15 @@ namespace SehensWerte.Controls.Sehens
                 Clicked = (a) =>
                 {
                     EmbedFftLabel fft = (EmbedFftLabel)FftLabel(a.View).NextEnumValue();
-                    a.View.MathType = (fft == EmbedFftLabel.FFT) ? TraceView.MathTypes.FFTMagnitude : TraceView.MathTypes.Normal;
-                    a.View.PaintMode = (fft == EmbedFftLabel.FFT2D) ? TraceView.PaintModes.FFT2D : TraceView.PaintModes.PolygonDigital;
-                    if (fft == EmbedFftLabel.FFT && a.View.LogVertical == TraceView.LogVerticalMode.Off)
+                    bool isFft = fft == EmbedFftLabel.FFT || fft == EmbedFftLabel.Spectral;
+                    a.View.MathType = isFft ? TraceView.MathTypes.FFTMagnitude : TraceView.MathTypes.Normal;
+                    a.View.PaintMode = fft switch
+                    {
+                        EmbedFftLabel.FFT2D => TraceView.PaintModes.FFT2D,
+                        EmbedFftLabel.Spectral => TraceView.PaintModes.Spectral,
+                        _ => TraceView.PaintModes.PolygonDigital,
+                    };
+                    if (isFft && a.View.LogVertical == TraceView.LogVerticalMode.Off)
                     {
                         a.View.LogVertical = TraceView.LogVerticalMode.dB10;
                     }
@@ -1690,6 +1699,36 @@ namespace SehensWerte.Controls.Sehens
             contextMenu.Add(new ScopeContextMenu.MenuItem
             {
                 SubMenuText = subMenuText,
+                Text = "Spectral",
+                ShownWhenTrace = ScopeContextMenu.MenuItem.ShowWhen.OnePlusSelected,
+                ShownWhenMouse = PaintBoxMouseInfo.GuiSection.TraceArea,
+                Call = ScopeContextMenu.MenuItem.CallWhen.PerTrace,
+                ShownText = ScopeContextMenu.MenuItem.TextDisplay.NoChange,
+                Clicked = (a) =>
+                {
+                    if (a.Views[0].PaintMode == TraceView.PaintModes.Spectral)
+                    {
+                        a.Views[0].MathType = TraceView.MathTypes.Normal;
+                        a.Views[0].PaintMode = TraceView.PaintModes.PolygonDigital;
+                    }
+                    else
+                    {
+                        a.Views[0].MathType = TraceView.MathTypes.FFTMagnitude;
+                        a.Views[0].MathPhase = TraceView.CalculatePhases.BeforeZoom;
+                        a.Views[0].PaintMode = TraceView.PaintModes.Spectral;
+                        if (a.Views[0].LogVertical == TraceView.LogVerticalMode.Off)
+                        {
+                            a.Views[0].LogVertical = TraceView.LogVerticalMode.dB10;
+                        }
+                    }
+                    a.Views[0].AutoRange();
+                },
+                GetStyle = (a) => a.Checked = a.Views[0].PaintMode == TraceView.PaintModes.Spectral,
+            });
+
+            contextMenu.Add(new ScopeContextMenu.MenuItem
+            {
+                SubMenuText = subMenuText,
                 Text = "Auto shrink",
                 ShownWhenTrace = ScopeContextMenu.MenuItem.ShowWhen.OnePlusSelected,
                 ShownWhenMouse = PaintBoxMouseInfo.GuiSection.TraceArea,
@@ -1814,7 +1853,8 @@ namespace SehensWerte.Controls.Sehens
                 {
                     string viewName = type.ToString() + "(" + string.Join(",", a.Views.Select(x => x.Samples.Name)) + ")";
                     TraceView view = a.Scope.EnsureView(viewName);
-                    view.CalculatedParameter = data ?? new TraceView.CalculatedTraceData();
+                    // Clone so each calculated trace gets its own parameter instance, not the data template
+                    view.CalculatedParameter = data?.Clone() ?? new TraceView.CalculatedTraceData();
                     view.Samples.InputSamplesPerSecond = a.Views[0].Samples.InputSamplesPerSecond;
                     view.CalculatedSourceViews = a.Views.ToList();
                     view.CalculateType = type;

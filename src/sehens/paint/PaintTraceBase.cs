@@ -109,6 +109,31 @@ namespace SehensWerte.Controls.Sehens
             newMax = maxStaves;
         }
 
+        // Most decades shown on the log horizontal axis
+        public const int LogHorizontalMaxDecades = 3;
+
+        public static double LogHEffectiveLeft(double left, double right, int length)
+        {
+            if (right <= 0) return right;
+            double dataLeft = left > 0 ? left : (length > 1 ? right / (length - 1) : right * 0.01);
+            double cappedLeft = right * Math.Pow(10.0, -LogHorizontalMaxDecades);
+            return Math.Max(dataLeft, cappedLeft);
+        }
+
+        // value on [effectiveLeft, right] -> fraction 0..1 across the plot width
+        public static double LogHValueToFraction(double value, double effectiveLeft, double right)
+        {
+            if (effectiveLeft <= 0 || right <= effectiveLeft || value <= effectiveLeft) return 0.0;
+            return (Math.Log10(value) - Math.Log10(effectiveLeft)) / (Math.Log10(right) - Math.Log10(effectiveLeft));
+        }
+
+        // Inverse of LogHValueToFraction: fraction 0..1 -> value on [effectiveLeft, right].
+        public static double LogHFractionToValue(double fraction, double effectiveLeft, double right)
+        {
+            if (effectiveLeft <= 0 || right <= effectiveLeft) return effectiveLeft;
+            return effectiveLeft * Math.Pow(10.0, fraction * (Math.Log10(right) - Math.Log10(effectiveLeft)));
+        }
+
         public double[] SnapshotProjection(TraceView trace)
         {
             (var result, var reprocessCurve) = trace.SnapshotProjection();
@@ -729,17 +754,15 @@ namespace SehensWerte.Controls.Sehens
             using Font font = info.Skin.AxisTextFont.Font;
             using Pen pen = new Pen(info.Skin.GraduationColour);
             using Brush brush = info.Skin.AxisTextFont.Brush;
-            double effectiveLeft = left > 0 ? left : right * 0.01;
-            ProjectLog(right, effectiveLeft, out var newMax, out var leftOutput);
-            double span = newMax - leftOutput;
-            if (span <= 0) return;
+            int length = info.RightSampleNumber - info.LeftSampleNumber; // == drawn sample count
+            double effectiveLeft = LogHEffectiveLeft(left, right, length);
+            if (effectiveLeft <= 0 || right <= effectiveLeft) return;
             float width = info.ProjectionArea.Width;
             graphics.SetClip(new Rectangle(info.ProjectionArea.Left, info.ProjectionArea.Top, info.ProjectionArea.Width, info.BottomGutter.Bottom - info.ProjectionArea.Top));
             float lastLabelRight = float.NegativeInfinity;
             foreach (double value in GetLogPartitions(effectiveLeft, right))
             {
-                ProjectLog(right, value, out _, out var output);
-                float x = (float)((output - leftOutput) / span * width);
+                float x = (float)(LogHValueToFraction(value, effectiveLeft, right) * width);
                 if (x < 0 || x >= width) continue;
                 pen.DashStyle = System.Drawing.Drawing2D.DashStyle.Dash;
                 graphics.DrawLine(pen, x + info.ProjectionArea.Left, info.ProjectionArea.Bottom, x + info.ProjectionArea.Left, info.ProjectionArea.Top);

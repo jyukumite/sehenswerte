@@ -204,6 +204,7 @@ namespace SehensWerte.Controls.Sehens
             XYCurve,
             XYZProjection,
             FFT2D,
+            Spectral,
         }
         private PaintModes m_PaintMode = PaintModes.PolygonDigital;
         [XmlSave]
@@ -216,6 +217,9 @@ namespace SehensWerte.Controls.Sehens
                 if (m_PaintMode == value) return;
                 lock (Samples.DataLock)
                 {
+                    // Spectral forces its own FFT window (see ExecuteFft)
+                    bool spectralChanged = (m_PaintMode == PaintModes.Spectral) != (value == PaintModes.Spectral);
+
                     m_PaintMode = value;
                     ClearPeakHold();
                     switch (m_PaintMode)
@@ -231,8 +235,13 @@ namespace SehensWerte.Controls.Sehens
                         case PaintModes.PolygonDigital:
                         case PaintModes.PolygonContinuous:
                         case PaintModes.PeakHold:
+                        case PaintModes.Spectral:
                         case PaintModes.Points:
                         case PaintModes.PointsIfChanged: Painter = new Paint2dTrace(); break;
+                    }
+                    if (spectralChanged)
+                    {
+                        BeforeZoomCalculateRequired();
                     }
                     RecalculateProjectionRequired();
                     Scope.ViewNeedsRepaint(this);
@@ -300,17 +309,23 @@ namespace SehensWerte.Controls.Sehens
         private double m_XYZZoom = 1.0;
         private double m_XYZPan = 0.0;
 
-        [XmlSave] [AutoEditor.Hidden]
+        [XmlSave]
+        [AutoEditor.Hidden]
         public double XYXZoom { get => m_XYXZoom; set { double v = Math.Max(1e-6, Math.Min(1.0, value)); if (m_XYXZoom != v) { m_XYXZoom = v; Scope?.ViewNeedsRepaint(this); } } }
-        [XmlSave] [AutoEditor.Hidden]
+        [XmlSave]
+        [AutoEditor.Hidden]
         public double XYXPan { get => m_XYXPan; set { double v = Math.Max(0.0, Math.Min(1.0, value)); if (m_XYXPan != v) { m_XYXPan = v; Scope?.ViewNeedsRepaint(this); } } }
-        [XmlSave] [AutoEditor.Hidden]
+        [XmlSave]
+        [AutoEditor.Hidden]
         public double XYYZoom { get => m_XYYZoom; set { double v = Math.Max(1e-6, Math.Min(1.0, value)); if (m_XYYZoom != v) { m_XYYZoom = v; Scope?.ViewNeedsRepaint(this); } } }
-        [XmlSave] [AutoEditor.Hidden]
+        [XmlSave]
+        [AutoEditor.Hidden]
         public double XYYPan { get => m_XYYPan; set { double v = Math.Max(0.0, Math.Min(1.0, value)); if (m_XYYPan != v) { m_XYYPan = v; Scope?.ViewNeedsRepaint(this); } } }
-        [XmlSave] [AutoEditor.Hidden]
+        [XmlSave]
+        [AutoEditor.Hidden]
         public double XYZZoom { get => m_XYZZoom; set { double v = Math.Max(1e-6, Math.Min(1.0, value)); if (m_XYZZoom != v) { m_XYZZoom = v; Scope?.ViewNeedsRepaint(this); } } }
-        [XmlSave] [AutoEditor.Hidden]
+        [XmlSave]
+        [AutoEditor.Hidden]
         public double XYZPan { get => m_XYZPan; set { double v = Math.Max(0.0, Math.Min(1.0, value)); if (m_XYZPan != v) { m_XYZPan = v; Scope?.ViewNeedsRepaint(this); } } }
 
         public bool IsXYMode =>
@@ -540,7 +555,7 @@ namespace SehensWerte.Controls.Sehens
             {
                 if (m_AudioAfterFilter == value) return;
                 m_AudioAfterFilter = value;
-                if (IsPlaying) 
+                if (IsPlaying)
                 {
                     StartPlayback();
                 }
@@ -1004,6 +1019,7 @@ namespace SehensWerte.Controls.Sehens
 
         public class CalculatedTraceData // XML Serialised
         {
+            public CalculatedTraceData Clone() => (CalculatedTraceData)MemberwiseClone();
         }
 
         public class CalculatedTraceDataOneDouble : CalculatedTraceData // XML Serialised
@@ -1034,7 +1050,13 @@ namespace SehensWerte.Controls.Sehens
 
         public class CalculatedTraceDataCount : CalculatedTraceData // XML Serialised
         {
+            [AutoEditor.DisplayName("Sample count")]
             public int Count = 100;
+
+            // Resample: if > 0, resample to this rate (Hz) over the source's duration and set the
+            // output trace rate, taking precedence over Count. 0 = resample by Count (default).
+            [AutoEditor.DisplayName("Sample rate (Hz)")]
+            public double SamplesPerSecond = 0.0;
         }
 
         public class CalculatedTraceDataOrder : CalculatedTraceData // XML Serialised
@@ -1111,7 +1133,8 @@ namespace SehensWerte.Controls.Sehens
         public class PaintedInfo
         {
             public int TraceIndex; // index of this trace within the group
-            public int GroupIndex; // index number of this group
+            public int GroupIndex; // index number of this group, counting visible groups only
+            public int RawGroupIndex; // index into the full m_ViewGroups list, including hidden groups
             public int GroupCount = 1; // number of groups
 
             public List<TraceView> Group = new List<TraceView>();
@@ -1726,9 +1749,13 @@ namespace SehensWerte.Controls.Sehens
                 m_Fft = new Fftw(input.Length);
             }
             m_FftInputBins = input.Length;
-            if (FftWindow != SampleWindow.WindowType.Rectangular)
+            // Tukey window to suppress edge-discontinuity leakage.
+            SampleWindow.WindowType window = m_PaintMode == PaintModes.Spectral && FftWindow == SampleWindow.WindowType.Rectangular
+                ? SampleWindow.WindowType.FrontBackQuarterRaisedCosine
+                : FftWindow;
+            if (window != SampleWindow.WindowType.Rectangular)
             {
-                input = input.ElementProduct(SampleWindow.GenerateWindow(input.Length, FftWindow));
+                input = input.ElementProduct(SampleWindow.GenerateWindow(input.Length, window));
             }
             m_Fft.ExecuteForward(input);
             double[] result;
@@ -1937,10 +1964,8 @@ namespace SehensWerte.Controls.Sehens
                         double rightVal = ext.rightSampleNumberValue;
                         if (rightVal > 0 && rightVal > leftVal)
                         {
-                            double effectiveLeft = leftVal > 0 ? leftVal : rightVal * 0.01;
-                            PaintTraceBase.ProjectLog(rightVal, effectiveLeft, out var newMax, out var leftOutput);
-                            double output = leftOutput + result.XRatio * (newMax - leftOutput);
-                            double val = rightVal * Math.Pow(10.0, output - newMax);
+                            double effectiveLeft = PaintTraceBase.LogHEffectiveLeft(leftVal, rightVal, length);
+                            double val = PaintTraceBase.LogHFractionToValue(result.XRatio, effectiveLeft, rightVal);
                             indexRatio = (val - leftVal) / (rightVal - leftVal);
                             indexRatio = Math.Max(0.0, Math.Min(1.0, indexRatio));
                         }
@@ -2272,7 +2297,21 @@ value=" + string.Format(VerticalUnitFormat, Clicks[0].SampleAtX.ToStringRound(5,
 
                 case CalculatedTypes.Resample:
                     exact(1);
-                    result = sourceTraces[0].Resample(((TraceView.CalculatedTraceDataCount)CalculatedParameter).Count);
+                    {
+                        var resample = (TraceView.CalculatedTraceDataCount)CalculatedParameter;
+                        double srcSps = CalculatedSourceViews[0].Samples.InputSamplesPerSecond;
+                        int newLength;
+                        if (resample.SamplesPerSecond > 0 && srcSps > 0)
+                        {
+                            newLength = (int)Math.Round(sourceTraces[0].Length * resample.SamplesPerSecond / srcSps);
+                            m_Samples.InputSamplesPerSecond = resample.SamplesPerSecond;
+                        }
+                        else
+                        {
+                            newLength = resample.Count;
+                        }
+                        result = sourceTraces[0].Resample(Math.Max(1, newLength));
+                    }
                     break;
             }
             return result;
