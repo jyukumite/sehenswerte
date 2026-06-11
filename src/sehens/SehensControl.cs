@@ -1916,7 +1916,7 @@ namespace SehensWerte.Controls
                 if (skin.ExportTraces == Skin.TraceSelections.VisibleTraces
                     || (item.FirstOrDefault()?.Selected ?? false))
                 {
-                    bitmap = PaintBox.ScreenshotToBitmap(skin, item.FirstOrDefault()?.Painted.GroupIndex);
+                    bitmap = PaintBox.ScreenshotToBitmap(skin, item.FirstOrDefault()?.Painted.RawGroupIndex);
                     if (notFirst)
                     {
                         stringBuilder.AppendLine("\\line");
@@ -1965,6 +1965,7 @@ namespace SehensWerte.Controls
 
                 double heightFactorSum = 0;
                 double traceHeightFactorSumTop = 0;
+                int rawGroupIndex = groupStart;
                 foreach (var traceGroup in m_ViewGroups.Skip(groupStart).Take(groupMax))
                 {
                     List<TraceView> viewsInGroup = new List<TraceView>();
@@ -1983,6 +1984,7 @@ namespace SehensWerte.Controls
                                 HeightAdjustSumBottom = heightFactorSum,
                                 TraceIndex = viewsInGroup.Count,
                                 GroupIndex = result.VisibleTraceGroupList.Count,
+                                RawGroupIndex = rawGroupIndex,
                                 Group = viewsInGroup,
                                 ClickZones = new List<TraceViewClickZone>(),
                             };
@@ -1995,6 +1997,7 @@ namespace SehensWerte.Controls
                     {
                         result.VisibleTraceGroupList.Add(viewsInGroup);
                     }
+                    rawGroupIndex++;
                 }
                 result.AllTraceList = list;
                 int groupCount = result.VisibleTraceGroupList.Count;
