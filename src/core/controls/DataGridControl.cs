@@ -290,6 +290,7 @@ namespace SehensWerte.Controls
             this.Grid.ColumnDividerDoubleClick += Grid_ColumnDividerDoubleClick;
             this.Grid.CellPainting += Grid_CellPainting;
             this.Grid.KeyDown += Grid_KeyDown;
+            this.Grid.MouseWheel += Grid_MouseWheel;
             this.Grid.CellClick += (s, e) => CellClick.Invoke(s, e);
             this.Grid.CellContextMenuStripNeeded += (s, e) => CellContextMenuStripNeeded.Invoke(s, e);
             this.Grid.CellMouseEnter += Grid_CellMouseEnter;
@@ -750,7 +751,19 @@ namespace SehensWerte.Controls
             }
         }
 
-        private float m_CellFontDelta = 0f; // Ctrl+'+' / Ctrl+'-' zoom the cell text
+        private void Grid_MouseWheel(object? sender, MouseEventArgs e)
+        {
+            if (!Grid.IsCurrentCellInEditMode && (Control.ModifierKeys & Keys.Control) == Keys.Control && e.Delta != 0)
+            {
+                AdjustGridFontSize(e.Delta > 0 ? +1f : -1f);
+                if (e is HandledMouseEventArgs hme)
+                {
+                    hme.Handled = true; // suppress the grid's own wheel scroll
+                }
+            }
+        }
+
+        private float m_CellFontDelta = 0f; // Ctrl+'+' / Ctrl+'-' / Ctrl+wheel zoom the cell text
 
         private void AdjustGridFontSize(float delta)
         {
