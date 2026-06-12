@@ -545,8 +545,12 @@ namespace SehensWerte.Controls
                 {
                     row.MoveColumnValue(from, to);
                 }
+                // A reorder shouldn't move the viewport, but RebuildGridColumns and the Reset
+                // below both snap the horizontal scroll to 0; capture and restore it.
+                int savedHScroll = DataGrid?.Grid.HorizontalScrollingOffset ?? 0;
                 RebuildGridColumns();
                 ListChanged?.Invoke(this, new ListChangedEventArgs(ListChangedType.Reset, 0));
+                DataGrid?.RestoreHorizontalScroll(savedHScroll);
             }
 
             [MemberNotNull(nameof(CsvFileName), nameof(ColumnNames), nameof(UnfilteredData), nameof(FilteredData))]
@@ -875,9 +879,17 @@ namespace SehensWerte.Controls
 
             public void HideRows(IEnumerable<int> selectedRows)
             {
-                foreach (var v in selectedRows)
+                var selected = selectedRows.ToList();
+                PushSnapshot(new DataGridControlHistory.Snapshot(DataGridControlHistory.Snapshot.Operation.HideRows)
                 {
-                    IndexToRow[v].Visible = false;
+                    SelectedRows = selected
+                });
+                foreach (var v in selected)
+                {
+                    if (v >= 0 && v < IndexToRow.Count)
+                    {
+                        IndexToRow[v].Visible = false;
+                    }
                 }
                 Refilter();
             }
@@ -999,12 +1011,24 @@ namespace SehensWerte.Controls
                 return FilteredData.Count - 1;
             }
 
-            // Does NOT push a snapshot
+            // Snapshot stores the selected row indices; replay (redo) re-hides everything
+            // else. Index-based, so replay only matches the original against the same data.
             public void HideRowsOtherThan(IEnumerable<int> selectedRows)
             {
                 if (FilteredData == null) return;
+                var selected = selectedRows.ToList();
+                PushSnapshot(new DataGridControlHistory.Snapshot(DataGridControlHistory.Snapshot.Operation.HideRowsOtherThan)
+                {
+                    SelectedRows = selected
+                });
                 UnfilteredData.ForEach(x => x.TempFlag = false);
-                selectedRows.ForEach(v => IndexToRow[v].TempFlag = true);
+                foreach (var v in selected)
+                {
+                    if (v >= 0 && v < IndexToRow.Count)
+                    {
+                        IndexToRow[v].TempFlag = true;
+                    }
+                }
                 FilteredData.Where(v => !v.TempFlag).ForEach(v => v.Visible = false);
                 Refilter();
             }
@@ -1418,6 +1442,12 @@ namespace SehensWerte.Controls
                             break;
                         case DataGridControlHistory.Snapshot.Operation.HideNotFirstUnique:
                             HideNotFirstUnique(snap.Column);
+                            break;
+                        case DataGridControlHistory.Snapshot.Operation.HideRows:
+                            HideRows(snap.SelectedRows);
+                            break;
+                        case DataGridControlHistory.Snapshot.Operation.HideRowsOtherThan:
+                            HideRowsOtherThan(snap.SelectedRows);
                             break;
                         case DataGridControlHistory.Snapshot.Operation.HideRowsAbove:
                             {

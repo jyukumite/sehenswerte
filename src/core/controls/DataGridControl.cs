@@ -56,6 +56,7 @@ namespace SehensWerte.Controls
         private DataGridView Grid;
         private System.Windows.Forms.Timer HoverShowTimer;
         private System.Windows.Forms.Timer HoverHideTimer;
+        private System.Windows.Forms.Timer DragScrollTimer;
         private DataGridControlToolTipArgs? HoverArgs;
 
         public int ToolTipShowMilliseconds { get; set; } = 10000;
@@ -196,6 +197,8 @@ namespace SehensWerte.Controls
         private string? m_DraggingColumnName;
         private int m_DraggingStartX = -1;
         private int m_DraggingDropX = -1; // x of drop indicator, -1 = hidden
+        private int m_DragScrollDirection; // during a column drag: -1 scroll left, 0 none, +1 scroll right
+        private int m_DragScrollMouseX; // last drag mouse X, so the auto-scroll tick can re-place the drop indicator
         private string? m_LiveResizeColumn;
         private int m_LiveResizeStartX = -1;
         private int m_LiveResizeStartWidth = -1;
@@ -358,36 +361,22 @@ namespace SehensWerte.Controls
                     // A resize has started under our drag — cancel the reorder.
                     m_DraggingColumnName = null;
                     m_DraggingStartX = -1;
+                    StopDragScroll();
                     UpdateDropIndicator(-1);
                     Grid.Cursor = Cursors.Default;
                     return;
                 }
                 if (Math.Abs(e.X - m_DraggingStartX) < 5)
                 {
+                    StopDragScroll();
                     UpdateDropIndicator(-1);
                     return;
                 }
                 if (Grid.Cursor != Cursors.SizeWE) Grid.Cursor = Cursors.SizeWE;
-                if (!Grid.Columns.Contains(m_DraggingColumnName))
-                {
-                    UpdateDropIndicator(-1);
-                    return;
-                }
-                int srcDisplay = Grid.Columns[m_DraggingColumnName].DisplayIndex;
-                int dropDisplay = ColumnDisplayAtX(e.X);
-                if (dropDisplay < 0 || dropDisplay == srcDisplay)
-                {
-                    UpdateDropIndicator(-1);
-                    return;
-                }
-                var targetCol = ColumnAtDisplay(dropDisplay);
-                if (targetCol == null)
-                {
-                    UpdateDropIndicator(-1);
-                    return;
-                }
-                var rect = Grid.GetColumnDisplayRectangle(targetCol.Index, false);
-                UpdateDropIndicator(dropDisplay > srcDisplay ? rect.Right - 1 : rect.Left);
+                // Past the dead zone: an edge hover auto-scrolls to reveal off-screen columns.
+                m_DragScrollMouseX = e.X;
+                UpdateDragScroll(e.X);
+                UpdateDragDropIndicatorAt(e.X);
             };
             this.Grid.MouseUp += (s, e) =>
             {
@@ -427,6 +416,7 @@ namespace SehensWerte.Controls
                     int startX = m_DraggingStartX;
                     m_DraggingColumnName = null;
                     m_DraggingStartX = -1;
+                    StopDragScroll();
                     UpdateDropIndicator(-1);
                     Grid.Cursor = Cursors.Default;
 
@@ -468,6 +458,9 @@ namespace SehensWerte.Controls
             this.HoverShowTimer.Tick += (s, e) => { HoverShow(); };
             this.HoverHideTimer = new System.Windows.Forms.Timer();
             this.HoverHideTimer.Tick += (s, e) => { HoverHide(); };
+            this.DragScrollTimer = new System.Windows.Forms.Timer();
+            this.DragScrollTimer.Interval = 50;
+            this.DragScrollTimer.Tick += this.DragScroll_Tick;
 
             this.StatusStrip.ImageScalingSize = new System.Drawing.Size(24, 24);
             this.StatusStrip.Items.AddRange(new System.Windows.Forms.ToolStripItem[] { // right to left
@@ -1729,6 +1722,120 @@ namespace SehensWerte.Controls
         public IEnumerable<string> GetColumnNames()
         {
             return DataGridBind?.ColumnNames ?? new List<string>();
+        }
+
+        // Place the drop indicator for the column being dragged, given a mouse X.
+        // Shared by MouseMove and the auto-scroll tick (which re-places it as columns scroll).
+        private void UpdateDragDropIndicatorAt(int x)
+        {
+            if (m_DraggingColumnName == null || !Grid.Columns.Contains(m_DraggingColumnName))
+            {
+                UpdateDropIndicator(-1);
+                return;
+            }
+            int srcDisplay = Grid.Columns[m_DraggingColumnName].DisplayIndex;
+            int dropDisplay = ColumnDisplayAtX(x);
+            if (dropDisplay < 0 || dropDisplay == srcDisplay)
+            {
+                UpdateDropIndicator(-1);
+                return;
+            }
+            var targetCol = ColumnAtDisplay(dropDisplay);
+            if (targetCol == null)
+            {
+                UpdateDropIndicator(-1);
+                return;
+            }
+            var rect = Grid.GetColumnDisplayRectangle(targetCol.Index, false);
+            UpdateDropIndicator(dropDisplay > srcDisplay ? rect.Right - 1 : rect.Left);
+        }
+
+        // Set the auto-scroll direction from the drag mouse X and start/stop the tick timer.
+        private void UpdateDragScroll(int x)
+        {
+            const int edgeZone = 28;
+            int dir = 0;
+            if (x < Grid.RowHeadersWidth + edgeZone)
+            {
+                dir = -1;
+            }
+            else if (x > Grid.ClientSize.Width - edgeZone)
+            {
+                dir = 1;
+            }
+            m_DragScrollDirection = dir;
+            if (dir == 0)
+            {
+                DragScrollTimer.Stop();
+            }
+            else if (!DragScrollTimer.Enabled)
+            {
+                DragScrollTimer.Start();
+            }
+        }
+
+        private void StopDragScroll()
+        {
+            m_DragScrollDirection = 0;
+            DragScrollTimer.Stop();
+        }
+
+        private void DragScroll_Tick(object? sender, EventArgs e)
+        {
+            if (m_DraggingColumnName == null || m_DragScrollDirection == 0)
+            {
+                StopDragScroll();
+                return;
+            }
+            if (!ColumnsOverflowViewport())
+            {
+                return; // nothing to scroll; setting a non-zero offset with no scrollbar would throw
+            }
+            const int step = 20;
+            int current = Grid.HorizontalScrollingOffset;
+            int next = Math.Max(0, current + m_DragScrollDirection * step); // setter clamps the right edge
+            if (next != current)
+            {
+                Grid.HorizontalScrollingOffset = next;
+                // avoid the red bar smearing across as the grid scrolls
+                Grid.Invalidate();
+            }
+            UpdateDragDropIndicatorAt(m_DragScrollMouseX);
+        }
+
+        private bool ColumnsOverflowViewport()
+        {
+            int total = 0;
+            foreach (DataGridViewColumn c in Grid.Columns)
+            {
+                if (c.Visible)
+                {
+                    total += c.Width;
+                }
+            }
+            return total > Grid.ClientSize.Width - Grid.RowHeadersWidth;
+        }
+
+        // Re-apply a horizontal scroll offset after a column rebuild. Deferred to after layout
+        // because the DataSource reset and the ListChanged.Reset both snap the offset back to 0.
+        internal void RestoreHorizontalScroll(int offset)
+        {
+            if (offset <= 0) return;
+            void apply()
+            {
+                if (Grid.HorizontalScrollingOffset != offset)
+                {
+                    Grid.HorizontalScrollingOffset = offset; // setter clamps to the scrollable max
+                }
+            }
+            if (Grid.IsHandleCreated)
+            {
+                Grid.BeginInvoke(apply);
+            }
+            else
+            {
+                apply();
+            }
         }
 
         private void UpdateDropIndicator(int newX)
