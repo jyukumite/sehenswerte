@@ -130,6 +130,7 @@ namespace SehensWerte.Controls
         internal void ClearHighlightsInternal()
         {
             m_Highlights.Clear();
+            m_PreviewHighlight = null;
             Grid.Invalidate();
         }
 
@@ -1511,47 +1512,43 @@ namespace SehensWerte.Controls
         }
 
 
-        public void Clear()
+        private void BindData(BoundData? data, bool numeric)
         {
             DataGridBind?.Unbind();
-            NumericGrid = false;
-            DataGridBind = null;
-            Grid.Columns.Clear();
-            UpdateButtons(this, EventArgs.Empty);
+            ClearHighlightsInternal();
+            NumericGrid = numeric;
+            DataGridBind = data;
+            if (data == null)
+            {
+                Grid.Columns.Clear();
+            }
+            else
+            {
+                data.ListChanged += GridData_ListChanged;
+                data.Setup(this);
+            }
             UpdateStatusStrip();
+            UpdateButtons(this, EventArgs.Empty);
+        }
+
+        public void Clear()
+        {
+            BindData(null, numeric: false);
         }
 
         public void LoadCsv(string fileName, bool numeric = false)
         {
-            DataGridBind?.Unbind();
-            NumericGrid = numeric;
-            DataGridBind = new BoundData(fileName, numeric: numeric, CsvLog.ExtendPath(OnLog, "BoundData"));
-            DataGridBind.ListChanged += GridData_ListChanged;
-            DataGridBind.Setup(this);
-            UpdateStatusStrip();
-            UpdateButtons(this, EventArgs.Empty);
+            BindData(new BoundData(fileName, numeric: numeric, CsvLog.ExtendPath(OnLog, "BoundData")), numeric);
         }
 
         public void LoadRows(IEnumerable<IEnumerable<string?>> rows, IEnumerable<string> colnames)
         {
-            DataGridBind?.Unbind();
-            NumericGrid = false;
-            DataGridBind = new BoundData(rows, colnames, CsvLog.ExtendPath(OnLog, "BoundData"));
-            DataGridBind.ListChanged += GridData_ListChanged;
-            DataGridBind.Setup(this);
-            UpdateStatusStrip();
-            UpdateButtons(this, EventArgs.Empty);
+            BindData(new BoundData(rows, colnames, CsvLog.ExtendPath(OnLog, "BoundData")), numeric: false);
         }
 
         public void LoadRows(IEnumerable<IEnumerable<double>> rows, IEnumerable<string> colnames)
         {
-            DataGridBind?.Unbind();
-            NumericGrid = true;
-            DataGridBind = new BoundData(rows, colnames, CsvLog.ExtendPath(OnLog, "BoundData"));
-            DataGridBind.ListChanged += GridData_ListChanged;
-            DataGridBind.Setup(this);
-            UpdateStatusStrip();
-            UpdateButtons(this, EventArgs.Empty);
+            BindData(new BoundData(rows, colnames, CsvLog.ExtendPath(OnLog, "BoundData")), numeric: true);
         }
 
         public void LoadJson(string json)

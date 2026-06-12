@@ -621,6 +621,7 @@ namespace SehensWerte.Controls
             public void Unbind()
             {
                 // could release resources, but the GC should clean up anyway
+                ListChanged = null;
             }
 
             public void CellColour(int col, int row, Color colour)
