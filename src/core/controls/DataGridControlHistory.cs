@@ -18,6 +18,8 @@ namespace SehensWerte.Controls
                 ShowRowsMatchingRegex,
                 HideRowsMatchingRegex,
                 HideNotFirstUnique,
+                HideRows,
+                HideRowsOtherThan,
                 HideRowsAbove,
                 HideRowsBelow,
                 ColumnResize,
@@ -38,6 +40,7 @@ namespace SehensWerte.Controls
             public int Width = -1; // ColumnResize
             public int Stride = 0; // Decimate: keep every Nth row
             public List<string> Values = new(); // HideRowsMatching/NotMatching
+            public List<int> SelectedRows = new(); // HideRows/HideRowsOtherThan: stable row indices selected at op time. Identity-based, so replay is only meaningful against the same data.
             public Func<string, IEnumerable<(string Header, string?[] Values)>>? SplitRecipe;
             // MoveColumn: Column is the column that was moved.
             // FromAfterColumn = previous left neighbour (where Undo puts it back).
@@ -138,6 +141,48 @@ namespace SehensWerte.Controls
             bd.HideRowsMatching("Name", new[] { "b" });
             Assert.AreEqual(2, bd.FilteredData.Count);
             Assert.IsFalse(bd.CanRedo);
+
+            bd.Undo();
+            Assert.AreEqual(3, bd.FilteredData.Count);
+            Assert.IsTrue(bd.CanRedo);
+
+            bd.Redo();
+            Assert.AreEqual(2, bd.FilteredData.Count);
+            Assert.IsFalse(bd.FilteredData.Any(r => r.Column(0) == "b"));
+            Assert.IsFalse(bd.CanRedo);
+        }
+
+        [TestMethod]
+        public void HideUnselectedRedoRestoresView()
+        {
+            var bd = CreateTestData(); // rows a/1, b/2, c/3 at indices 0,1,2
+            // Stack an earlier op so we exercise ordering, not just a lone hide.
+            bd.HideRowsMatching("Name", new[] { "a" }); // hides index 0; b,c visible
+            Assert.AreEqual(2, bd.FilteredData.Count);
+
+            // Hide unselected: keep only index 2 ("c").
+            bd.HideRowsOtherThan(new[] { 2 });
+            Assert.AreEqual(1, bd.FilteredData.Count);
+            Assert.AreEqual("c", bd.FilteredData[0].Column(0));
+            Assert.IsFalse(bd.CanRedo);
+
+            bd.Undo();
+            Assert.AreEqual(2, bd.FilteredData.Count); // back to b,c
+            Assert.IsTrue(bd.CanRedo);
+
+            bd.Redo();
+            Assert.AreEqual(1, bd.FilteredData.Count);
+            Assert.AreEqual("c", bd.FilteredData[0].Column(0));
+            Assert.IsFalse(bd.CanRedo);
+        }
+
+        [TestMethod]
+        public void HideSelectedRedoRestoresView()
+        {
+            var bd = CreateTestData(); // rows a/1, b/2, c/3 at indices 0,1,2
+            bd.HideRows(new[] { 1 }); // hide "b"
+            Assert.AreEqual(2, bd.FilteredData.Count);
+            Assert.IsFalse(bd.FilteredData.Any(r => r.Column(0) == "b"));
 
             bd.Undo();
             Assert.AreEqual(3, bd.FilteredData.Count);

@@ -202,7 +202,8 @@ Data lives in `BoundData` (implements `IBindingList`):
 - `UnfilteredData` - all rows in original order. Each `BoundDataRow.Index` is the
   stable identity used everywhere instead of grid position.
 - `FilteredData` - currently visible/sorted rows; what the grid shows.
-- `UndoList` - `Stack<UndoEntry>` of full view snapshots.
+- `m_History` / `m_RedoStack` - `DataGridControlHistory` lists of
+  `Snapshot` view states (undo and redo stacks).
 
 ### Column mutations
 
@@ -214,6 +215,31 @@ accessor block if a use case needs more.
 
 `grid.SaveView()` returns a `DataGridControlHistory` snapshot; `grid.RestoreView(view)`
 replays it.
+
+### Undo / redo (the snapshot triad)
+
+Every undoable/redoable op needs three things in lockstep, or it silently falls out
+of the history (the "hide unselected redo doesn't work" class of bug):
+1. An `Operation` enum value in `DataGridControlHistory.Snapshot.Operation`.
+2. A `PushSnapshot(...)` call at the start of the public method - this captures the
+   pre-op visible set, which is what `Undo()`'s `ApplyVisible` restores.
+3. A `case` in `DispatchAction` - `Redo()` and `RestoreBoundState` re-execute the op
+   by re-calling the public method through here. No case means nothing to replay.
+Undo restores the captured pre-op view; redo re-runs the op. Selection-based hides
+(`HideRows`, `HideRowsOtherThan`) store stable row `Index` values, so they replay
+only against the same data (fine for in-session undo/redo and SaveView/RestoreView;
+best-effort, bounds-guarded, on a different dataset). Data-driven hides
+(`HideRowsMatching`, anchors) replay meaningfully on different data.
+
+### Column reorder and horizontal scroll
+
+`RebuildGridColumns` resets `grid.DataSource`, which snaps the horizontal scroll to 0.
+A reorder (`DoMove`) must not move the viewport, so it captures
+`HorizontalScrollingOffset` and restores it via `RestoreHorizontalScroll` - deferred
+through `BeginInvoke` because the `DataSource` reset and the `ListChanged.Reset` both
+re-zero it before layout settles. Column drag is hand-rolled (the WinForms
+`AllowUserToOrderColumns` is off); a `DragScrollTimer` auto-scrolls when the drag mouse
+enters the left/right edge zone, gated on `ColumnsOverflowViewport`.
 
 ---
 

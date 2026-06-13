@@ -20,6 +20,11 @@ namespace SehensWerte.Files
             return new Entry.CallPathProxy(prev ?? (_ => { }), callPath).Add;
         }
 
+        static public Action<Entry> DemoteToDebug(Action<Entry>? prev, string textPrefix = "")
+        {
+            return new Entry.DemoteProxy(prev ?? (_ => { }), textPrefix).Add;
+        }
+
         public class Entry : ICloneable
         {
             public string Text = "";
@@ -90,6 +95,34 @@ namespace SehensWerte.Files
                     Entry e = (Entry)entry.Clone();
                     e.CallPath = e.CallPath + ":" + m_CallPath;
                     m_Add?.Invoke(e);
+                }
+            }
+
+            internal class DemoteProxy
+            {
+                private Action<CsvLog.Entry> m_Add;
+                private string m_TextPrefix;
+
+                public DemoteProxy(Action<CsvLog.Entry> prev, string textPrefix)
+                {
+                    this.m_Add = prev;
+                    this.m_TextPrefix = textPrefix;
+                }
+
+                public void Add(CsvLog.Entry entry)
+                {
+                    bool demote = entry.Priority != CsvLog.Priority.Debug;
+                    if (demote)
+                    {
+                        Entry e = (Entry)entry.Clone();
+                        e.Text = m_TextPrefix + e.Text;
+                        e.Priority = CsvLog.Priority.Debug;
+                        m_Add?.Invoke(e);
+                    }
+                    else
+                    {
+                        m_Add?.Invoke(entry);
+                    }
                 }
             }
         }
