@@ -734,21 +734,28 @@ namespace SehensWerte.Controls.Sehens
             double[] samples = new double[waveforms.Extracted.Count];
             bool stop = false;
 
-            int index = 0;
+            int sampleIndex = 0;
             RiffWriter riffWriter = new RiffWriter(edit.Filename, (int)waveforms.SamplesPerSeconds[0], waveforms.Extracted.Count);
+
+            List<double[]> extracted = new List<double[]>();
+            for (int channel = 0; channel < waveforms.Extracted.Count; channel++)
+            {
+                extracted.Add(waveforms.Extracted[channel].CopyToDoubleArray());
+            }
+
             while (!stop)
             {
                 stop = true;
                 for (int channel = 0; channel < waveforms.Extracted.Count; channel++)
                 {
-                    var array = waveforms.Extracted[channel].CopyToDoubleArray();
-                    samples[channel] = (array.Length > index) ? array[index] : 0.0;
-                    if (array.Length > index)
+                    var array = extracted[channel];
+                    samples[channel] = (array.Length > sampleIndex) ? array[sampleIndex] : 0.0;
+                    if (array.Length > sampleIndex)
                     {
                         stop = false;
                     }
                 }
-                index++;
+                sampleIndex++;
                 riffWriter.Add(samples);
             }
             riffWriter.Close();
