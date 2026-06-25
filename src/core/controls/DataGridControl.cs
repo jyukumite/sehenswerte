@@ -292,6 +292,7 @@ namespace SehensWerte.Controls
             this.Grid.SelectionChanged += this.Grid_SelectionChanged;
             this.Grid.CellDoubleClick += (s, e) => CellDoubleClick.Invoke(s, e);
             this.Grid.ColumnDividerDoubleClick += Grid_ColumnDividerDoubleClick;
+            this.Grid.RowDividerDoubleClick += Grid_RowDividerDoubleClick;
             this.Grid.CellPainting += Grid_CellPainting;
             this.Grid.KeyDown += Grid_KeyDown;
             this.Grid.MouseWheel += Grid_MouseWheel;
@@ -827,6 +828,26 @@ namespace SehensWerte.Controls
         }
 
 
+        // The text and flags a cell paints with: null renders as "null", masked
+        // columns render as MaskString
+        private (string DisplayText, bool IsNull, bool Masked) CellDisplayText(string columnName, string? raw)
+        {
+            bool isNull = raw == null;
+            string realText = raw ?? "null";
+            bool masked = !isNull && realText != "" && (MaskColumns?.Contains(columnName) ?? false);
+            return (masked ? MaskString : realText, isNull, masked);
+        }
+
+        // Base string format used to draw/measure cell text
+        private StringFormat BuildCellStringFormat()
+        {
+            return new StringFormat
+            {
+                Trimming = StringTrimming.EllipsisCharacter,
+                FormatFlags = NumericGrid ? StringFormatFlags.NoWrap : 0
+            };
+        }
+
         private void Grid_ColumnDividerDoubleClick(object? sender, DataGridViewColumnDividerDoubleClickEventArgs e)
         {
             try
@@ -842,26 +863,30 @@ namespace SehensWerte.Controls
                 SizeF headerTextSize = TextRenderer.MeasureText(column.HeaderText, headerFont);
                 int headerWidth = (int)Math.Ceiling(headerTextSize.Width) + padding;
 
+                // GetCellFont returns cache-/grid-owned fonts: fetch them on the UI thread
+                // (the cache is not thread-safe) and never dispose them.
                 Font baseCellFont = column.InheritedStyle.Font;
-                float cellFontSize = Math.Clamp(baseCellFont.Size + m_CellFontDelta, 6f, 72f);
-                using Font cellFont = new Font(baseCellFont.FontFamily, cellFontSize, baseCellFont.Style);
+                Font normalFont = GetCellFont(baseCellFont, italic: false);
+                Font nullFont = GetCellFont(baseCellFont, italic: true);
 
-                ThreadLocal<(Graphics g, int m)> widths = new ThreadLocal<(Graphics g, int m)>(() =>
-                    (Graphics.FromImage(new Bitmap(1, 1)), headerWidth), trackAllValues: true
-                );
+                ThreadLocal<(Bitmap bmp, Graphics g, int m)> widths = new ThreadLocal<(Bitmap bmp, Graphics g, int m)>(() =>
+                {
+                    Bitmap bmp = new Bitmap(1, 1);
+                    return (bmp, Graphics.FromImage(bmp), headerWidth);
+                }, trackAllValues: true);
                 Parallel.ForEach(strings, str =>
                 {
-                    if (str != null)
-                    {
-                        Graphics g = widths.Value.g;
-                        SizeF textSize = g.MeasureString(str, cellFont);
-                        int width = (int)Math.Ceiling(textSize.Width) + padding;
-                        widths.Value = (g, Math.Max(widths.Value.m, width));
-                    }
+                    var (displayText, isNull, _) = CellDisplayText(column.Name, str);
+                    if (string.IsNullOrEmpty(displayText)) return;
+                    var local = widths.Value;
+                    SizeF textSize = local.g.MeasureString(displayText, isNull ? nullFont : normalFont);
+                    int width = (int)Math.Ceiling(textSize.Width) + padding;
+                    widths.Value = (local.bmp, local.g, Math.Max(local.m, width));
                 });
                 foreach (var v in widths.Values)
                 {
                     v.g.Dispose();
+                    v.bmp.Dispose();
                 }
 
                 int maxWidth = widths.Values.Max(value => value.m);
@@ -886,8 +911,51 @@ namespace SehensWerte.Controls
 
                 e.Handled = true;
             }
-            catch
+            catch (Exception ex)
             {
+                OnLog?.Invoke(new CsvLog.Entry($"ColumnDividerDoubleClick auto-fit failed: {ex.Message}", CsvLog.Priority.Warn));
+            }
+        }
+
+        private void Grid_RowDividerDoubleClick(object? sender, DataGridViewRowDividerDoubleClickEventArgs e)
+        {
+            try
+            {
+                if (sender == null) return;
+                DataGridView grid = (DataGridView)sender;
+                if (e.RowIndex < 0 || e.RowIndex >= grid.Rows.Count) return;
+
+                string?[] cells = GetRow(e.RowIndex);
+                DataGridViewRow row = grid.Rows[e.RowIndex];
+                int defaultHeight = grid.RowTemplate.Height;
+                int contentHeight = defaultHeight;
+
+                using Graphics g = grid.CreateGraphics();
+                for (int loop = 0; loop < grid.Columns.Count; loop++)
+                {
+                    DataGridViewColumn column = grid.Columns[loop];
+                    if (!column.Visible) continue;
+
+                    string? raw = loop < cells.Length ? cells[loop] : null;
+                    var (displayText, isNull, _) = CellDisplayText(column.Name, raw);
+                    if (string.IsNullOrEmpty(displayText)) continue;
+
+                    DataGridViewCellStyle style = row.Cells[loop].InheritedStyle;
+                    Font cellFont = GetCellFont(style.Font, isNull);
+                    int availWidth = Math.Max(1, column.Width - style.Padding.Left - style.Padding.Right);
+
+                    using StringFormat stringFormat = BuildCellStringFormat();
+                    SizeF textSize = g.MeasureString(displayText, cellFont, availWidth, stringFormat);
+                    int cellHeight = (int)Math.Ceiling(textSize.Height) + style.Padding.Top + style.Padding.Bottom;
+                    contentHeight = Math.Max(contentHeight, cellHeight);
+                }
+
+                row.Height = Math.Max(defaultHeight, Math.Min(grid.ClientSize.Height, contentHeight + 2));
+                e.Handled = true;
+            }
+            catch (Exception ex)
+            {
+                OnLog?.Invoke(new CsvLog.Entry($"RowDividerDoubleClick auto-fit failed: {ex.Message}", CsvLog.Priority.Warn));
             }
         }
 
@@ -1304,18 +1372,11 @@ namespace SehensWerte.Controls
             }
 
             string colName = Grid.Columns[e.ColumnIndex].Name;
-            bool isNull = e.Value == null;
-            string realText = e.Value?.ToString() ?? "null";
-            bool masked = !isNull && realText != "" && (MaskColumns?.Contains(colName) ?? false);
-            string displayText = masked ? MaskString : realText;
+            var (displayText, isNull, masked) = CellDisplayText(colName, e.Value?.ToString());
 
             Font cellFont = GetCellFont(e.CellStyle.Font, isNull);
             Color textColor = isNull ? NullForeColor : e.CellStyle.ForeColor;
-            using StringFormat stringFormat = new StringFormat
-            {
-                Trimming = StringTrimming.EllipsisCharacter,
-                FormatFlags = NumericGrid ? StringFormatFlags.NoWrap : 0
-            };
+            using StringFormat stringFormat = BuildCellStringFormat();
 
             stringFormat.Alignment = e.CellStyle.Alignment switch
             {
