@@ -131,19 +131,39 @@ namespace SehensWerte.Utils
             Thread thread = new Thread(new ThreadStart(new OutputCapture(process, stdout, stderr).Run));
             thread.Start();
 
-            if (!process.HasExited)
+            // wine can invalidate a fast-exiting child's handle mid-query, making these
+            // throw; treat that as "child gone" and return -1
+            try
             {
-                if (stdin != null)
+                if (!process.HasExited)
                 {
-                    process.StandardInput.AutoFlush = true;
-                    process.StandardInput.BaseStream.Write(stdin, 0, stdin.Length);
-                    process.StandardInput.Close();
+                    if (stdin != null)
+                    {
+                        try
+                        {
+                            process.StandardInput.AutoFlush = true;
+                            process.StandardInput.BaseStream.Write(stdin, 0, stdin.Length);
+                            process.StandardInput.Close();
+                        }
+                        catch (System.IO.IOException) { }
+                        catch (InvalidOperationException) { }
+                    }
+                    process.WaitForExit();
                 }
-                process.WaitForExit();
             }
+            catch (InvalidOperationException) { }
+            catch (System.ComponentModel.Win32Exception) { }
 
             thread.Join();
-            return process.ExitCode;
+
+            int exitCode = -1;
+            try
+            {
+                exitCode = process.ExitCode;
+            }
+            catch (InvalidOperationException) { }
+            catch (System.ComponentModel.Win32Exception) { }
+            return exitCode;
         }
 
         private static ProcessStartInfo GetProcessStartInfo(string executableName, string parameters, string workingfolder, Dictionary<string, string>? environment)
@@ -304,30 +324,68 @@ namespace SehensWerte.Utils
 
             public void Run()
             {
-                while (!m_Process.HasExited)
+                // HasExited throws under wine once the handle dies; treat as exited
+                // rather than crash the app from this thread
+                try
+                {
+                    while (!m_Process.HasExited)
+                    {
+                        Fetch();
+                        Thread.Sleep(0);
+                    }
+                }
+                catch (InvalidOperationException)
+                {
+                }
+                catch (System.ComponentModel.Win32Exception)
+                {
+                }
+                try
                 {
                     Fetch();
-                    Thread.Sleep(0);
                 }
-                Fetch();
+                catch (InvalidOperationException)
+                {
+                }
+                catch (System.ComponentModel.Win32Exception)
+                {
+                }
             }
 
             private void Fetch()
             {
                 int byteCount;
-                while ((byteCount = m_Process.StandardOutput.BaseStream.ReadByte()) >= 0)
+                try
                 {
-                    if (m_StdOut != null)
+                    while ((byteCount = m_Process.StandardOutput.BaseStream.ReadByte()) >= 0)
                     {
-                        m_StdOut.WriteByte((byte)byteCount);
+                        if (m_StdOut != null)
+                        {
+                            m_StdOut.WriteByte((byte)byteCount);
+                        }
                     }
                 }
-                while ((byteCount = m_Process.StandardError.BaseStream.ReadByte()) >= 0)
+                catch (System.IO.IOException)
                 {
-                    if (m_StdErr != null)
+                }
+                catch (InvalidOperationException)
+                {
+                }
+                try
+                {
+                    while ((byteCount = m_Process.StandardError.BaseStream.ReadByte()) >= 0)
                     {
-                        m_StdErr.WriteByte((byte)byteCount);
+                        if (m_StdErr != null)
+                        {
+                            m_StdErr.WriteByte((byte)byteCount);
+                        }
                     }
+                }
+                catch (System.IO.IOException)
+                {
+                }
+                catch (InvalidOperationException)
+                {
                 }
             }
         }
