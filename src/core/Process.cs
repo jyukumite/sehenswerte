@@ -132,7 +132,8 @@ namespace SehensWerte.Utils
             thread.Start();
 
             // wine can invalidate a fast-exiting child's handle mid-query, making these
-            // throw; treat that as "child gone" and return -1
+            // throw; treat that as "child gone" and return -1.
+            string? diag = null;
             try
             {
                 if (!process.HasExited)
@@ -145,14 +146,26 @@ namespace SehensWerte.Utils
                             process.StandardInput.BaseStream.Write(stdin, 0, stdin.Length);
                             process.StandardInput.Close();
                         }
-                        catch (System.IO.IOException) { }
-                        catch (InvalidOperationException) { }
+                        catch (System.IO.IOException ex)
+                        {
+                            diag ??= DiagText("stdin write", ex);
+                        }
+                        catch (InvalidOperationException ex)
+                        {
+                            diag ??= DiagText("stdin write", ex);
+                        }
                     }
                     process.WaitForExit();
                 }
             }
-            catch (InvalidOperationException) { }
-            catch (System.ComponentModel.Win32Exception) { }
+            catch (InvalidOperationException ex)
+            {
+                diag ??= DiagText("WaitForExit", ex);
+            }
+            catch (System.ComponentModel.Win32Exception ex)
+            {
+                diag ??= DiagText("WaitForExit", ex);
+            }
 
             thread.Join();
 
@@ -161,8 +174,19 @@ namespace SehensWerte.Utils
             {
                 exitCode = process.ExitCode;
             }
-            catch (InvalidOperationException) { }
-            catch (System.ComponentModel.Win32Exception) { }
+            catch (InvalidOperationException ex)
+            {
+                diag ??= DiagText("ExitCode", ex);
+            }
+            catch (System.ComponentModel.Win32Exception ex)
+            {
+                diag ??= DiagText("ExitCode", ex);
+            }
+
+            if (diag != null)
+            {
+                WriteDiag(stderr, diag);
+            }
             return exitCode;
         }
 
@@ -309,6 +333,25 @@ namespace SehensWerte.Utils
             }
         }
 
+        private static string DiagText(string context, Exception ex)
+        {
+            return $"\n[Process.Run: {context} failed: {ex.GetType().Name}: {ex.Message}]\n";
+        }
+
+        private static void WriteDiag(MemoryStream? stderr, string message)
+        {
+            if (stderr == null)
+            {
+                return;
+            }
+            try
+            {
+                byte[] bytes = Encoding.UTF8.GetBytes(message);
+                stderr.Write(bytes, 0, bytes.Length);
+            }
+            catch (Exception) { }
+        }
+
         private class OutputCapture
         {
             private System.Diagnostics.Process m_Process;
@@ -334,21 +377,25 @@ namespace SehensWerte.Utils
                         Thread.Sleep(0);
                     }
                 }
-                catch (InvalidOperationException)
+                catch (InvalidOperationException ex)
                 {
+                    WriteDiag(m_StdErr, DiagText("capture loop", ex));
                 }
-                catch (System.ComponentModel.Win32Exception)
+                catch (System.ComponentModel.Win32Exception ex)
                 {
+                    WriteDiag(m_StdErr, DiagText("capture loop", ex));
                 }
                 try
                 {
                     Fetch();
                 }
-                catch (InvalidOperationException)
+                catch (InvalidOperationException ex)
                 {
+                    WriteDiag(m_StdErr, DiagText("final fetch", ex));
                 }
-                catch (System.ComponentModel.Win32Exception)
+                catch (System.ComponentModel.Win32Exception ex)
                 {
+                    WriteDiag(m_StdErr, DiagText("final fetch", ex));
                 }
             }
 
