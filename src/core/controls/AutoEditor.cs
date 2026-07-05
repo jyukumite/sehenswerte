@@ -60,8 +60,16 @@ namespace SehensWerte.Controls
         public Action<AutoEditor>? OnChanging;
         public Action<AutoEditor>? OnChanged;
         public AutoEditor? Parent;
+        private CommitMode m_CommitMode = CommitMode.Immediate;
+        private bool m_ReadOnly;
         private bool m_Updating;
         private static int m_UpdateRecursion;
+
+        public enum CommitMode
+        {
+            Immediate,   // text controls commit on every TextChanged (default, original behaviour)
+            OnValidated, // text controls commit on focus-leave (Validated) or Enter
+        }
 
         internal class EditRow
         {
@@ -255,13 +263,18 @@ namespace SehensWerte.Controls
             public IEnumerable<string> GetValues();
         }
 
-        public AutoEditor(object source, Control.ControlCollection? controls)
+        public AutoEditor(object source, Control.ControlCollection? controls,
+                          CommitMode commitMode = CommitMode.Immediate, bool readOnly = false)
         {
             Controls = controls;
+            m_CommitMode = commitMode;
+            m_ReadOnly = readOnly;
             if (source is AutoEditor)
             {
                 SourceData = ((AutoEditor)source).SourceData;
                 Parent = (AutoEditor)source;
+                m_CommitMode = Parent.m_CommitMode; // child editors (nested controls) inherit
+                m_ReadOnly = Parent.m_ReadOnly;
             }
             else
             {
@@ -425,8 +438,11 @@ namespace SehensWerte.Controls
             {
                 if (item is ComboBox)
                 {
-                    ((ComboBox)item).SelectedIndexChanged += TextChanged;
-                    ((ComboBox)item).TextChanged += TextChanged;
+                    if (!m_ReadOnly)
+                    {
+                        ((ComboBox)item).SelectedIndexChanged += TextChanged;
+                        ((ComboBox)item).TextChanged += TextChanged;
+                    }
                     string[]? array = EnumValues(SourceData, item.Tag as EditRow);
                     if (array != null)
                     {
@@ -438,8 +454,11 @@ namespace SehensWerte.Controls
                 }
                 else if (item is ListBox)
                 {
-                    ((ListBox)item).SelectedIndexChanged += TextChanged;
-                    ((ListBox)item).TextChanged += TextChanged;
+                    if (!m_ReadOnly)
+                    {
+                        ((ListBox)item).SelectedIndexChanged += TextChanged;
+                        ((ListBox)item).TextChanged += TextChanged;
+                    }
                     string[]? array = EnumValues(SourceData, item.Tag as EditRow);
                     if (array != null)
                     {
@@ -457,6 +476,7 @@ namespace SehensWerte.Controls
         private void SetEvents()
         {
             if (Controls == null) return;
+            if (m_ReadOnly) return; // no commit wiring at all - the editor is a viewer
             foreach (Control item in Controls)
             {
                 if (item is Button)
@@ -484,6 +504,11 @@ namespace SehensWerte.Controls
                 else if (item is RadioButton)
                 {
                     ((RadioButton)item).CheckedChanged += TextChanged;
+                }
+                else if (m_CommitMode == CommitMode.OnValidated && item is TextBoxBase)
+                {
+                    item.Validated += TextChanged; // focus-leave commit
+                    item.KeyDown += TextKeyDown;   // Enter commit
                 }
                 else
                 {
@@ -665,6 +690,16 @@ namespace SehensWerte.Controls
             return (control == null) ? null
                    : (control is Form) ? (Form)control
                    : ParentForm(control.Parent);
+        }
+
+        private void TextKeyDown(object? sender, KeyEventArgs e)
+        {
+            if (e.KeyCode == Keys.Enter && sender is TextBoxBase box && !box.Multiline)
+            {
+                TextChanged(sender, EventArgs.Empty);
+                e.Handled = true;
+                e.SuppressKeyPress = true; // kill the ding
+            }
         }
 
         private void TextChanged(object? sender, EventArgs e)
@@ -996,6 +1031,22 @@ namespace SehensWerte.Controls
             public NestedTestData Inner = new NestedTestData();
         }
 
+        // plain (non-AutoEditorBase) child + plain wrapper: the shape the Bluetooth
+        // panel uses to render several protocol packets in one editor via [InlineClass]
+        class PlainInlineChild
+        {
+            public int Value = 7;
+            public string Label = "hello";
+        }
+
+        class PlainInlineWrapper
+        {
+            [AutoEditor.InlineClass, AutoEditor.DisplayOrder(0, "First")]
+            public PlainInlineChild First = new PlainInlineChild();
+            [AutoEditor.InlineClass, AutoEditor.DisplayOrder(1, "Second")]
+            public PlainInlineChild Second = new PlainInlineChild();
+        }
+
 
         [TestMethod]
         public void TestAutoEditor()
@@ -1107,6 +1158,119 @@ namespace SehensWerte.Controls
             var attr = AutoEditor.ArrayEditor(member);
             Assert.IsNotNull(attr);
             Assert.AreEqual(AutoEditor.ArrayEditorAttribute.DisplayMode.Inline, attr!.Mode);
+        }
+
+#pragma warning disable CS0649 // fields are written via reflection by AutoEditor
+        class CommitTestData
+        {
+            public int Number = 42;
+            public string Name = "x";
+            public bool Flag;
+            public System.Windows.Forms.AnchorStyles Anchor = System.Windows.Forms.AnchorStyles.Left;
+            [AutoEditor.PushButton("go")]
+            public bool Go;
+        }
+#pragma warning restore CS0649
+
+        private static IEnumerable<Control> AllControls(Control root)
+        {
+            foreach (Control child in root.Controls)
+            {
+                yield return child;
+                foreach (Control sub in AllControls(child))
+                {
+                    yield return sub;
+                }
+            }
+        }
+
+        private static Control? FindControl(Control root, string memberName, Type controlType)
+        {
+            return AllControls(root).FirstOrDefault(c =>
+                controlType.IsAssignableFrom(c.GetType())
+                && (c.Tag as AutoEditor.EditRow)?.MemberInfo.Name == memberName);
+        }
+
+        [TestMethod]
+        public void TestCommitModeDefaults()
+        {
+            var control = new AutoEditorControl();
+            Assert.AreEqual(AutoEditor.CommitMode.Immediate, control.CommitMode);
+            Assert.IsFalse(control.ReadOnly);
+        }
+
+        [TestMethod]
+        public void TestImmediateCommit()
+        {
+            var data = new CommitTestData();
+            var control = new AutoEditorControl();
+            control.Generate(data);
+            var box = (TextBox)FindControl(control, nameof(CommitTestData.Number), typeof(TextBox))!;
+            box.Text = "7";
+            Assert.AreEqual(7, data.Number); // default mode commits per keystroke
+        }
+
+        [TestMethod]
+        public void TestOnValidatedDefersCommit()
+        {
+            var data = new CommitTestData();
+            var control = new AutoEditorControl { CommitMode = AutoEditor.CommitMode.OnValidated };
+            control.Generate(data);
+            var box = (TextBox)FindControl(control, nameof(CommitTestData.Number), typeof(TextBox))!;
+            box.Text = "7";
+            Assert.AreEqual(42, data.Number); // deferred until Validated/Enter
+        }
+
+        [TestMethod]
+        public void TestReadOnlyRendering()
+        {
+            var data = new CommitTestData();
+            var control = new AutoEditorControl { ReadOnly = true };
+            control.Generate(data);
+            var numberBox = (TextBox)FindControl(control, nameof(CommitTestData.Number), typeof(TextBox))!;
+            Assert.IsTrue(numberBox.ReadOnly);
+            Assert.IsFalse(AllControls(control).Any(c => c is ComboBox)); // enum renders as read-only TextBox
+            var enumBox = (TextBox)FindControl(control, nameof(CommitTestData.Anchor), typeof(TextBox))!;
+            Assert.IsTrue(enumBox.ReadOnly);
+            var checkBox = (CheckBox)FindControl(control, nameof(CommitTestData.Flag), typeof(CheckBox))!;
+            Assert.IsFalse(checkBox.AutoCheck);
+            var goButton = (Button)FindControl(control, nameof(CommitTestData.Go), typeof(Button))!;
+            Assert.IsFalse(goButton.Enabled);
+        }
+
+        [TestMethod]
+        public void TestReadOnlySuppressesCommitAndUpdates()
+        {
+            var data = new CommitTestData();
+            var control = new AutoEditorControl { ReadOnly = true };
+            control.Generate(data);
+            var box = (TextBox)FindControl(control, nameof(CommitTestData.Number), typeof(TextBox))!;
+            box.Text = "7";
+            Assert.AreEqual(42, data.Number); // no commit wiring at all
+
+            data.Number = 9;
+            control.UpdateControls(); // public refresh for non-AutoEditorBase sources
+            Assert.AreEqual("9", box.Text);
+        }
+
+        [TestMethod]
+        public void TestPlainInlineClassWrapper()
+        {
+            // one editor over a plain wrapper of plain [InlineClass] children (the
+            // Bluetooth panel's packet-column shape) - renders and refreshes in place
+            var wrapper = new PlainInlineWrapper();
+            var control = new AutoEditorControl();
+            control.Generate(wrapper);
+            var boxes = AllControls(control)
+                .OfType<TextBox>()
+                .Where(t => (t.Tag as AutoEditor.EditRow)?.MemberInfo.Name == nameof(PlainInlineChild.Value))
+                .ToList();
+            Assert.AreEqual(2, boxes.Count); // First.Value and Second.Value both rendered
+            Assert.IsTrue(boxes.All(b => b.Text == "7"));
+
+            wrapper.First.Value = 11; // mutate the nested instance in place
+            control.UpdateControls();
+            Assert.IsTrue(boxes.Any(b => b.Text == "11"));
         }
 
         [TestMethod]

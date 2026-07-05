@@ -8,11 +8,26 @@ namespace SehensWerte.Controls
         private object? SourceData;
         private AutoEditor? m_Editor;
         public Action<AutoEditor>? OnChange;
+        // Both applied at Generate() time; changing them later has no effect until the next Generate().
+        public AutoEditor.CommitMode CommitMode { get; set; } = AutoEditor.CommitMode.Immediate;
+        public bool ReadOnly { get; set; }
         private Dictionary<AutoEditor.EditRow, object> m_StartValues = new Dictionary<AutoEditor.EditRow, object>();
         internal TableLayoutPanel? LayoutPanel;
         public int PreferredHeight => LayoutPanel?.GetRowHeights().Sum() ?? 0;
         // tracks (memberInfo, source) -> last-seen IList count so the panel can rebuild when an array length changes
         private Dictionary<(MemberInfo, object), int> m_ArrayLengths = new();
+
+        // TableLayoutPanel is not double-buffered by default: on a resize it repaints every
+        // cell (and, with CellBorderStyle, every border) unbuffered, which is slow and flickers
+        // badly on a panel with many rows. This subclass buffers the paint.
+        private class BufferedTableLayoutPanel : TableLayoutPanel
+        {
+            public BufferedTableLayoutPanel()
+            {
+                DoubleBuffered = true;
+                SetStyle(ControlStyles.OptimizedDoubleBuffer | ControlStyles.AllPaintingInWmPaint, true);
+            }
+        }
 
         public AutoEditorControl()
         {
@@ -29,6 +44,14 @@ namespace SehensWerte.Controls
             {
                 ab.UpdateControls -= OnUpdateControlsRequested;
             }
+        }
+
+        // Push current SourceData values into the generated controls. Safe to call from a
+        // non-UI thread (marshals via BeginInvoke once the handle exists). Needed when
+        // SourceData is not an AutoEditorBase (e.g. plain objects mutated in place).
+        public void UpdateControls()
+        {
+            m_Editor?.UpdateControls();
         }
 
         internal void Revert()
@@ -64,7 +87,7 @@ namespace SehensWerte.Controls
                     ab.UpdateControls += OnUpdateControlsRequested;
                 }
                 GenerateControls();
-                m_Editor = new AutoEditor(sourceData, Controls);
+                m_Editor = new AutoEditor(sourceData, Controls, CommitMode, ReadOnly);
                 m_Editor.OnChanging = (Action<AutoEditor>)Delegate.Combine(m_Editor.OnChanging, new Action<AutoEditor>(OnChanging));
                 m_Editor.OnChanged = (Action<AutoEditor>)Delegate.Combine(m_Editor.OnChanged, new Action<AutoEditor>(OnChanged));
             }
@@ -81,7 +104,7 @@ namespace SehensWerte.Controls
 
         private void GenerateControls()
         {
-            LayoutPanel = new TableLayoutPanel
+            LayoutPanel = new BufferedTableLayoutPanel
             {
                 Dock = DockStyle.Fill,
                 CellBorderStyle = TableLayoutPanelCellBorderStyle.Single,
@@ -136,7 +159,7 @@ namespace SehensWerte.Controls
                         if (!string.IsNullOrEmpty(groupName)) AddGroupNameRow(groupName!);
                         prevKey = key;
                     }
-                    GenerateControl(LayoutPanel, row);
+                    GenerateControl(LayoutPanel, row, ReadOnly);
                 }
 
                 AddFinalRow();
@@ -379,7 +402,7 @@ namespace SehensWerte.Controls
                 || t == typeof(long) || t == typeof(ulong);
         }
 
-        private static void GenerateControl(TableLayoutPanel tableLayout, AutoEditor.EditRow row)
+        private static void GenerateControl(TableLayoutPanel tableLayout, AutoEditor.EditRow row, bool readOnly)
         {
             if (AutoEditor.IsHidden(row.MemberInfo)
                 || row.Type == typeof(Delegate)
@@ -399,7 +422,21 @@ namespace SehensWerte.Controls
             };
             try
             {
-                if (row.OpenArraySubForm)
+                if (readOnly && (AutoEditor.Values(row.MemberInfo) != null || row.Type.BaseType == typeof(Enum)))
+                {
+                    // ReadOnly viewer: render list/enum values as a legible read-only TextBox
+                    // (ComboBox has no ReadOnly; the static UpdateControls refreshes via .Text)
+                    TextBox textBox = new TextBox
+                    {
+                        Dock = DockStyle.Fill,
+                        AutoSize = true,
+                        Tag = row,
+                        ReadOnly = true,
+                    };
+                    tableLayout.Controls.Add(control, 0, ++tableLayout.RowCount);
+                    tableLayout.Controls.Add(textBox, 1, tableLayout.RowCount);
+                }
+                else if (row.OpenArraySubForm)
                 {
                     var arrayAttr = AutoEditor.ArrayEditor(row.MemberInfo);
                     Button button = new Button
@@ -411,7 +448,7 @@ namespace SehensWerte.Controls
                     };
                     tableLayout.Controls.Add(control, 0, ++tableLayout.RowCount);
                     tableLayout.Controls.Add(button, 1, tableLayout.RowCount);
-                    button.Enabled = AutoEditor.IsEnabled(row.MemberInfo);
+                    button.Enabled = !readOnly && AutoEditor.IsEnabled(row.MemberInfo);
                 }
                 else if (row.OpenElementSubForm)
                 {
@@ -424,7 +461,7 @@ namespace SehensWerte.Controls
                     };
                     tableLayout.Controls.Add(control, 0, ++tableLayout.RowCount);
                     tableLayout.Controls.Add(button, 1, tableLayout.RowCount);
-                    button.Enabled = AutoEditor.IsEnabled(row.MemberInfo);
+                    button.Enabled = !readOnly && AutoEditor.IsEnabled(row.MemberInfo);
                 }
                 else if (AutoEditor.IsSubEditor(row.MemberInfo))
                 {
@@ -437,6 +474,7 @@ namespace SehensWerte.Controls
                     };
                     tableLayout.Controls.Add(control, 0, ++tableLayout.RowCount);
                     tableLayout.Controls.Add(control2, 1, tableLayout.RowCount);
+                    if (readOnly) { control2.Enabled = false; }
                 }
                 else if (AutoEditor.Values(row.MemberInfo) != null)
                 {
@@ -473,8 +511,9 @@ namespace SehensWerte.Controls
                     };
                     if (AutoEditor.IsPassword(row.MemberInfo)) { textBox.PasswordChar = '*'; }
                     textBox.Enabled = AutoEditor.IsEnabled(row.MemberInfo);
+                    textBox.ReadOnly = readOnly;
 
-                    AutoEditor.RangeAttribute? range = (row.Type == typeof(string)) ? null : AutoEditor.Range(row.MemberInfo);
+                    AutoEditor.RangeAttribute? range = (row.Type == typeof(string) || readOnly) ? null : AutoEditor.Range(row.MemberInfo);
                     tableLayout.Controls.Add(control, 0, ++tableLayout.RowCount);
                     if (range != null)
                     {
@@ -496,7 +535,7 @@ namespace SehensWerte.Controls
                     };
                     tableLayout.Controls.Add(control, 0, ++tableLayout.RowCount);
                     tableLayout.Controls.Add(button, 1, tableLayout.RowCount);
-                    button.Enabled = AutoEditor.IsEnabled(row.MemberInfo);
+                    button.Enabled = !readOnly && AutoEditor.IsEnabled(row.MemberInfo);
                 }
                 else if ((Type?)row.Type == typeof(bool) && AutoEditor.IsPushButton(row.MemberInfo))
                 {
@@ -509,7 +548,7 @@ namespace SehensWerte.Controls
                     };
                     tableLayout.Controls.Add(control, 0, ++tableLayout.RowCount);
                     tableLayout.Controls.Add(button, 1, tableLayout.RowCount);
-                    button.Enabled = AutoEditor.IsEnabled(row.MemberInfo);
+                    button.Enabled = !readOnly && AutoEditor.IsEnabled(row.MemberInfo);
                 }
                 else if ((Type?)row.Type == typeof(bool))
                 {
@@ -518,7 +557,8 @@ namespace SehensWerte.Controls
                         AutoSize = true,
                         Tag = row,
                         Dock = DockStyle.Left,
-                        CheckAlign = (ContentAlignment)1
+                        CheckAlign = (ContentAlignment)1,
+                        AutoCheck = !readOnly, // ReadOnly: full-contrast rendering, clicks do nothing
                     };
                     tableLayout.Controls.Add(control, 0, ++tableLayout.RowCount);
                     tableLayout.Controls.Add(checkBox, 1, tableLayout.RowCount);

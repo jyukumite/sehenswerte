@@ -145,7 +145,7 @@ Settings objects inherit `AutoEditorBase`. Decorate fields/properties with attri
 | `[AutoEditor.Values(new[]{...})]` / `Values(typeof(Enum))` / `Values(typeof(IValuesAttrInterface))` | Render as a `ComboBox` with the given list |
 | `[AutoEditor.Range(min, max, step)]` | On a numeric field, adds `-`/`+` kick buttons that nudge by `step`, clamped to `[min, max]` |
 | `[AutoEditor.Hidden]` | Skip rendering |
-| `[AutoEditor.Disabled]` | Render read-only |
+| `[AutoEditor.Disabled]` | Render greyed/disabled (`Enabled=false`); see the `ReadOnly` property for a legible viewer |
 | `[AutoEditor.Password]` | Mask the TextBox content |
 | `[AutoEditor.PushButton("caption")]` | On a `bool` or delegate field, render as a clickable Button |
 | `[AutoEditor.SubEditor]` | Render a `...` button that opens an `AutoEditorForm` for the nested object |
@@ -154,6 +154,12 @@ Settings objects inherit `AutoEditorBase`. Decorate fields/properties with attri
 
 Host a panel by adding an `AutoEditorControl` to your form and calling `Generate(sourceData)`.  
 `AutoEditorBase` exposes an `OnChanged` callback and an `UpdateControls` action for round-tripping between the UI and model.
+
+`AutoEditorControl` per-instance options (set BEFORE `Generate`; changing later has no effect until the next `Generate`):
+
+- `CommitMode` (`AutoEditor.CommitMode`): `Immediate` (default) commits text fields on every keystroke (`TextChanged`); `OnValidated` commits text fields on focus-leave (`Validated`) or Enter. CheckBox/RadioButton/ComboBox selections always commit immediately (discrete gestures, no partial state). Limitations: do not host an `OnValidated` panel inside `AutoEditorForm` (the form's KeyPreview Enter fires OK before the control-level commit); a value still being typed when the form closes is not committed; `[Range]` kick buttons commit on the NEXT focus loss, not the click.
+- `ReadOnly` (bool): legible non-editable viewer, distinct from `[Disabled]` greying. TextBoxes get `TextBox.ReadOnly=true` (selectable/copyable), `[Values]`/enum rows render as read-only TextBoxes instead of ComboBoxes, bool CheckBoxes get `AutoCheck=false`, buttons are disabled, and NO commit wiring is attached at all.
+- `UpdateControls()` (public method): push current `SourceData` values into the generated controls. The refresh path for `SourceData` objects that are NOT `AutoEditorBase` (e.g. protocol packet objects mutated in place by a read thread). Safe to call from a non-UI thread (marshals via `BeginInvoke` once the handle exists; runs synchronously on the calling thread before the handle is created).
 
 ---
 
@@ -208,8 +214,18 @@ Data lives in `BoundData` (implements `IBindingList`):
 ### Column mutations
 
 Limit: column display is bound via the hardcoded `col0..col99` accessors on
-`BoundDataRow`, so columns beyond index 99 will not render values. Extend that
-accessor block if a use case needs more.
+`BoundDataRow`, which bind via reflection to `DataPropertyName = "col{N}"`. This
+caps the grid at 100 displayable columns; columns beyond index 99 will not render
+values. Extend that `col0..colN` accessor block if a use case needs more.
+
+Replacing the hardcoded accessors with `ITypedList` on `BoundData` plus a dynamic
+`IndexedColumnDescriptor` was tried and reverted: sorting on a newly-added column
+(via `AddColumns`/`InsertColumns`) blanked only that column's cells after the sort,
+while other columns stayed intact. Root cause was not fully pinned - suspected a
+stale `CurrentSortProperty` descriptor surviving the `DataSource` cycle, or `::`
+in the column `Name` confusing WinForms cell rendering. The static reflection 
+binding sorts correctly across `AddColumns`; the dynamic approach did not. If you
+must revisit it, first reproduce and pin that sort-blank bug in a focused test.
 
 ### SaveView / RestoreView
 
