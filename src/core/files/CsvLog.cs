@@ -60,7 +60,7 @@ namespace SehensWerte.Files
                 MemberName = memberName;
                 SourcePath = sourceFilePath;
                 SourceLineNumber = sourceLineNumber;
-                Time = logEntryTime;
+                Time = logEntryTime ?? HighResTimer.StaticNow;
                 ThreadID = Thread.CurrentThread.ManagedThreadId;
             }
 
