@@ -238,15 +238,25 @@ namespace SehensWerte.Controls
 
                 var memberOrder = AutoEditor.DisplayOrder(memberInfo);
 
-                // [ArrayEditor] -- expand inline rows or emit a single SubForm button
+                // IList/array field. [ArrayEditor] chooses how it renders; an undecorated
+                // array is no longer an "unknown type" - it defaults to a SubForm button in an
+                // editable editor, or expands inline in a read-only viewer so live values show
+                // without a click. Either way the contents are reachable, not "System.X[]".
                 var arrayAttr = AutoEditor.ArrayEditor(memberInfo);
-                if (arrayAttr != null && typeof(IList).IsAssignableFrom(memberType))
+                if (typeof(IList).IsAssignableFrom(memberType) && memberType != typeof(string))
                 {
                     Type elementType = AutoEditor.ElementType(memberType) ?? typeof(object);
                     object? container = memberInfo is FieldInfo afi ? afi.GetValue(source)
                                      : ((PropertyInfo)memberInfo).GetValue(source, null);
 
-                    if (arrayAttr.Mode == AutoEditor.ArrayEditorAttribute.DisplayMode.SubForm)
+                    var mode = arrayAttr?.Mode
+                        ?? (ReadOnly ? AutoEditor.ArrayEditorAttribute.DisplayMode.Inline
+                                     : AutoEditor.ArrayEditorAttribute.DisplayMode.SubForm);
+                    // Undecorated inline rows carry the field name so they read as e.g. "Bat Soc [0]".
+                    string itemLabelFormat = arrayAttr?.ItemLabelFormat
+                        ?? (AutoEditor.DisplayName(memberInfo) + " [{0}]");
+
+                    if (mode == AutoEditor.ArrayEditorAttribute.DisplayMode.SubForm)
                     {
                         rows.Add(new AutoEditor.EditRow(memberInfo, memberType)
                         {
@@ -271,7 +281,7 @@ namespace SehensWerte.Controls
                         {
                             rows.Add(new AutoEditor.EditRow(memberInfo, elementType)
                             {
-                                DisplayText = string.Format(arrayAttr.ItemLabelFormat, i),
+                                DisplayText = string.Format(itemLabelFormat, i),
                                 ObjectIndex = i,
                                 // Children of inline arrays share the host's slot. Top-level arrays sort
                                 // by element order (0..N) inside the host's group: use memberOrder for primary,
@@ -448,7 +458,8 @@ namespace SehensWerte.Controls
                     };
                     tableLayout.Controls.Add(control, 0, ++tableLayout.RowCount);
                     tableLayout.Controls.Add(button, 1, tableLayout.RowCount);
-                    button.Enabled = !readOnly && AutoEditor.IsEnabled(row.MemberInfo);
+                    // Enabled even when read-only: the popup opens as a read-only viewer.
+                    button.Enabled = AutoEditor.IsEnabled(row.MemberInfo);
                 }
                 else if (row.OpenElementSubForm)
                 {
@@ -461,7 +472,8 @@ namespace SehensWerte.Controls
                     };
                     tableLayout.Controls.Add(control, 0, ++tableLayout.RowCount);
                     tableLayout.Controls.Add(button, 1, tableLayout.RowCount);
-                    button.Enabled = !readOnly && AutoEditor.IsEnabled(row.MemberInfo);
+                    // Enabled even when read-only: the popup opens as a read-only viewer.
+                    button.Enabled = AutoEditor.IsEnabled(row.MemberInfo);
                 }
                 else if (AutoEditor.IsSubEditor(row.MemberInfo))
                 {
@@ -493,6 +505,7 @@ namespace SehensWerte.Controls
                     comboBox.Enabled = AutoEditor.IsEnabled(row.MemberInfo);
                 }
                 else if (row.Type == typeof(byte)
+                    || row.Type == typeof(sbyte)
                     || row.Type == typeof(int)
                     || row.Type == typeof(long)
                     || row.Type == typeof(ulong)

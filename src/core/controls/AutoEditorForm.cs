@@ -79,11 +79,17 @@ namespace SehensWerte.Controls
             return new AutoEditorForm().ShowDialog(prompt, title, sourceData);
         }
 
-        public bool ShowDialog(string prompt, string title, object sourceData)
+        public bool ShowDialog(string prompt, string title, object sourceData, bool readOnly = false)
         {
             Title = title;
             Prompt = prompt;
+            Panel.ReadOnly = readOnly; // must be set before Generate
             Panel.Generate(sourceData);
+            if (readOnly)
+            {
+                ButtonOK.Visible = false;
+                ButtonCancel.Text = "Close";
+            }
 
             Rectangle workingArea = Screen.PrimaryScreen?.WorkingArea ?? Screen.GetWorkingArea(this);
             base.Height = Math.Min(workingArea.Height - 100, Panel.PreferredHeight + 140);

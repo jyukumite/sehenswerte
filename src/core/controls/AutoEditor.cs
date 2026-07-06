@@ -476,7 +476,20 @@ namespace SehensWerte.Controls
         private void SetEvents()
         {
             if (Controls == null) return;
-            if (m_ReadOnly) return; // no commit wiring at all - the editor is a viewer
+            if (m_ReadOnly)
+            {
+                // No commit wiring - the editor is a viewer. Array/element subform buttons
+                // are still clickable so the user can open them to inspect the contents.
+                foreach (Control item in Controls)
+                {
+                    if (item is Button button && item.Tag is EditRow row
+                        && (row.OpenArraySubForm || row.OpenElementSubForm))
+                    {
+                        button.Click += MouseClicked;
+                    }
+                }
+                return;
+            }
             foreach (Control item in Controls)
             {
                 if (item is Button)
@@ -634,14 +647,14 @@ namespace SehensWerte.Controls
                         hostType.GetField("Items")!.SetValue(host, listForForm);
                         // Popup creates its own AutoEditor with no Parent link, so changes
                         // inside it can't propagate up via InvokeOnChanged. Fire ours on OK.
-                        if (new AutoEditorForm().ShowDialog(control.Text, row.DisplayText ?? "", host))
+                        if (new AutoEditorForm().ShowDialog(control.Text, row.DisplayText ?? "", host, m_ReadOnly))
                         {
                             InvokeOnChanged();
                         }
                     }
                     else if (row?.OpenElementSubForm == true)
                     {
-                        if (new AutoEditorForm().ShowDialog(control.Text, row.DisplayText ?? "", value))
+                        if (new AutoEditorForm().ShowDialog(control.Text, row.DisplayText ?? "", value, m_ReadOnly))
                         {
                             InvokeOnChanged();
                         }
