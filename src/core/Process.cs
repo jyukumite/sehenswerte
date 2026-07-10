@@ -30,7 +30,7 @@ namespace SehensWerte.Utils
 
         private static string[] CommandLineArgs => Environment.GetCommandLineArgs()[1..];
 
-        private static bool RunningOnWine()
+        public static bool RunningOnWine()
         {
             // Uses the wine registry entry. This may be unreliable?
             Microsoft.Win32.RegistryKey? wineKey = null;
