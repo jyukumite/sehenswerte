@@ -214,9 +214,14 @@ namespace SehensWerte.Controls
             base.Dispose(disposing);
         }
 
-        // Make Alt+<mnemonic> on any status-strip button (e.g. &Columns, &Show All) work when the grid has focus
+        // Make Alt+<mnemonic> on any status-strip button (e.g. &Columns, &Show All) work when the grid has focus.
         protected override bool ProcessMnemonic(char charCode)
         {
+            if (char.ToLowerInvariant(charCode) == 'f')
+            {
+                ColumnsButton.PerformClick(); // Alt+F as secondary for Columns (Alt+C)
+                return true;
+            }
             foreach (ToolStripItem item in StatusStrip.Items)
             {
                 if (!item.Enabled || !item.Visible) continue;
@@ -625,7 +630,7 @@ namespace SehensWerte.Controls
             this.ColumnsButton.ShowDropDownArrow = false;
             this.ColumnsButton.Size = new System.Drawing.Size(140, 38);
             this.ColumnsButton.Text = "&Columns";
-            this.ColumnsButton.ToolTipText = "Pick which columns are shown or hidden (Alt+C)";
+            this.ColumnsButton.ToolTipText = "Pick which columns are shown or hidden (Alt+C or Alt+F)";
             this.ColumnsButton.Click += new System.EventHandler(this.ColumnsButton_Click);
             this.ColumnsButton.BackColor = prettyColours ? Color.FromArgb(216, 232, 218) : SystemColors.Control;
 
@@ -1272,10 +1277,12 @@ namespace SehensWerte.Controls
 
                 var form = new CheckBoxListForm();
                 form.Title = "Columns";
-                form.Prompt = "Tick columns to show; Enter or OK scrolls to the topmost match.";
+                form.Prompt = "Tick columns to show; OK moves the cursor to the highlighted column.";
                 form.Selection = allCols;
                 form.CheckedSelection = visible;
+                form.FilterChanged += (t) => HighlightMatchingHeaders(t, scrollIntoView: true);
                 form.ShowDialog();
+                HighlightMatchingHeaders(null);
                 if (form.Result != DialogResult.OK) return;
 
                 var nowChecked = new HashSet<string>(form.CheckedSelection);
@@ -1293,12 +1300,36 @@ namespace SehensWerte.Controls
                     }
                 }
 
-                var topmost = form.TopmostItem;
-                if (topmost != null)
+                var selected = form.SelectedItem;
+                if (selected != null)
                 {
-                    ScrollColumnIntoView(topmost);
+                    MoveCursorToColumn(selected);
                 }
             }, "Columns");
+        }
+
+        private static readonly Color HeaderMatchColor = Color.FromArgb(242, 232, 178); // gold, matches the Regex Show button
+
+        private void HighlightMatchingHeaders(string? text, bool scrollIntoView = false)
+        {
+            bool searching = !string.IsNullOrEmpty(text);
+            // HeaderCell.Style.BackColor is ignored if Grid.EnableHeadersVisualStyles is true
+            Grid.EnableHeadersVisualStyles = !searching;
+            DataGridViewColumn? firstMatch = null;
+            foreach (DataGridViewColumn c in Grid.Columns)
+            {
+                bool match = searching && (c.HeaderText ?? "").Contains(text!, StringComparison.OrdinalIgnoreCase);
+                c.HeaderCell.Style.BackColor = match ? HeaderMatchColor : Color.Empty;
+                if (match && (firstMatch == null || c.DisplayIndex < firstMatch.DisplayIndex))
+                {
+                    firstMatch = c;
+                }
+            }
+            if (scrollIntoView && firstMatch != null)
+            {
+                ScrollColumnIntoView(firstMatch.Name);
+            }
+            Grid.Invalidate(); // the picker is modal; force the owner's header row to repaint
         }
 
         private SaveFileDialog m_SaveFileDialog = new SaveFileDialog();
@@ -1994,13 +2025,33 @@ namespace SehensWerte.Controls
         public void ScrollColumnIntoView(string column)
         {
             if (!Grid.Columns.Contains(column)) return;
+            var c = Grid.Columns[column];
+            if (!c.Visible) return;
+            if (!Grid.GetColumnDisplayRectangle(c.Index, false).IsEmpty) return; // already on-screen, don't move the viewport
             try
             {
-                Grid.FirstDisplayedScrollingColumnIndex = Grid.Columns[column].Index;
+                Grid.FirstDisplayedScrollingColumnIndex = c.Index;
             }
             catch
             {
                 // Index can be invalid mid-rebind; ignore.
+            }
+        }
+
+        public void MoveCursorToColumn(string column)
+        {
+            if (!Grid.Columns.Contains(column)) return;
+            var c = Grid.Columns[column];
+            if (!c.Visible || Grid.Rows.Count == 0) return;
+            int rowIndex = Grid.CurrentCell?.RowIndex ?? 0;
+            if (rowIndex < 0 || rowIndex >= Grid.Rows.Count) rowIndex = 0;
+            try
+            {
+                Grid.CurrentCell = Grid.Rows[rowIndex].Cells[c.Index];
+            }
+            catch
+            {
+                // Index/row can be invalid mid-rebind; ignore.
             }
         }
 

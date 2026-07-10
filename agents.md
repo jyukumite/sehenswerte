@@ -147,6 +147,7 @@ Settings objects inherit `AutoEditorBase`. Decorate fields/properties with attri
 | `[AutoEditor.Hidden]` | Skip rendering |
 | `[AutoEditor.Disabled]` | Render greyed/disabled (`Enabled=false`); see the `ReadOnly` property for a legible viewer |
 | `[AutoEditor.Password]` | Mask the TextBox content |
+| `[AutoEditor.Radix(n)]` | On an integer field, display and parse in radix `n` (default 16 = hex; 2 = binary, 8 = octal). Shown `0x`/`0b`/`0o`-prefixed, zero-padded to the type's native width; input prefix optional; signed types use raw two's-complement bits (`0xFF` -> sbyte -1). Non-fitting or unparseable input is not committed. Ignored on non-integer types (incl. float/double) and unsupported radixes; composes with `[Range]` kick buttons. On an array field it applies to the elements |
 | `[AutoEditor.PushButton("caption")]` | On a `bool` or delegate field, render as a clickable Button |
 | `[AutoEditor.SubEditor]` | Render a `...` button that opens an `AutoEditorForm` for the nested object |
 | `[AutoEditor.InlineClass]` | Flatten a nested class's fields directly into the parent panel at the host field's `[DisplayOrder]` slot. Child rows keep their own ordering/grouping/display names inside that slot. Alternative to `[SubEditor]` -- no button, no popup. |

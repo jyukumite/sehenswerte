@@ -19,6 +19,9 @@ namespace SehensWerte.Controls
         public string Prompt { set { LabelText.Text = value; } }
         public DialogResult Result => ResultButton;
         public string? TopmostItem => ListBox.Items.Count > 0 ? (string?)ListBox.Items[0] : null;
+        public string? SelectedItem => (string?)ListBox.SelectedItem;
+
+        public event Action<string>? FilterChanged;
 
         public List<string> Selection
         {
@@ -262,6 +265,7 @@ namespace SehensWerte.Controls
             if (FilterText != previousFilter)
             {
                 Refilter();
+                FilterChanged?.Invoke(FilterText);
             }
         }
 

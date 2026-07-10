@@ -381,15 +381,23 @@ namespace SehensWerte.Controls
             down.Enabled = textBox.Enabled;
             up.Enabled = textBox.Enabled;
 
+            int? radix = AutoEditor.DisplayRadix(row.MemberInfo, row.Type);
             void kick(double direction)
             {
                 double value;
-                if (!double.TryParse(textBox.Text, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.CurrentCulture, out value))
+                if (radix != null)
+                {
+                    object? parsed = AutoEditor.ParseRadix(row.Type, radix.Value, textBox.Text);
+                    value = parsed == null ? range.Min : Convert.ToDouble(parsed);
+                }
+                else if (!double.TryParse(textBox.Text, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.CurrentCulture, out value))
                 {
                     value = range.Min;
                 }
                 value = Math.Max(range.Min, Math.Min(range.Max, value + direction * range.Step));
-                string text = IsIntegerType(row.Type) ? ((long)Math.Round(value)).ToString() : value.ToString("G15");
+                string text = radix != null ? AutoEditor.ToRadixText(row.Type, radix.Value, Convert.ChangeType(Math.Round(value), row.Type))
+                    : AutoEditor.IsIntegerType(row.Type) ? ((long)Math.Round(value)).ToString()
+                    : value.ToString("G15");
                 if (textBox.Text != text)
                 {
                     textBox.Text = text;
@@ -402,14 +410,6 @@ namespace SehensWerte.Controls
             panel.Controls.Add(up);
             panel.Controls.Add(down);
             return panel;
-        }
-
-        private static bool IsIntegerType(Type t)
-        {
-            return t == typeof(byte) || t == typeof(sbyte)
-                || t == typeof(short) || t == typeof(ushort)
-                || t == typeof(int) || t == typeof(uint)
-                || t == typeof(long) || t == typeof(ulong);
         }
 
         private static void GenerateControl(TableLayoutPanel tableLayout, AutoEditor.EditRow row, bool readOnly)

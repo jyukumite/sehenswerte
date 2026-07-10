@@ -20,7 +20,8 @@ namespace SehensWerte.Controls
     ///   - <see cref="DisplayNameAttribute"/>, control order of field display,
     ///   - <see cref="SubEditorAttribute"/> for nested edit forms,
     ///   - <see cref="PushButtonAttribute"/> for action binding,
-    ///   - <see cref="HiddenAttribute"/> and <see cref="DisabledAttribute"/> for visibility/enabling.
+    ///   - <see cref="HiddenAttribute"/> and <see cref="DisabledAttribute"/> for visibility/enabling,
+    ///   - <see cref="RadixAttribute"/> for hex/binary/octal display/entry of integer fields.
     /// - Automatically propagates UI changes to the data source and vice versa.
     /// - Provides optional callbacks <see cref="OnChanging"/> and <see cref="OnChanged"/> for data change notification.
     /// 
@@ -237,6 +238,15 @@ namespace SehensWerte.Controls
         {
         }
 
+        // Render an integer field/property in a non-decimal radix (16 = hex, 2 = binary,
+        // 8 = octal): displayed 0x/0b/0o-prefixed and zero-padded to the type's native width
+        [AttributeUsage(AttributeTargets.Property | AttributeTargets.Field)]
+        public class RadixAttribute : Attribute
+        {
+            public int Radix;
+            public RadixAttribute(int radix = 16) { Radix = radix; }
+        }
+
         [AttributeUsage(AttributeTargets.Property | AttributeTargets.Field)]
         public class PushButtonAttribute : Attribute
         {
@@ -407,6 +417,90 @@ namespace SehensWerte.Controls
         internal static bool IsPassword(MemberInfo info)
         {
             return info.GetCustomAttributes(typeof(PasswordAttribute), inherit: false).Length != 0;
+        }
+
+        internal static int? DisplayRadix(MemberInfo info, Type type)
+        {
+            object[] customAttributes = info.GetCustomAttributes(typeof(RadixAttribute), inherit: false);
+            int radix = customAttributes.Length == 0 ? 10 : ((RadixAttribute)customAttributes[0]).Radix;
+            return ((radix == 2 || radix == 8 || radix == 16) && IsIntegerType(type)) ? radix : null;
+        }
+
+        internal static bool IsIntegerType(Type t)
+        {
+            return t == typeof(byte) || t == typeof(sbyte)
+                || t == typeof(short) || t == typeof(ushort)
+                || t == typeof(int) || t == typeof(uint)
+                || t == typeof(long) || t == typeof(ulong);
+        }
+
+        private static int TypeBits(Type type)
+        {
+            return (type == typeof(byte) || type == typeof(sbyte)) ? 8
+                 : (type == typeof(short) || type == typeof(ushort)) ? 16
+                 : (type == typeof(int) || type == typeof(uint)) ? 32
+                 : 64;
+        }
+
+        private static string RadixPrefix(int radix)
+        {
+            return radix == 2 ? "0b" : radix == 8 ? "0o" : radix == 16 ? "0x" : "";
+        }
+
+        internal static string ToRadixText(Type type, int radix, object value)
+        {
+            ulong bits = value switch
+            {
+                byte v => v,
+                sbyte v => unchecked((byte)v),
+                short v => unchecked((ushort)v),
+                ushort v => v,
+                int v => unchecked((uint)v),
+                uint v => v,
+                long v => unchecked((ulong)v),
+                ulong v => v,
+                _ => 0
+            };
+            int bitsPerDigit = radix == 2 ? 1 : radix == 8 ? 3 : 4;
+            int digits = (TypeBits(type) + bitsPerDigit - 1) / bitsPerDigit;
+            // Convert.ToString(long, base) emits two's-complement bits for negatives,
+            // which matches the ulong bit pattern for full-width (64-bit) values.
+            string text = Convert.ToString(unchecked((long)bits), radix).ToUpperInvariant();
+            return RadixPrefix(radix) + text.PadLeft(digits, '0');
+        }
+
+        internal static object? ParseRadix(Type type, int radix, string text)
+        {
+            object? result = null;
+            string trimmed = text.Trim();
+            string prefix = RadixPrefix(radix);
+            if (trimmed.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+            {
+                trimmed = trimmed.Substring(prefix.Length);
+            }
+            try
+            {
+                ulong bits = Convert.ToUInt64(trimmed, radix);
+                int width = TypeBits(type);
+                if (width == 64 || (bits >> width) == 0)
+                {
+                    result = Type.GetTypeCode(type) switch
+                    {
+                        TypeCode.Byte => (byte)bits,
+                        TypeCode.SByte => unchecked((sbyte)bits),
+                        TypeCode.Int16 => unchecked((short)bits),
+                        TypeCode.UInt16 => (ushort)bits,
+                        TypeCode.Int32 => unchecked((int)bits),
+                        TypeCode.UInt32 => (uint)bits,
+                        TypeCode.Int64 => unchecked((long)bits),
+                        _ => bits
+                    };
+                }
+            }
+            catch
+            {
+            }
+            return result;
         }
 
         internal static RangeAttribute? Range(MemberInfo info)
@@ -605,10 +699,16 @@ namespace SehensWerte.Controls
                 }
                 else if (!(control is Button))
                 {
-                    object? value = GetValue(sourceData, control.Tag as EditRow);
-                    if (value != null && control.Text != value.ToString())
+                    EditRow? row = control.Tag as EditRow;
+                    object? value = GetValue(sourceData, row);
+                    if (value != null)
                     {
-                        control.Text = value.ToString();
+                        int? radix = row == null ? null : DisplayRadix(row.MemberInfo, row.Type);
+                        string? text = radix != null ? ToRadixText(row!.Type, radix.Value, value) : value.ToString();
+                        if (text != null && control.Text != text)
+                        {
+                            control.Text = text;
+                        }
                     }
                 }
                 if (control.Controls.Count > 0)
@@ -780,6 +880,7 @@ namespace SehensWerte.Controls
             if (row == null) return;
             if (SourceData == null) return;
             object source = row.NestedSource ?? SourceData;
+            int radix = DisplayRadix(row.MemberInfo, row.Type) ?? 10;
             object? obj = null;
             if (row.ObjectIndex != null)
             {
@@ -796,7 +897,7 @@ namespace SehensWerte.Controls
                 else if (container is IList list)
                 {
                     if (idx < 0 || idx >= list.Count) return;
-                    object? parsed = ParseTo(row.Type, value);
+                    object? parsed = ParseTo(row.Type, value, radix);
                     if (parsed != null)
                     {
                         InvokeOnChanging();
@@ -809,7 +910,7 @@ namespace SehensWerte.Controls
             if (row.MemberInfo is FieldInfo)
             {
                 FieldInfo fieldInfo = (FieldInfo)row.MemberInfo;
-                obj = ParseTo(fieldInfo.FieldType, value);
+                obj = ParseTo(fieldInfo.FieldType, value, radix);
                 if (obj != null && !fieldInfo.IsLiteral && !fieldInfo.IsInitOnly)
                 {
                     InvokeOnChanging();
@@ -820,7 +921,7 @@ namespace SehensWerte.Controls
             else if (row.MemberInfo is PropertyInfo)
             {
                 PropertyInfo propertyInfo = (PropertyInfo)row.MemberInfo;
-                obj = ParseTo(propertyInfo.PropertyType, value);
+                obj = ParseTo(propertyInfo.PropertyType, value, radix);
                 if (obj != null)
                 {
                     InvokeOnChanging();
@@ -915,10 +1016,14 @@ namespace SehensWerte.Controls
             }
         }
 
-        private static object? ParseTo(Type type, object newValue)
+        private static object? ParseTo(Type type, object newValue, int radix = 10)
         {
             try
             {
+                if (radix != 10 && newValue is string radixText && IsIntegerType(type))
+                {
+                    return ParseRadix(type, radix, radixText);
+                }
                 if (type == typeof(bool) && newValue is bool)
                 {
                     return newValue;
@@ -1078,22 +1183,161 @@ namespace SehensWerte.Controls
         [TestMethod]
         public void TestAttributes()
         {
-            //fixme: test these
+            // attribute state only; behaviour is covered by the per-attribute tests below
+            CollectionAssert.AreEqual(new[] { "a", "b", "c" }, new AutoEditor.ValuesAttribute(new string[] { "a", "b", "c" }).Values);
+            CollectionAssert.AreEqual(Enum.GetNames(typeof(System.Windows.Forms.AnchorStyles)), new AutoEditor.ValuesAttribute(typeof(System.Windows.Forms.AnchorStyles)).Values);
+            CollectionAssert.AreEqual(new[] { "a", "b", "c" }, new AutoEditor.ValuesAttribute(typeof(TestValues)).Values);
+            Assert.AreEqual("bob", new AutoEditor.DisplayNameAttribute("bob").DisplayName);
+            Assert.AreEqual(42.0, new AutoEditor.DisplayOrderAttribute(42).DisplayOrder);
+            Assert.AreEqual("g", new AutoEditor.DisplayOrderAttribute(1, "g").GroupName);
+            Assert.IsTrue(new AutoEditor.SubEditorAttribute(closeOnClick: true).CloseOnClick);
+            Assert.AreEqual("test", new AutoEditor.PushButtonAttribute("test").Caption);
+            var range = new AutoEditor.RangeAttribute(0, 100, 1);
+            Assert.AreEqual(0.0, range.Min);
+            Assert.AreEqual(100.0, range.Max);
+            Assert.AreEqual(1.0, range.Step);
+            Assert.AreEqual(16, new AutoEditor.RadixAttribute().Radix);
+            Assert.AreEqual(2, new AutoEditor.RadixAttribute(2).Radix);
+        }
 
-            Attribute att;
-            att = new AutoEditor.ValuesAttribute(new string[] { "a", "b", "c" });
-            att = new AutoEditor.ValuesAttribute(typeof(System.Windows.Forms.AnchorStyles));
-            att = new AutoEditor.ValuesAttribute(typeof(TestValues));
-            att = new AutoEditor.DisplayNameAttribute("bob");
-            att = new AutoEditor.DisplayOrderAttribute(42);
-            att = new AutoEditor.SubEditorAttribute(closeOnClick: true);
-            att = new AutoEditor.HiddenAttribute();
-            att = new AutoEditor.DisabledAttribute();
-            att = new AutoEditor.PushButtonAttribute("test");
-            att = new AutoEditor.RangeAttribute(0, 100, 1);
-            att = new AutoEditor.ArrayEditorAttribute();
-            att = new AutoEditor.ArrayEditorAttribute(AutoEditor.ArrayEditorAttribute.DisplayMode.SubForm, "[{0}]", "Edit...");
-            att = new AutoEditor.InlineClassAttribute();
+#pragma warning disable CS0649 // fields are written via reflection by AutoEditor
+        class AttributeTestData
+        {
+            [AutoEditor.DisplayOrder(0, "Group A")]
+            public int First = 1;
+            [AutoEditor.DisplayOrder(1, "Group B")]
+            public int Second = 2;
+            [AutoEditor.Disabled]
+            public int Greyed = 3;
+            [AutoEditor.Password]
+            public string Secret = "pw";
+            [AutoEditor.Range(0, 10, 2)]
+            public int Clamped = 8;
+            [AutoEditor.Radix, AutoEditor.Range(0, 255, 16)]
+            public byte HexKick = 0x10;
+            [AutoEditor.SubEditor]
+            public NestedTestData Nested = new NestedTestData();
+            [AutoEditor.PushButton("go")]
+            public bool Go;
+            [AutoEditor.PushButton("run")]
+            public Action? Run;
+        }
+#pragma warning restore CS0649
+
+        [TestMethod]
+        public void TestValuesCommit()
+        {
+            var data = new TestClass();
+            var control = new AutoEditorControl();
+            control.Generate(data);
+            var combo = (ComboBox)FindControl(control, nameof(TestClass.TestString), typeof(ComboBox))!;
+            CollectionAssert.AreEqual(new[] { "a", "b", "c" }, combo.Items.Cast<object>().Select(o => o.ToString()).ToArray());
+            combo.SelectedIndex = 1;
+            Assert.AreEqual("b", data.TestString);
+        }
+
+        [TestMethod]
+        public void TestEnumComboCommit()
+        {
+            var data = new CommitTestData();
+            var control = new AutoEditorControl();
+            control.Generate(data);
+            var combo = (ComboBox)FindControl(control, nameof(CommitTestData.Anchor), typeof(ComboBox))!;
+            combo.SelectedIndex = combo.Items.IndexOf(nameof(System.Windows.Forms.AnchorStyles.Top));
+            Assert.AreEqual(System.Windows.Forms.AnchorStyles.Top, data.Anchor);
+        }
+
+        [TestMethod]
+        public void TestDisplayNameAndHidden()
+        {
+            var data = new TestClass();
+            var control = new AutoEditorControl();
+            control.Generate(data);
+            Assert.IsTrue(AllControls(control).OfType<Label>().Any(l => l.Text == "integer")); // [DisplayName]
+            Assert.IsTrue(AllControls(control).OfType<Label>().Any(l => l.Text == "Test String")); // PrettyName default
+            Assert.IsNull(FindControl(control, nameof(TestClass.Hidden), typeof(Control))); // [Hidden] not rendered
+        }
+
+        [TestMethod]
+        public void TestDisabledAndPassword()
+        {
+            var data = new AttributeTestData();
+            var control = new AutoEditorControl();
+            control.Generate(data);
+            Assert.IsFalse(FindControl(control, nameof(AttributeTestData.Greyed), typeof(TextBox))!.Enabled);
+            Assert.AreEqual('*', ((TextBox)FindControl(control, nameof(AttributeTestData.Secret), typeof(TextBox))!).PasswordChar);
+        }
+
+        [TestMethod]
+        public void TestDisplayOrderGroupHeaders()
+        {
+            var data = new AttributeTestData();
+            var control = new AutoEditorControl();
+            control.Generate(data);
+            var labels = AllControls(control).OfType<Label>().Select(l => l.Text).ToList();
+            Assert.IsTrue(labels.Contains("Group A"));
+            Assert.IsTrue(labels.Contains("Group B"));
+            var layout = control.LayoutPanel!;
+            int firstRow = layout.GetRow(FindControl(control, nameof(AttributeTestData.First), typeof(TextBox))!);
+            int secondRow = layout.GetRow(FindControl(control, nameof(AttributeTestData.Second), typeof(TextBox))!);
+            Assert.IsTrue(firstRow < secondRow);
+        }
+
+        [TestMethod]
+        public void TestSubEditorRendersButton()
+        {
+            // clicking would open a modal AutoEditorForm, so assert the render shape only
+            var data = new AttributeTestData();
+            var control = new AutoEditorControl();
+            control.Generate(data);
+            Assert.IsNotNull(FindControl(control, nameof(AttributeTestData.Nested), typeof(Button)));
+        }
+
+        [TestMethod]
+        public void TestPushButtonClick()
+        {
+            var data = new AttributeTestData();
+            bool ran = false;
+            data.Run = () => ran = true;
+            var control = new AutoEditorControl();
+            control.Generate(data);
+            var go = (Button)FindControl(control, nameof(AttributeTestData.Go), typeof(Button))!;
+            Assert.AreEqual("go", go.Text);
+            go.PerformClick();
+            Assert.IsTrue(data.Go); // bool push button commits true
+            ((Button)FindControl(control, nameof(AttributeTestData.Run), typeof(Button))!).PerformClick();
+            Assert.IsTrue(ran); // delegate push button invokes
+        }
+
+        [TestMethod]
+        public void TestRangeKickButtons()
+        {
+            var data = new AttributeTestData();
+            var control = new AutoEditorControl();
+            control.Generate(data);
+            var box = (TextBox)FindControl(control, nameof(AttributeTestData.Clamped), typeof(TextBox))!;
+            var panel = (Panel)box.Parent!;
+            var up = panel.Controls.OfType<Button>().First(b => b.Text == "+");
+            var down = panel.Controls.OfType<Button>().First(b => b.Text == "-");
+            up.PerformClick();
+            Assert.AreEqual(10, data.Clamped); // 8 + 2
+            up.PerformClick();
+            Assert.AreEqual(10, data.Clamped); // clamped at max
+            down.PerformClick();
+            Assert.AreEqual(8, data.Clamped);
+        }
+
+        [TestMethod]
+        public void TestRadixRangeKickButtons()
+        {
+            var data = new AttributeTestData();
+            var control = new AutoEditorControl();
+            control.Generate(data);
+            var box = (TextBox)FindControl(control, nameof(AttributeTestData.HexKick), typeof(TextBox))!;
+            var up = ((Panel)box.Parent!).Controls.OfType<Button>().First(b => b.Text == "+");
+            up.PerformClick();
+            Assert.AreEqual((byte)0x20, data.HexKick); // 0x10 + 16, committed through the hex parser
+            Assert.AreEqual("0x20", box.Text);
         }
 
         [TestMethod]
@@ -1284,6 +1528,93 @@ namespace SehensWerte.Controls
             wrapper.First.Value = 11; // mutate the nested instance in place
             control.UpdateControls();
             Assert.IsTrue(boxes.Any(b => b.Text == "11"));
+        }
+
+#pragma warning disable CS0649 // fields are written via reflection by AutoEditor
+        class RadixTestData
+        {
+            [AutoEditor.Radix]
+            public byte Small = 0x0F;
+            [AutoEditor.Radix]
+            public sbyte Signed = -1;
+            [AutoEditor.Radix]
+            public uint Medium = 0xDEADBEEF;
+            [AutoEditor.Radix]
+            public ulong Big = 0x123456789ABCDEF0;
+            [AutoEditor.Radix(2)]
+            public byte Flags = 0b00010100;
+            [AutoEditor.Radix(8)]
+            public ushort Mode = 511;
+            [AutoEditor.Radix]
+            public double NotInteger = 1.5;
+            [AutoEditor.Radix(7)]
+            public int BadRadix = 255;
+            public int Plain = 255;
+        }
+#pragma warning restore CS0649
+
+        [TestMethod]
+        public void TestRadixRendering()
+        {
+            var data = new RadixTestData();
+            var control = new AutoEditorControl();
+            control.Generate(data);
+            Assert.AreEqual("0x0F", FindControl(control, nameof(RadixTestData.Small), typeof(TextBox))!.Text);
+            Assert.AreEqual("0xFF", FindControl(control, nameof(RadixTestData.Signed), typeof(TextBox))!.Text); // two's complement
+            Assert.AreEqual("0xDEADBEEF", FindControl(control, nameof(RadixTestData.Medium), typeof(TextBox))!.Text);
+            Assert.AreEqual("0x123456789ABCDEF0", FindControl(control, nameof(RadixTestData.Big), typeof(TextBox))!.Text);
+            Assert.AreEqual("0b00010100", FindControl(control, nameof(RadixTestData.Flags), typeof(TextBox))!.Text);
+            Assert.AreEqual("0o000777", FindControl(control, nameof(RadixTestData.Mode), typeof(TextBox))!.Text);
+            Assert.AreEqual((1.5).ToString(), FindControl(control, nameof(RadixTestData.NotInteger), typeof(TextBox))!.Text); // ignored on non-integer
+            Assert.AreEqual("255", FindControl(control, nameof(RadixTestData.BadRadix), typeof(TextBox))!.Text); // unsupported radix falls back to decimal
+            Assert.AreEqual("255", FindControl(control, nameof(RadixTestData.Plain), typeof(TextBox))!.Text);
+        }
+
+        [TestMethod]
+        public void TestRadixCommit()
+        {
+            var data = new RadixTestData();
+            var control = new AutoEditorControl();
+            control.Generate(data);
+            var box = (TextBox)FindControl(control, nameof(RadixTestData.Small), typeof(TextBox))!;
+            box.Text = "0x2A";
+            Assert.AreEqual((byte)0x2A, data.Small);
+            box.Text = "ff"; // prefix optional, case-insensitive
+            Assert.AreEqual((byte)0xFF, data.Small);
+            box.Text = "0x100"; // does not fit a byte - not committed
+            Assert.AreEqual((byte)0xFF, data.Small);
+            box.Text = "zz"; // not hex - not committed
+            Assert.AreEqual((byte)0xFF, data.Small);
+
+            var signedBox = (TextBox)FindControl(control, nameof(RadixTestData.Signed), typeof(TextBox))!;
+            signedBox.Text = "0x80"; // raw two's-complement bits
+            Assert.AreEqual((sbyte)-128, data.Signed);
+
+            var bigBox = (TextBox)FindControl(control, nameof(RadixTestData.Big), typeof(TextBox))!;
+            bigBox.Text = "0xFFFFFFFFFFFFFFFF";
+            Assert.AreEqual(ulong.MaxValue, data.Big);
+
+            var flagsBox = (TextBox)FindControl(control, nameof(RadixTestData.Flags), typeof(TextBox))!;
+            flagsBox.Text = "0b1010";
+            Assert.AreEqual((byte)0b1010, data.Flags);
+            flagsBox.Text = "0b100000000"; // 9 bits - not committed
+            Assert.AreEqual((byte)0b1010, data.Flags);
+
+            var modeBox = (TextBox)FindControl(control, nameof(RadixTestData.Mode), typeof(TextBox))!;
+            modeBox.Text = "0o644";
+            Assert.AreEqual((ushort)0x1A4, data.Mode);
+        }
+
+        [TestMethod]
+        public void TestRadixUpdateControlsRoundTrip()
+        {
+            var data = new RadixTestData();
+            var control = new AutoEditorControl();
+            control.Generate(data);
+            var box = (TextBox)FindControl(control, nameof(RadixTestData.Medium), typeof(TextBox))!;
+            data.Medium = 0x1234;
+            control.UpdateControls();
+            Assert.AreEqual("0x00001234", box.Text);
         }
 
         [TestMethod]
