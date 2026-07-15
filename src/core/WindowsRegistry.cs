@@ -53,6 +53,15 @@ namespace SehensWerte.Utils
             }
         }
 
+        public static void Delete(string key)
+        {
+            string? filename = System.Diagnostics.Process.GetCurrentProcess().MainModule?.FileName;
+            if (filename == null) return;
+            using var subKey = Registry.CurrentUser.OpenSubKey(
+                $@"Software\{System.IO.Path.GetFileNameWithoutExtension(filename)}", writable: true);
+            subKey?.DeleteValue(key, throwOnMissingValue: false);
+        }
+
         // REG_MULTI_SZ; entries must be non-empty (the format cannot represent an empty string and would truncate the list there)
         public static void Write(string key, string[] value)
         {
