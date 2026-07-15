@@ -52,7 +52,7 @@ namespace SehensWerte.Comms
 
         public SerialPort(Action<CsvLog.Entry> onLog) : base(onLog)
         {
-            m_Thread = new Thread(Run);
+            m_Thread = new Thread(Run) { IsBackground = true };
         }
 
         public override void Close()
@@ -62,7 +62,7 @@ namespace SehensWerte.Comms
                 if (m_SerialPort == null) return;
 
                 OnLog?.Invoke(new CsvLog.Entry($"Closing {ConfigString}", CsvLog.Priority.Info));
-                if (m_Thread.ThreadState == ThreadState.Running)
+                if (m_Thread.IsAlive)
                 {
                     m_ThreadStop.Set();
                     m_Thread.Join();
@@ -116,8 +116,7 @@ namespace SehensWerte.Comms
                     OnLog?.Invoke(new CsvLog.Entry($"Error on {ConfigString}: {e.EventType}", CsvLog.Priority.Exception));
                 };
 
-                while (Thread.CurrentThread.ThreadState == ThreadState.Running
-                    && !m_ThreadStop.WaitOne(ThreadPollRate_ms))
+                while (!m_ThreadStop.WaitOne(ThreadPollRate_ms))
                 {
                     int bytesToRead = m_SerialPort.BytesToRead;
                     if (bytesToRead != 0)

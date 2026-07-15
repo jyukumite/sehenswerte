@@ -104,7 +104,7 @@ namespace SehensWerte.Comms
 
         private void Run()
         {
-            while (!m_ThreadStop.WaitOne(0) && Thread.CurrentThread.ThreadState == ThreadState.Running)
+            while (!m_ThreadStop.WaitOne(0))
             {
                 Poll();
                 WaitHandle.WaitAny(new[] { m_ThreadStop, m_TransmitEvent }, ThreadPollRate_ms);
@@ -168,7 +168,7 @@ namespace SehensWerte.Comms
 
         public void Start()
         {
-            m_Thread = new Thread(Run);
+            m_Thread = new Thread(Run) { IsBackground = true };
             m_Thread.Start();
         }
 
