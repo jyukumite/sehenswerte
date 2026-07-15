@@ -12,6 +12,7 @@ namespace SehensWerte.Controls
         private Button ButtonCancel;
         private Label LabelText;
         private EnhancedTextBox EditResult;
+        private MruComboBox? EditMru;
 
         public string Title { set => Text = value; }
         public string Prompt { set => LabelText.Text = value; }
@@ -32,11 +33,63 @@ namespace SehensWerte.Controls
             }
         }
         public DialogResult Result => ResultButton;
-        public string ResultString => EditResult.Text;
+        public string ResultString => EditMru?.Text ?? EditResult.Text;
 
         public event Action<string>? PreviewChanged;
 
-        public string DefaultResponse { set { EditResult.Text = value; EditResult.SelectAll(); } }
+        public string DefaultResponse
+        {
+            set
+            {
+                if (EditMru == null)
+                {
+                    EditResult.Text = value;
+                    EditResult.SelectAll();
+                }
+                else
+                {
+                    EditMru.Text = value;
+                    EditMru.SelectAll();
+                }
+            }
+        }
+
+        // Swaps the text box for an MruComboBox with a registry-persisted MRU drop-down. Not compatible with MultiLine or Password.
+        public string MruRegistryKey
+        {
+            set
+            {
+                if (EditMru == null)
+                {
+                    MruComboBox combo = new MruComboBox();
+                    combo.Dock = DockStyle.Fill;
+                    combo.TabIndex = 1;
+                    combo.PreviewKeyDown += (sender, e) =>
+                    {
+                        if (e.KeyCode == Keys.Enter && !combo.DroppedDown)
+                        {
+                            ResultButton = DialogResult.OK;
+                            Close();
+                        }
+                    };
+                    // Enter with the list open must pick the item, not fire AcceptButton
+                    combo.DropDown += (sender, e) => AcceptButton = null;
+                    combo.DropDownClosed += (sender, e) => AcceptButton = ButtonOK;
+                    combo.TextChanged += (sender, e) => PreviewChanged?.Invoke(combo.Text);
+                    m_Layout.Controls.Remove(EditResult);
+                    m_Layout.Controls.Add(combo, 0, 1);
+                    EditMru = combo;
+                }
+                EditMru.RegistryKey = value;
+                if (EditMru.Text.Length == 0 && EditMru.Items.Count > 0)
+                {
+                    EditMru.Text = EditMru.Items[0] as string ?? "";
+                    EditMru.SelectAll();
+                }
+            }
+        }
+
+        public void CommitMru() => EditMru?.CommitMru();
         public bool Password
         {
             get => EditResult.UseSystemPasswordChar; 
@@ -146,11 +199,12 @@ namespace SehensWerte.Controls
             SizeGripStyle = SizeGripStyle.Show;
             ClientSize = new Size(400, 150);
 
-            Shown += (sender, e) => { ActiveControl = EditResult; };
+            Shown += (sender, e) => { ActiveControl = (Control?)EditMru ?? EditResult; };
             Load += (s, e) =>
             {
                 var nc = Size - ClientSize;
-                int minClientH = LabelText.Height + 16 + EditResult.PreferredHeight + 8 + 40;
+                int editHeight = EditMru?.PreferredHeight ?? EditResult.PreferredHeight;
+                int minClientH = LabelText.Height + 16 + editHeight + 8 + 40;
                 MinimumSize = new Size(400 + nc.Width, minClientH + nc.Height);
                 if (!MultiLine) MaximumSize = new Size(Screen.FromControl(this).WorkingArea.Width, MinimumSize.Height);
                 ClientSize = new Size(ClientSize.Width, MultiLine ? LabelText.Height + 16 + EditResult.PreferredHeight * 8 + 8 + 40 : minClientH);
@@ -165,12 +219,13 @@ namespace SehensWerte.Controls
         public static string? Show(string prompt, string title,
                                    object? defaultResponse = null, bool password = false,
                                    bool multiLine = false, bool cache = false, bool save = false,
-                                   string? saveKey = null, bool regex = false,
+                                   string? saveKey = null, bool regex = false, bool saveMRU = false,
                          [System.Runtime.CompilerServices.CallerFilePath] string cacheFilePath = "",
                          [System.Runtime.CompilerServices.CallerLineNumber] int cacheLineNumber = 0)
         {
             string key = saveKey ?? $"{prompt}:{title}:{cacheFilePath}[{cacheLineNumber}]";
-            bool persistInRegistry = save || saveKey != null;
+            bool mru = saveMRU && !password && !multiLine;
+            bool persistInRegistry = save || saveKey != null || mru;
             if (cache)
             {
                 string? cached;
@@ -194,6 +249,10 @@ namespace SehensWerte.Controls
             form.DefaultResponse = defaultResponse?.ToString() ?? "";
             form.Password = password;
             form.MultiLine = multiLine;
+            if (mru)
+            {
+                form.MruRegistryKey = key + ".mru";
+            }
             if (regex)
             {
                 form.PasteHook = (s) =>
@@ -217,6 +276,10 @@ namespace SehensWerte.Controls
                 if (persistInRegistry && !password)
                 {
                     WindowsRegistry.Write(key, form.ResultString);
+                }
+                if (mru)
+                {
+                    form.CommitMru();
                 }
                 return form.ResultString;
             }

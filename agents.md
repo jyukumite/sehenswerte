@@ -64,6 +64,7 @@ src/
 |-------|----------|------|
 | `SehensControl` | `src/sehens/SehensControl.cs` | Main oscilloscope WinForms control — embed in host forms |
 | `TraceData` | `src/sehens/data/TraceData.cs` | Holds sample data and metadata for one trace channel |
+| `TraceNameHints` | `src/sehens/TraceNameHints.cs` | Host-declared trace name decorations (prefixes/suffixes) for fuzzy state matching. Host sets `SehensControl.TraceNameHints` in one go after loading; cleared by `Clear()`; embedded in saved state XML |
 | `FilterInput` | `src/core/filters/FilterInput.cs` | Entry point to the filter chain; feeds data into connected filters |
 | `FilterOutput` | `src/core/filters/FilterOutput.cs` | End of filter chain; provides resampled output to consumers |
 | `FftFilter` | `src/core/filters/FftFilter.cs` | FFT filter stage |
@@ -77,6 +78,7 @@ src/
 | `SerialPort` | `src/core/comms/SerialPort.cs` | Serial port wrapper |
 | `Ring<T>` | `src/core/Ring.cs` | Generic ring/circular buffer |
 | `StatsFilter` | `src/core/filters/StatsFilter.cs` | Rolling statistics (mean, variance, RMS) filter |
+| `MruComboBox` | `src/core/controls/MruComboBox.cs` | Editable ComboBox whose drop-down is an MRU history persisted via `WindowsRegistry` (REG_MULTI_SZ, default 10 entries; entries must be non-empty). Set `RegistryKey`, call `CommitMru()` when the text is used. Used by `InputFieldForm.Show(saveMRU: true)` and the trace list's "Filter by (regex)" box (`SehensControl.FilterMruRegistryKey`, default shared key `SehensTraceFilterMru`) |
 | `DataGridControl` | `src/core/controls/DataGridControl.cs` | Filterable, sortable data grid with undo/replay stack and save/restore view state |
 | `BoundData` | `src/core/controls/DataGridBoundData.cs` | `IBindingList` backing store for `DataGridControl`; owns `UnfilteredData`, `FilteredData`, `SortKeys`, `UndoList` |
 | `DataGridControlHistory` | `src/core/controls/DataGridControlHistory.cs` | Snapshot history for `DataGridControl.SaveView` / `RestoreView` |

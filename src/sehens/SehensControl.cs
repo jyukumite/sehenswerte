@@ -216,6 +216,30 @@ namespace SehensWerte.Controls
         [XmlSave]
         public bool TraceAutoRange { get => m_TraceAutoRange; set => m_TraceAutoRange = value; }
 
+        // host-provided hints on trace names (e.g. per-source-file suffixes), used by SehensSave.Sehens.ApplyTo for fuzzy matching
+        private TraceNameHints m_TraceNameHints = new TraceNameHints();
+        [Browsable(false)]
+        [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
+        public TraceNameHints TraceNameHints
+        {
+            get => m_TraceNameHints;
+            set => m_TraceNameHints = value ?? new TraceNameHints();
+        }
+
+        // registry value name prefix for the trace list's layout preset buttons;
+        // give each scope in an application a distinct prefix
+        public string LayoutPresetRegistryPrefix { get; set; } = "SehensLayoutPreset";
+
+        // registry value name for the trace list's "Filter by (regex)" MRU
+        // drop-down history; scopes sharing the default share one history
+        [Browsable(false)]
+        [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
+        public string FilterMruRegistryKey
+        {
+            get => TraceListView.FilterMruRegistryKey;
+            set => TraceListView.FilterMruRegistryKey = value;
+        }
+
         public bool StopUpdates
         {
             get => AllTraces.Any(x => x.StopUpdates);
@@ -628,6 +652,7 @@ namespace SehensWerte.Controls
         public void Clear()
         {
             AllTraces.ForEach(x => x.Close());
+            m_TraceNameHints = new TraceNameHints();
         }
 
         public void AutoRangeAll()
@@ -807,6 +832,19 @@ namespace SehensWerte.Controls
             lock (m_ViewGroupsLock)
             {
                 m_ViewGroups.Sort(new TraceViewComparer(ActiveSkin, byColour));
+            }
+            ViewListChanged();
+            RecalculateProjection();
+        }
+
+        // impose an explicit group order; stable, so equal ranks keep their relative order
+        public void OrderViewGroups(Func<TraceView, int> rank)
+        {
+            lock (m_ViewGroupsLock)
+            {
+                m_ViewGroups = m_ViewGroups
+                    .OrderBy(group => group.Count == 0 ? int.MaxValue : group.Min(rank))
+                    .ToList();
             }
             ViewListChanged();
             RecalculateProjection();

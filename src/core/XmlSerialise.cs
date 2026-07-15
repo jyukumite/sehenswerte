@@ -31,6 +31,25 @@ namespace SehensWerte
     //     }
     // }
 
+    // XmlSerializer's (Type, Type[]) constructor codegens and a new dynamic assembly on EVERY construction, so cache instances here.
+    // Caching is only the Serialiser, not the data object.
+    public static class XmlSerializerCache
+    {
+        private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, XmlSerializer> s_Cache = new();
+
+        public static XmlSerializer Get(Type type, Type[]? derivedTypes = null)
+        {
+            string key = derivedTypes == null || derivedTypes.Length == 0
+                ? type.AssemblyQualifiedName ?? type.FullName ?? type.Name
+                : (type.AssemblyQualifiedName ?? type.FullName ?? type.Name)
+                    + "|" + string.Join("|", derivedTypes.Select(x => x.AssemblyQualifiedName ?? x.FullName ?? x.Name));
+            return s_Cache.GetOrAdd(key, _ =>
+                derivedTypes == null || derivedTypes.Length == 0
+                    ? new XmlSerializer(type)
+                    : new XmlSerializer(type, derivedTypes));
+        }
+    }
+
     [AttributeUsage(AttributeTargets.Field | AttributeTargets.Property, Inherited = false, AllowMultiple = false)]
     sealed public class XmlSaveAttribute : Attribute
     {
@@ -190,7 +209,7 @@ namespace SehensWerte
                         var newType = types.FirstOrDefault(t => t.Name == GetXmlFirstElement(element.InnerXml));
                         using (StringReader sr = new StringReader(element.InnerXml))
                         {
-                            result = new XmlSerializer(newType ?? fieldType, types.ToArray()).Deserialize((TextReader)sr);
+                            result = XmlSerializerCache.Get(newType ?? fieldType, types.ToArray()).Deserialize((TextReader)sr);
                         }
                     }
                 }

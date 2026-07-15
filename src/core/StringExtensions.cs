@@ -34,7 +34,7 @@ namespace SehensWerte
             {
                 using (StringReader sr = new StringReader(data))
                 {
-                    object? obj = new XmlSerializer(typeof(T), derivedTypes).Deserialize((TextReader)sr);
+                    object? obj = XmlSerializerCache.Get(typeof(T), derivedTypes).Deserialize((TextReader)sr);
                     return obj == null ? defaultValue : (T)obj;
                 }
             }
@@ -190,7 +190,7 @@ namespace SehensWerte
         {
             if (source == null) return "";
 
-            XmlSerializer xs = new XmlSerializer(source.GetType(), derivedTypes);
+            XmlSerializer xs = XmlSerializerCache.Get(source.GetType(), derivedTypes);
             XmlWriterSettings settings = new XmlWriterSettings
             {
                 Indent = !compact,

@@ -1,4 +1,5 @@
 using SehensWerte.Files;
+using SehensWerte.Utils;
 using System.Reflection;
 using System.Text.RegularExpressions;
 using System.Windows.Forms.VisualStyles;
@@ -17,11 +18,19 @@ namespace SehensWerte.Controls.Sehens
         private Button ButtonLoad;
         private Button ButtonMenu;
 
+        private TableLayoutPanel PanelPresets;
+        private const int PresetCount = 3;
+        private const int PresetHoldMilliseconds = 600;
+        private Button[] ButtonPresets = new Button[PresetCount];
+        private System.Windows.Forms.Timer PresetHoldTimer;
+        private System.Windows.Forms.Timer PresetFlashTimer;
+        private int m_PresetHeldIndex = -1;
+
         private ToolTip ToolTip;
 
         private Panel PanelTop;
         private Label LabelFilterBy;
-        private TextBox TextBoxFilter;
+        private MruComboBox FilterCombo;
         private UserControl PaintBox;
         private VScrollBar VerticalScrollbar;
 
@@ -41,6 +50,13 @@ namespace SehensWerte.Controls.Sehens
         private const int LineHeight = 17;
         private const float TextLeft = 16f;
 
+        // registry value name for the filter box's MRU drop-down history
+        public string FilterMruRegistryKey
+        {
+            get => FilterCombo.RegistryKey ?? "";
+            set => FilterCombo.RegistryKey = value;
+        }
+
         public TraceListControl(SehensControl scope, Action<CsvLog.Entry> onLog)
         {
             OnLog = onLog;
@@ -55,7 +71,7 @@ namespace SehensWerte.Controls.Sehens
             ButtonAutoAll = new Button();
             ButtonSort = new Button();
             LabelFilterBy = new Label();
-            TextBoxFilter = new TextBox();
+            FilterCombo = new MruComboBox();
             ButtonMenu = new Button();
             PaintBox = new UserControl();
             VerticalScrollbar = new VScrollBar();
@@ -162,22 +178,25 @@ namespace SehensWerte.Controls.Sehens
             LabelFilterBy.Size = new Size(78, 13);
             LabelFilterBy.TabIndex = 78;
             LabelFilterBy.Text = "Filter by (regex)";
-            TextBoxFilter.Dock = DockStyle.Bottom;
-            TextBoxFilter.Location = new Point(3, 113);
-            TextBoxFilter.Size = new Size(131, 20);
-            TextBoxFilter.TabIndex = 79;
-            TextBoxFilter.TextChanged += (o, e) =>
+            FilterCombo.Dock = DockStyle.Bottom;
+            FilterCombo.Location = new Point(3, 113);
+            FilterCombo.Size = new Size(131, 20);
+            FilterCombo.TabIndex = 79;
+            FilterCombo.RegistryKey = "SehensTraceFilterMru";
+            FilterCombo.TextChanged += (o, e) =>
             {
                 ButtonAllOff.Text = "Change Visible";
                 TraceListChanged();
             };
-            TextBoxFilter.KeyPress += (o, e) =>
+            FilterCombo.KeyPress += (o, e) =>
             {
-                if (e.KeyChar == '\r')
+                if (e.KeyChar == '\r' && !FilterCombo.DroppedDown)
                 {
+                    FilterCombo.CommitMru();
                     ButtonAllOnOff_Click();
                 }
             };
+            FilterCombo.Leave += (o, e) => FilterCombo.CommitMru();
             ButtonMenu.Dock = DockStyle.Bottom;
             ButtonMenu.Location = new Point(6, 29);
             ButtonMenu.Size = new Size(57, 62);
@@ -192,14 +211,64 @@ namespace SehensWerte.Controls.Sehens
                 }, "Show menu");
             };
 
+            PresetHoldTimer = new System.Windows.Forms.Timer();
+            PresetHoldTimer.Interval = PresetHoldMilliseconds;
+            PresetHoldTimer.Tick += PresetHoldTimer_Tick;
+            PresetFlashTimer = new System.Windows.Forms.Timer();
+            PresetFlashTimer.Interval = 900;
+            PresetFlashTimer.Tick += (o, e) =>
+            {
+                PresetFlashTimer.Stop();
+                for (int loop = 0; loop < PresetCount; loop++)
+                {
+                    ButtonPresets[loop].Text = (loop + 1).ToString();
+                }
+            };
+            PanelPresets = new TableLayoutPanel();
+            PanelPresets.Dock = DockStyle.Bottom;
+            PanelPresets.Height = 25;
+            PanelPresets.ColumnCount = PresetCount;
+            PanelPresets.RowCount = 1;
+            PanelPresets.TabIndex = 82;
+            for (int loop = 0; loop < PresetCount; loop++)
+            {
+                int index = loop;
+                Button button = new Button();
+                button.Text = (index + 1).ToString();
+                button.Dock = DockStyle.Fill;
+                button.Margin = new Padding(0);
+                button.UseVisualStyleBackColor = true;
+                button.MouseDown += (o, e) =>
+                {
+                    if (e.Button == MouseButtons.Left)
+                    {
+                        PresetMouseDown(index);
+                    }
+                };
+                button.MouseUp += (o, e) =>
+                {
+                    if (e.Button == MouseButtons.Left)
+                    {
+                        PresetMouseUp(index);
+                    }
+                };
+                button.MouseLeave += (o, e) => PresetCancel();
+                ToolTip.SetToolTip(button,
+                    $"Tap: load layout preset {index + 1}\nHold: save current layout as preset {index + 1}");
+                PanelPresets.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100f / PresetCount));
+                PanelPresets.Controls.Add(button, loop, 0);
+                ButtonPresets[loop] = button;
+            }
+
             base.Controls.Add(LabelFilterBy);
-            base.Controls.Add(TextBoxFilter);
+            base.Controls.Add(FilterCombo);
             base.Controls.Add(ButtonSort);
             base.Controls.Add(ButtonAutoAll);
             base.Controls.Add(ButtonAllOff);
             base.Controls.Add(ButtonMenu);
             base.Controls.Add(ButtonLoad);
             base.Controls.Add(ButtonSave);
+            base.Controls.Add(PanelPresets);
             base.Controls.Add(PanelTop);
 
             base.AutoScaleDimensions = new SizeF(6f, 13f);
@@ -227,8 +296,67 @@ namespace SehensWerte.Controls.Sehens
             {
                 TextFont.Dispose();
                 WarningFont.Dispose();
+                PresetHoldTimer.Dispose();
+                PresetFlashTimer.Dispose();
             }
             base.Dispose(disposing);
+        }
+
+        private void PresetMouseDown(int index)
+        {
+            m_PresetHeldIndex = index;
+            PresetHoldTimer.Stop();
+            PresetHoldTimer.Start();
+        }
+
+        private void PresetHoldTimer_Tick(object? o, EventArgs e)
+        {
+            PresetHoldTimer.Stop();
+            int index = m_PresetHeldIndex;
+            m_PresetHeldIndex = -1; // consumed - the following MouseUp won't load
+            if (index >= 0)
+            {
+                this.ExceptionToMessagebox(() =>
+                {
+                    WindowsRegistry.Write(
+                        Scope.LayoutPresetRegistryPrefix + (index + 1),
+                        new SehensSave.Sehens(Scope, copySamples: false).ToXml(compact: true));
+                    FlashPresetButton(index, "Saved");
+                }, "Save layout preset");
+            }
+        }
+
+        private void PresetMouseUp(int index)
+        {
+            PresetHoldTimer.Stop();
+            if (m_PresetHeldIndex != index) return; // hold-saved or cancelled
+            m_PresetHeldIndex = -1;
+            this.ExceptionToMessagebox(() =>
+            {
+                WindowsRegistry.Read<string>(Scope.LayoutPresetRegistryPrefix + (index + 1), out string? xml);
+                SehensSave.Sehens? layout = string.IsNullOrEmpty(xml) ? null : xml.FromXml<SehensSave.Sehens>();
+                if (layout == null)
+                {
+                    FlashPresetButton(index, "Empty");
+                }
+                else
+                {
+                    layout.ApplyTo(Scope);
+                }
+            }, "Load layout preset");
+        }
+
+        private void PresetCancel()
+        {
+            PresetHoldTimer.Stop();
+            m_PresetHeldIndex = -1;
+        }
+
+        private void FlashPresetButton(int index, string text)
+        {
+            ButtonPresets[index].Text = text;
+            PresetFlashTimer.Stop();
+            PresetFlashTimer.Start();
         }
 
         private void TraceListChanged()
@@ -246,7 +374,7 @@ namespace SehensWerte.Controls.Sehens
         {
             m_UpdateSemaphore = 0;
             AllTraces = Scope.AllViews;
-            string text = TextBoxFilter.Text;
+            string text = FilterCombo.Text;
             if (text.Length == 0)
             {
                 FilteredTraces = AllTraces;
@@ -283,6 +411,7 @@ namespace SehensWerte.Controls.Sehens
                 ButtonLoad.Visible = !Scope.SimpleUi;
                 ButtonSave.Visible = !Scope.SimpleUi;
                 ButtonMenu.Visible = !Scope.SimpleUi;
+                PanelPresets.Visible = !Scope.SimpleUi;
             }
             if (m_UpdateSemaphore != 0)
             {
@@ -422,7 +551,7 @@ namespace SehensWerte.Controls.Sehens
 
         private void ButtonAllOnOff_Click()
         {
-            TraceView[] array = (TextBoxFilter.Text.Length > 0) ? FilteredTraces : AllTraces;
+            TraceView[] array = (FilterCombo.Text.Length > 0) ? FilteredTraces : AllTraces;
             bool visible = array.Any(x => x.Visible);
             Scope.BeginUpdate();
             foreach (var f in array)

@@ -52,5 +52,22 @@ namespace SehensWerte.Utils
                 Registry.SetValue(registryKey, key, value?.ToString() ?? "");
             }
         }
+
+        // REG_MULTI_SZ; entries must be non-empty (the format cannot represent an empty string and would truncate the list there)
+        public static void Write(string key, string[] value)
+        {
+            string? registryKey = Key();
+            if (registryKey != null)
+            {
+                Registry.SetValue(registryKey, key, value);
+            }
+        }
+
+        public static bool Read(string key, out string[]? result)
+        {
+            string? registryKey = Key();
+            result = registryKey == null ? null : Registry.GetValue(registryKey, key, null) as string[];
+            return result != null;
+        }
     }
 }
