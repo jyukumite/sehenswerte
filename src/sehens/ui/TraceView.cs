@@ -1601,6 +1601,13 @@ namespace SehensWerte.Controls.Sehens
                             rightSampleNumberValue = (rightSampleNumber + num) / m_Samples.InputSamplesPerSecond;
                             sampleValueUnit = "s";
                         }
+                        else if (m_Samples.HorizontalAxisValues is double[] hax && hax.Length != 0)
+                        {
+                            int lastIndex = hax.Length - 1;
+                            leftSampleNumberValue = hax[Math.Clamp(leftSampleNumber, 0, lastIndex)];
+                            rightSampleNumberValue = hax[Math.Clamp(rightSampleNumber, 0, lastIndex)];
+                            sampleValueUnit = m_Samples.HorizontalAxisUnit;
+                        }
                         else
                         {
                             leftSampleNumberValue = leftSampleNumber + num;
@@ -1998,6 +2005,10 @@ namespace SehensWerte.Controls.Sehens
                     ? $"{value.ToStringRound(5, 3)} of N"
                     : value.ToStringRound(5, 3, "Hz");
             }
+            else if (m_Samples.HorizontalAxisValues is double[] hax && hax.Length != 0)
+            {
+                return m_Samples.HorizontalValueAt(click.IndexBeforeTrim).ToStringRound(5, 3, m_Samples.HorizontalAxisUnit);
+            }
             else if (Samples.ViewedIsYTTrace)
             {
                 return click.UnixTimeAtX.ToStringRound(3, 3); // use ToHorizontalUnit?
@@ -2079,13 +2090,14 @@ namespace SehensWerte.Controls.Sehens
             double delta01 = Clicks[0].YValue - Clicks[1].YValue;
             double delta23 = Clicks[2].YValue - Clicks[3].YValue;
             StringBuilder text = new StringBuilder();
-            var time = Samples.InputSamplesPerSecond == 0.0 ? "" : $" ({SampleNumberText(Clicks[0])})";
+            bool hasHorizontal = Samples.InputSamplesPerSecond != 0.0 || Samples.HorizontalAxisValues != null;
+            var time = hasHorizontal ? $" ({SampleNumberText(Clicks[0])})" : "";
             text.Append($"{ViewName}[{Clicks[0].IndexBeforeTrim}/{Clicks[0].CountBeforeTrim}{time}]");
             text.Append(@"
 value=" + string.Format(VerticalUnitFormat, Clicks[0].SampleAtX.ToStringRound(5, 3)));
             var deltaInfo = Clicks[0].ShallowClone();
             deltaInfo.IndexBeforeTrim = Clicks[0].IndexBeforeTrim - Clicks[1].IndexBeforeTrim;
-            string delta = $"{deltaInfo.IndexBeforeTrim}{((Samples.InputSamplesPerSecond == 0.0) ? "" : (" (" + SampleNumberText(deltaInfo) + ")"))}";
+            string delta = $"{deltaInfo.IndexBeforeTrim}{(hasHorizontal ? (" (" + SampleNumberText(deltaInfo) + ")") : "")}";
             var c12 = Math.Abs(delta01).ToStringRound(5, 3);
             var c23 = Math.Abs(delta23).ToStringRound(5, 3);
             var ratio = ((delta01 + delta23 != 0.0) ? (delta23 / delta01) : 0.0).ToStringRound(5, 3);

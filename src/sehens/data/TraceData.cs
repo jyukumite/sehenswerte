@@ -132,6 +132,33 @@ namespace SehensWerte.Controls.Sehens
             }
         }
 
+        // Optional horizontal-axis values, one per input sample (monotonic, increasing)
+        // Not valid on time/YT or FFT trace
+        public double[]? HorizontalAxisValues { get; private set; }
+        public string HorizontalAxisUnit { get; private set; } = "";
+
+        public void SetHorizontalAxis(double[]? values, string unit = "")
+        {
+            lock (DataLock)
+            {
+                HorizontalAxisValues = values;
+                HorizontalAxisUnit = unit ?? "";
+            }
+            ForEachViewer(x => x.TraceDataSettingsChanged(this));
+        }
+
+        // Interpolated horizontal value at a (possibly fractional) sample number, for hover readout.
+        public double HorizontalValueAt(double sampleNumber)
+        {
+            double[]? v = HorizontalAxisValues;
+            if (v == null || v.Length == 0) return sampleNumber;
+            if (sampleNumber <= 0) return v[0];
+            if (sampleNumber >= v.Length - 1) return v[v.Length - 1];
+            int i = (int)sampleNumber;
+            double frac = sampleNumber - i;
+            return v[i] + (v[i + 1] - v[i]) * frac;
+        }
+
         [XmlSave]
         public string VerticalUnit
         {

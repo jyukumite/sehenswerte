@@ -252,8 +252,10 @@ namespace SehensWerte.Controls.Sehens
 
         public virtual string GetHoverStatistics(TraceView trace, TraceView.MouseInfo info)
         {
-            string sps = (trace.Samples.InputSamplesPerSecond == 0.0) ? "" : (" (" + trace.SampleNumberText(info) + ")");
-            return $"{info.SampleAtX.ToStringRound(5, 3)} {trace.ViewName}[{info.IndexBeforeTrim}]{sps}";
+            bool hasHorizontal = trace.Samples.InputSamplesPerSecond != 0.0
+                || (trace.Samples.HorizontalAxisValues is double[] h && h.Length != 0);
+            string horizontal = hasHorizontal ? (" (" + trace.SampleNumberText(info) + ")") : "";
+            return $"{info.SampleAtX.ToStringRound(5, 3)} {trace.ViewName}[{info.IndexBeforeTrim}]{horizontal}";
         }
 
         ////////////////////////////////////////////

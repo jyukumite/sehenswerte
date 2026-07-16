@@ -961,7 +961,8 @@ namespace SehensWerte.Controls.Sehens
         public TraceGroupDisplay TraceToGroupDisplayInfo(TraceView trace, TraceGroupDisplay.PaintFlags flags = TraceGroupDisplay.PaintFlags.None)
         {
             var info = new TraceGroupDisplay(Scope.PaintBoxMouse, PaintBoxScreenRect, this, trace, flags);
-            info.ShowHorizontalUnits = info.View0.Samples.InputSamplesPerSecond != 0.0
+            info.ShowHorizontalUnits = (info.View0.Samples.InputSamplesPerSecond != 0.0
+                    || info.View0.Samples.HorizontalAxisValues != null)
                 && Scope.PaintBoxMouse.MouseGuiSection != PaintBoxMouseInfo.GuiSection.BottomGutter;
             return info;
         }

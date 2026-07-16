@@ -247,6 +247,14 @@ namespace SehensWerte.Controls
             public RadixAttribute(int radix = 16) { Radix = radix; }
         }
 
+        // Numeric format string, e.g. "0", "0.##", "0.0", "G5"
+        [AttributeUsage(AttributeTargets.Property | AttributeTargets.Field)]
+        public class FormatAttribute : Attribute
+        {
+            public string Format;
+            public FormatAttribute(string format) { Format = format; }
+        }
+
         [AttributeUsage(AttributeTargets.Property | AttributeTargets.Field)]
         public class PushButtonAttribute : Attribute
         {
@@ -426,6 +434,24 @@ namespace SehensWerte.Controls
             return ((radix == 2 || radix == 8 || radix == 16) && IsIntegerType(type)) ? radix : null;
         }
 
+        internal static string? DisplayFormat(MemberInfo info)
+        {
+            object[] customAttributes = info.GetCustomAttributes(typeof(FormatAttribute), inherit: false);
+            return customAttributes.Length == 0 ? null : ((FormatAttribute)customAttributes[0]).Format;
+        }
+
+        internal static string? DisplayText(MemberInfo info, Type type, object value)
+        {
+            int? radix = DisplayRadix(info, type);
+            if (radix != null) return ToRadixText(type, radix.Value, value);
+            string? format = DisplayFormat(info);
+            if (format != null && value is IFormattable formattable)
+            {
+                return formattable.ToString(format, System.Globalization.CultureInfo.CurrentCulture);
+            }
+            return value.ToString();
+        }
+
         internal static bool IsIntegerType(Type t)
         {
             return t == typeof(byte) || t == typeof(sbyte)
@@ -588,7 +614,18 @@ namespace SehensWerte.Controls
             {
                 if (item is Button)
                 {
-                    ((Button)item).Click += MouseClicked;
+                    Button button = (Button)item;
+                    TextBox? kickTextBox = button.Tag is EditRow
+                        ? null
+                        : button.Parent?.Controls.OfType<TextBox>().FirstOrDefault();
+                    if (m_CommitMode == CommitMode.OnValidated && kickTextBox != null)
+                    {
+                        button.Click += (s, e) => TextChanged(kickTextBox, EventArgs.Empty);
+                    }
+                    else
+                    {
+                        button.Click += MouseClicked;
+                    }
                 }
                 else if (item is CheckBox)
                 {
@@ -703,8 +740,7 @@ namespace SehensWerte.Controls
                     object? value = GetValue(sourceData, row);
                     if (value != null)
                     {
-                        int? radix = row == null ? null : DisplayRadix(row.MemberInfo, row.Type);
-                        string? text = radix != null ? ToRadixText(row!.Type, radix.Value, value) : value.ToString();
+                        string? text = row == null ? value.ToString() : DisplayText(row.MemberInfo, row.Type, value);
                         if (text != null && control.Text != text)
                         {
                             control.Text = text;
@@ -898,7 +934,7 @@ namespace SehensWerte.Controls
                 {
                     if (idx < 0 || idx >= list.Count) return;
                     object? parsed = ParseTo(row.Type, value, radix);
-                    if (parsed != null)
+                    if (parsed != null && !Equals(list[idx], parsed))
                     {
                         InvokeOnChanging();
                         list[idx] = parsed;
@@ -911,7 +947,8 @@ namespace SehensWerte.Controls
             {
                 FieldInfo fieldInfo = (FieldInfo)row.MemberInfo;
                 obj = ParseTo(fieldInfo.FieldType, value, radix);
-                if (obj != null && !fieldInfo.IsLiteral && !fieldInfo.IsInitOnly)
+                if (obj != null && !fieldInfo.IsLiteral && !fieldInfo.IsInitOnly
+                    && !Equals(fieldInfo.GetValue(source), obj))
                 {
                     InvokeOnChanging();
                     fieldInfo.SetValue(source, obj);
@@ -922,7 +959,7 @@ namespace SehensWerte.Controls
             {
                 PropertyInfo propertyInfo = (PropertyInfo)row.MemberInfo;
                 obj = ParseTo(propertyInfo.PropertyType, value, radix);
-                if (obj != null)
+                if (obj != null && !Equals(propertyInfo.GetValue(source, null), obj))
                 {
                     InvokeOnChanging();
                     try
@@ -1476,6 +1513,35 @@ namespace SehensWerte.Controls
             var box = (TextBox)FindControl(control, nameof(CommitTestData.Number), typeof(TextBox))!;
             box.Text = "7";
             Assert.AreEqual(42, data.Number); // deferred until Validated/Enter
+        }
+
+        private static void RaiseValidated(Control c) =>
+            typeof(Control).GetMethod("OnValidated", BindingFlags.Instance | BindingFlags.NonPublic)!
+                .Invoke(c, new object[] { EventArgs.Empty });
+
+        [TestMethod]
+        public void TestOnValidatedUnchangedFieldDoesNotFire()
+        {
+            // Tabbing away (Validated) from an untouched field must NOT fire OnChange:
+            // Validated raises regardless of edits, so the commit must be gated on a real value change.
+            var data = new CommitTestData();
+            var control = new AutoEditorControl { CommitMode = AutoEditor.CommitMode.OnValidated };
+            control.Generate(data);
+            int changes = 0;
+            control.OnChange += _ => changes++;
+            var box = (TextBox)FindControl(control, nameof(CommitTestData.Number), typeof(TextBox))!;
+
+            RaiseValidated(box); // box still shows "42" - unchanged
+            Assert.AreEqual(0, changes);
+            Assert.AreEqual(42, data.Number);
+
+            box.Text = "7";     // deferred (no TextChanged commit in OnValidated mode)
+            RaiseValidated(box); // now the value genuinely changed
+            Assert.AreEqual(1, changes);
+            Assert.AreEqual(7, data.Number);
+
+            RaiseValidated(box); // tabbing away again with no further edit must stay quiet
+            Assert.AreEqual(1, changes);
         }
 
         [TestMethod]

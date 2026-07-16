@@ -320,6 +320,8 @@ namespace SehensWerte
             public Data InputData = new Data();
             public Data? ViewedData = new Data(); // never deserialises as null
             public string Name = "";
+            public double[]? HorizontalAxisValues = null;
+            public string HorizontalAxisUnit = "";
 
             public Trace() { }
 
@@ -332,6 +334,11 @@ namespace SehensWerte
                     InputData = new Data(obj.SaveInputData, copySamples);
                     DataStore? saveViewedData = obj.SaveViewedData;
                     ViewedData = saveViewedData == null ? null : new Data(saveViewedData, copySamples);
+                    if (copySamples)
+                    {
+                        HorizontalAxisValues = obj.HorizontalAxisValues;
+                        HorizontalAxisUnit = obj.HorizontalAxisUnit;
+                    }
                 }
             }
 
@@ -341,6 +348,10 @@ namespace SehensWerte
                 {
                     obj.Name = Name;
                     XmlSaveAttribute.Inject(obj, OtherElements);
+                    if (HorizontalAxisValues != null)
+                    {
+                        obj.SetHorizontalAxis(HorizontalAxisValues, HorizontalAxisUnit);
+                    }
 
                     var inputData = new DataStore();
                     InputData.SaveTo(inputData);
