@@ -147,6 +147,7 @@ Settings objects inherit `AutoEditorBase`. Decorate fields/properties with attri
 | `[AutoEditor.Values(new[]{...})]` / `Values(typeof(Enum))` / `Values(typeof(IValuesAttrInterface))` | Render as a `ComboBox` with the given list |
 | `[AutoEditor.Range(min, max, step)]` | On a numeric field, adds `-`/`+` kick buttons that nudge by `step`, clamped to `[min, max]` |
 | `[AutoEditor.Hidden]` | Skip rendering |
+| `[AutoEditor.Tooltip("...")]` | Hover tooltip on the row's label and editor control. `\n` for line breaks. One shared `ToolTip` per `AutoEditorControl` |
 | `[AutoEditor.Disabled]` | Render greyed/disabled (`Enabled=false`); see the `ReadOnly` property for a legible viewer |
 | `[AutoEditor.Password]` | Mask the TextBox content |
 | `[AutoEditor.Radix(n)]` | On an integer field, display and parse in radix `n` (default 16 = hex; 2 = binary, 8 = octal). Shown `0x`/`0b`/`0o`-prefixed, zero-padded to the type's native width; input prefix optional; signed types use raw two's-complement bits (`0xFF` -> sbyte -1). Non-fitting or unparseable input is not committed. Ignored on non-integer types (incl. float/double) and unsupported radixes; composes with `[Range]` kick buttons. On an array field it applies to the elements |

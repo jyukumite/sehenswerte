@@ -61,7 +61,7 @@ namespace SehensWerte.Utils
         {
             string text = mode switch
             {
-                DumpMode.CSharp => Pad(indent, "new {0}() {{\r\n", name == CNullName ? "" : name),
+                DumpMode.CSharp => Pad(indent, "new {0}() {{\r\n", name == CNullName || name == NullName ? "" : name),
                 _ => Pad(indent, "{0} ({1}):\r\n", name == NullName ? "" : name, type.Name),
             };
 
@@ -129,14 +129,25 @@ namespace SehensWerte.Utils
             string text = "";
             foreach (object key in dictionary.Keys)
             {
-                text += mode switch
+                object? value = dictionary[key];
+                if (mode == DumpMode.CSharp)
                 {
-                    DumpMode.CSharp => Pad(indent + 1, "{{ {0}, {1} }},\r\n", CSharpLiteral(key), CSharpLiteral(dictionary[key])),
-                    _ => Pad(indent + 1, "[{0}] ({1}):\r\n", key, key.GetType().Name),
-                };
-                if (mode != DumpMode.CSharp)
+                    bool simple = value == null || value is string || value.GetType().IsEnum || value.GetType().IsPrimitive;
+                    if (simple)
+                    {
+                        text += Pad(indent + 1, "{{ {0}, {1} }},\r\n", CSharpLiteral(key), CSharpLiteral(value));
+                    }
+                    else
+                    {   // composite values recurse so the dump can be pasted back as an initializer
+                        text += Pad(indent + 1, "{{ {0}, ", CSharpLiteral(key));
+                        text += Object(value, indent + 2, mode);
+                        text += Pad(indent + 1, "}},\r\n");
+                    }
+                }
+                else
                 {
-                    text += Object(dictionary[key] ?? NullName, indent + 2, mode);
+                    text += Pad(indent + 1, "[{0}] ({1}):\r\n", key, key.GetType().Name);
+                    text += Object(value ?? NullName, indent + 2, mode);
                 }
             }
             return text;
@@ -268,6 +279,26 @@ namespace SehensWerte.Utils
 
             string nullResult = ((object)null!).DumpObject();
             Assert.AreEqual("(null)", nullResult);
+        }
+
+        enum TestKey { First, Second };
+
+        [TestMethod]
+        public void TestDictionaryCSharp()
+        {
+            var simple = new Dictionary<TestKey, int> { { TestKey.First, 1 }, { TestKey.Second, 2 } };
+            string csharp = simple.DumpObject(ObjectDumpExtension.DumpMode.CSharp);
+            Assert.IsTrue(csharp.Contains("{ TestKey.First, 1 },"));
+            Assert.IsTrue(csharp.Contains("{ TestKey.Second, 2 },"));
+
+            // composite values must recurse into a pasteable initializer, not ToString()
+            var composite = new Dictionary<TestKey, SimpleObj> { { TestKey.First, new SimpleObj() } };
+            csharp = composite.DumpObject(ObjectDumpExtension.DumpMode.CSharp);
+            Assert.IsTrue(csharp.Contains("{ TestKey.First,"));
+            Assert.IsTrue(csharp.Contains("new () {"));
+            Assert.IsTrue(csharp.Contains("Name = \"hello\","));
+            Assert.IsTrue(csharp.Contains("Value = 42,"));
+            Assert.IsFalse(csharp.Contains("SimpleObj }"));
         }
     }
 }

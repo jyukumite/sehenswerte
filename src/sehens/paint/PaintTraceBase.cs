@@ -182,26 +182,23 @@ namespace SehensWerte.Controls.Sehens
             divisionInfo.View0.DrawnValueLowest = min;
         }
 
+        protected static float EffectiveLineWidth(TraceGroupDisplay info)
+        {
+            if (!info.Scope.HighQualityRender) return info.Skin.TraceLineWidth;
+            return info.DrawPictureInPicture
+                ? 1f
+                : info.View0.LineWidth == 0 ? info.Skin.TraceLineWidth : info.View0.LineWidth;
+        }
+
         protected static Pen LinePen(Color col, TraceGroupDisplay info)
         {
-            Pen pen;
-            if (info.Scope.HighQualityRender)
+            Pen pen = new Pen(col, EffectiveLineWidth(info));
+            if (info.Scope.HighQualityRender && info.View0.LineWidth != 1.0f)
             {
-                float width = info.DrawPictureInPicture
-                    ? 1f
-                    : info.View0.LineWidth == 0 ? info.Skin.TraceLineWidth : info.View0.LineWidth;
-                pen = new Pen(col, width);
-                if (info.View0.LineWidth != 1.0f && info.Scope.HighQualityRender)
-                {
-                    pen.StartCap = LineCap.Round;
-                    pen.EndCap = LineCap.Round;
-                    pen.LineJoin = LineJoin.Round;
-                    pen.MiterLimit = 1f;
-                }
-            }
-            else
-            {
-                pen = new Pen(col, width: info.Skin.TraceLineWidth);
+                pen.StartCap = LineCap.Round;
+                pen.EndCap = LineCap.Round;
+                pen.LineJoin = LineJoin.Round;
+                pen.MiterLimit = 1f;
             }
             return pen;
         }

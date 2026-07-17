@@ -152,6 +152,13 @@ namespace SehensWerte.Controls
         }
 
         [AttributeUsage(AttributeTargets.Property | AttributeTargets.Field)]
+        public class TooltipAttribute : Attribute
+        {
+            public string Text;
+            public TooltipAttribute(string text) { Text = text; }
+        }
+
+        [AttributeUsage(AttributeTargets.Property | AttributeTargets.Field)]
         public class DisplayOrderAttribute : Attribute
         {
             public double DisplayOrder;
@@ -361,6 +368,12 @@ namespace SehensWerte.Controls
         internal static bool IsHidden(MemberInfo info)
         {
             return info.GetCustomAttributes(typeof(HiddenAttribute), inherit: false).Length != 0;
+        }
+
+        internal static string? Tooltip(MemberInfo info)
+        {
+            var attrs = info.GetCustomAttributes(typeof(TooltipAttribute), inherit: false);
+            return attrs.Length == 0 ? null : ((TooltipAttribute)attrs[0]).Text;
         }
 
         internal static bool IsSubEditor(MemberInfo info)
@@ -711,7 +724,7 @@ namespace SehensWerte.Controls
                 {
                     ComboBox comboBox = (ComboBox)control;
                     object? value = GetValue(sourceData, comboBox.Tag as EditRow);
-                    if (value != null && (string)comboBox.SelectedText != value.ToString())
+                    if (value != null && comboBox.Text != value.ToString())
                     {
                         comboBox.SelectedIndex = comboBox.Items.IndexOf(value.ToString());
                     }
@@ -1282,6 +1295,39 @@ namespace SehensWerte.Controls
             var combo = (ComboBox)FindControl(control, nameof(CommitTestData.Anchor), typeof(ComboBox))!;
             combo.SelectedIndex = combo.Items.IndexOf(nameof(System.Windows.Forms.AnchorStyles.Top));
             Assert.AreEqual(System.Windows.Forms.AnchorStyles.Top, data.Anchor);
+        }
+
+        [TestMethod]
+        public void TestEnumComboUpdateControlsRefresh()
+        {
+            var data = new CommitTestData();
+            var control = new AutoEditorControl();
+            control.Generate(data);
+            var combo = (ComboBox)FindControl(control, nameof(CommitTestData.Anchor), typeof(ComboBox))!;
+            data.Anchor = System.Windows.Forms.AnchorStyles.Bottom;
+            control.UpdateControls();
+            Assert.AreEqual(nameof(System.Windows.Forms.AnchorStyles.Bottom), combo.Text);
+            Assert.AreEqual(System.Windows.Forms.AnchorStyles.Bottom, data.Anchor); // refresh must not re-commit stale UI
+        }
+
+        class TooltipTestData
+        {
+            [AutoEditor.Tooltip("kv sets back-emf")]
+            public double Kv = 223;
+            public double NoTip = 1;
+        }
+
+        [TestMethod]
+        public void TestTooltipAttribute()
+        {
+            var data = new TooltipTestData();
+            var control = new AutoEditorControl();
+            control.Generate(data);
+            var tipped = (TextBox)FindControl(control, nameof(TooltipTestData.Kv), typeof(TextBox))!;
+            Assert.IsNotNull(control.RowToolTip);
+            Assert.AreEqual("kv sets back-emf", control.RowToolTip!.GetToolTip(tipped));
+            var plain = (TextBox)FindControl(control, nameof(TooltipTestData.NoTip), typeof(TextBox))!;
+            Assert.AreEqual("", control.RowToolTip!.GetToolTip(plain) ?? "");
         }
 
         [TestMethod]

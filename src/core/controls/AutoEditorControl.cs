@@ -13,19 +13,49 @@ namespace SehensWerte.Controls
         public bool ReadOnly { get; set; }
         private Dictionary<AutoEditor.EditRow, object> m_StartValues = new Dictionary<AutoEditor.EditRow, object>();
         internal TableLayoutPanel? LayoutPanel;
+        internal ToolTip? RowToolTip;
         public int PreferredHeight => LayoutPanel?.GetRowHeights().Sum() ?? 0;
         // tracks (memberInfo, source) -> last-seen IList count so the panel can rebuild when an array length changes
         private Dictionary<(MemberInfo, object), int> m_ArrayLengths = new();
 
         // TableLayoutPanel is not double-buffered by default: on a resize it repaints every
-        // cell (and, with CellBorderStyle, every border) unbuffered, which is slow and flickers
-        // badly on a panel with many rows. This subclass buffers the paint.
+        // cell unbuffered, which is slow and flickers badly on a panel with many rows. 
         private class BufferedTableLayoutPanel : TableLayoutPanel
         {
+            public List<Label> GroupNameLabels = new List<Label>(); // full-width group headers
+
             public BufferedTableLayoutPanel()
             {
                 DoubleBuffered = true;
-                SetStyle(ControlStyles.OptimizedDoubleBuffer | ControlStyles.AllPaintingInWmPaint, true);
+                SetStyle(ControlStyles.OptimizedDoubleBuffer | ControlStyles.AllPaintingInWmPaint | ControlStyles.ResizeRedraw, true);
+            }
+
+            protected override void OnPaint(PaintEventArgs e)
+            {
+                base.OnPaint(e);
+                int[] widths = GetColumnWidths();
+                int[] heights = GetRowHeights();
+                if (widths.Length < 2 || heights.Length == 0) return;
+                using Pen pen = new Pen(SystemColors.ControlDark);
+                int left = DisplayRectangle.X;
+                int right = left + widths.Sum() - 1;
+                int divider = left + widths[0];
+                int top = DisplayRectangle.Y;
+                int bottom = top + heights.Sum() - 1;
+
+                e.Graphics.DrawRectangle(pen, left, top, right - left, bottom - top);
+                int y = top;
+                for (int loop = 0; loop < heights.Length; loop++)
+                {
+                    int bandTop = y;
+                    y += heights[loop];
+                    e.Graphics.DrawLine(pen, left, y - 1, right, y - 1); // row separator
+                    bool headerBand = GroupNameLabels.Any(l => l.Visible && l.Top >= bandTop && l.Top < y);
+                    if (!headerBand)
+                    {
+                        e.Graphics.DrawLine(pen, divider, bandTop, divider, y - 1); // label|value divider
+                    }
+                }
             }
         }
 
@@ -75,6 +105,8 @@ namespace SehensWerte.Controls
                 LayoutPanel.Controls.Clear();
                 Controls.Remove(LayoutPanel);
             }
+            RowToolTip?.Dispose();
+            RowToolTip = null;
             if (sourceData != null)
             {
                 SourceData = sourceData;
@@ -107,7 +139,7 @@ namespace SehensWerte.Controls
             LayoutPanel = new BufferedTableLayoutPanel
             {
                 Dock = DockStyle.Fill,
-                CellBorderStyle = TableLayoutPanelCellBorderStyle.Single,
+                CellBorderStyle = TableLayoutPanelCellBorderStyle.None,
                 AutoScroll = true
             };
             LayoutPanel.SuspendLayout();
@@ -163,6 +195,7 @@ namespace SehensWerte.Controls
                 }
 
                 AddFinalRow();
+                ApplyTooltips();
                 LayoutPanel?.ResumeLayout();
                 Controls.Add(LayoutPanel);
                 m_StartValues = AutoEditor.GetValueList(SourceData, rows);
@@ -340,6 +373,30 @@ namespace SehensWerte.Controls
             }
         }
 
+        // Attach [Tooltip] text to each generated row: the editor control (found by its EditRow
+        // Tag), its sub-controls (kick-panel TextBox/buttons), and the label in column 0.
+        private void ApplyTooltips()
+        {
+            if (LayoutPanel == null) return;
+            foreach (Control control in LayoutPanel.Controls)
+            {
+                if (control.Tag is not AutoEditor.EditRow row) continue;
+                string? tip = AutoEditor.Tooltip(row.MemberInfo);
+                if (tip == null) continue;
+                RowToolTip ??= new ToolTip { AutoPopDelay = 30000, InitialDelay = 400, ReshowDelay = 100 };
+                RowToolTip.SetToolTip(control, tip);
+                foreach (Control sub in control.Controls)
+                {
+                    RowToolTip.SetToolTip(sub, tip);
+                }
+                int rowIndex = LayoutPanel.GetPositionFromControl(control).Row;
+                if (LayoutPanel.GetControlFromPosition(0, rowIndex) is Label label)
+                {
+                    RowToolTip.SetToolTip(label, tip);
+                }
+            }
+        }
+
         private void AddGroupNameRow(string groupName)
         {
             Label groupLabel = new Label
@@ -354,6 +411,10 @@ namespace SehensWerte.Controls
             groupLabel.UseMnemonic = false;
             LayoutPanel?.Controls.Add(groupLabel, 0, ++LayoutPanel.RowCount);
             LayoutPanel?.SetColumnSpan(groupLabel, 2);
+            if (LayoutPanel is BufferedTableLayoutPanel buffered)
+            {
+                buffered.GroupNameLabels.Add(groupLabel);
+            }
         }
 
         private void AddFinalRow()

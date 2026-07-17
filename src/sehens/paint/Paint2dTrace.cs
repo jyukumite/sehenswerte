@@ -182,30 +182,49 @@ namespace SehensWerte.Controls.Sehens
             return Math.Max(PaintProjectionArea.Top - 1, Math.Min(PaintProjectionArea.Bottom + 1, num));
         }
 
-        private PointF[]? ProjectPolygon()
-        {
-            if (DrawnProjection1 == null || DrawnProjection2 == null) return null;
+        private PointF[]? ProjectPolygon() => ProjectPolygon(DrawnProjection1, DrawnProjection2);
 
-            int length1 = DrawnProjection1!.Length;
-            int length2 = DrawnProjection2!.Length;
+        private static PointF[]? ProjectPolygon(PointF[]? projection1, PointF[]? projection2)
+        {
+            if (projection1 == null || projection2 == null) return null;
+
             var result = new List<PointF>();
 
             //fixme: split polygons for embedded NANs
-            for (int loop = 0; loop < length1; loop++)
+            for (int loop = 0; loop < projection1.Length; loop++)
             {
-                if (float.IsFinite(DrawnProjection1[loop].Y))
+                if (float.IsFinite(projection1[loop].Y))
                 {
-                    result.Add(DrawnProjection1[loop]);
+                    result.Add(projection1[loop]);
                 }
             }
-            for (int loop = length2 - 1; loop >= 0; loop--)
+            for (int loop = projection2.Length - 1; loop >= 0; loop--)
             {
-                if (float.IsFinite(DrawnProjection2[loop].Y))
+                if (float.IsFinite(projection2[loop].Y))
                 {
-                    result.Add(DrawnProjection2[loop]);
+                    result.Add(projection2[loop]);
                 }
             }
             return result.ToArray();
+        }
+
+        private static (PointF[], PointF[]) WidenEnvelope(PointF[] projection1, PointF[] projection2, float lineWidth)
+        {
+            PointF[] widened1 = (PointF[])projection1.Clone();
+            PointF[] widened2 = (PointF[])projection2.Clone();
+            int count = Math.Min(widened1.Length, widened2.Length);
+            for (int loop = 0; loop < count; loop++)
+            {
+                float y1 = widened1[loop].Y;
+                float y2 = widened2[loop].Y;
+                float pad = (lineWidth - (Math.Abs(y1 - y2) + 1f)) / 2f;
+                if (pad > 0 && float.IsFinite(pad))
+                {
+                    widened1[loop].Y = y1 >= y2 ? y1 + pad : y1 - pad;
+                    widened2[loop].Y = y1 >= y2 ? y2 - pad : y2 + pad;
+                }
+            }
+            return (widened1, widened2);
         }
 
         private void ProjectYT(TraceGroupDisplay info, int leftIndex, int rightIndex)
@@ -342,10 +361,22 @@ namespace SehensWerte.Controls.Sehens
             else
             {
                 bool dots = info.View0.PaintMode == TraceView.PaintModes.Points || info.View0.PaintMode == TraceView.PaintModes.PointsIfChanged;
-                if (DrawnPolygon != null && !dots && DrawnPolygon.Length > 0)
+                PointF[]? projection1 = DrawnProjection1;
+                PointF[]? projection2 = DrawnProjection2;
+                PointF[]? polygon = DrawnPolygon;
+                if (!dots && polygon != null && projection1 != null && projection2 != null)
+                {
+                    float lineWidth = EffectiveLineWidth(info);
+                    if (lineWidth > 1f)
+                    {
+                        (projection1, projection2) = WidenEnvelope(projection1, projection2, lineWidth);
+                        polygon = ProjectPolygon(projection1, projection2);
+                    }
+                }
+                if (polygon != null && !dots && polygon.Length > 0)
                 {
                     using Brush brush = new SolidBrush(InterpolateColour(info.Skin.BackgroundColour, info.View0.Colour, 0, 1));
-                    graphics.FillPolygon(brush, DrawnPolygon);
+                    graphics.FillPolygon(brush, polygon);
                 }
 
                 Color color = dots ? InterpolateColour(info.View0.Colour, info.Skin.BackgroundColour, 0, 1) : info.View0.Colour;
@@ -355,16 +386,16 @@ namespace SehensWerte.Controls.Sehens
                     using Brush brush = new SolidBrush(info.View0.Colour);
                     PaintTraceBase.PaintFilledCircles(graphics, brush, DotDrawPoints!.ToArray(), 4f);
                 }
-                else if (DrawnProjection1 != null && DrawnProjection2 != null)
+                else if (projection1 != null && projection2 != null)
                 {
                     using Pen pen = new Pen(color, width: 1);
-                    PaintProjection(DrawnProjection1, graphics, pen);
-                    PaintProjection(DrawnProjection2, graphics, pen);
+                    PaintProjection(projection1, graphics, pen);
+                    PaintProjection(projection2, graphics, pen);
                 }
-                else if (DrawnProjection1 != null)
+                else if (projection1 != null)
                 {
                     using Pen pen = LinePen(color, info);
-                    PaintProjection(DrawnProjection1, graphics, pen);
+                    PaintProjection(projection1, graphics, pen);
                 }
                 PaintPiP(info, graphics);
             }
@@ -570,17 +601,30 @@ namespace SehensWerte.Controls.Sehens
                 DrawnPolygon = ProjectPolygon();
             }
 
-            if (DrawnPolygon != null)
+            PointF[]? projection1 = DrawnProjection1;
+            PointF[]? projection2 = DrawnProjection2;
+            PointF[]? polygon = DrawnPolygon;
+            if (projection1 != null && projection2 != null)
             {
-                using Brush brush = new SolidBrush(InterpolateColour(info.Skin.BackgroundColour, info.View0.Colour, 0, 1));
-                graphics.FillPolygon(brush, DrawnPolygon);
+                float lineWidth = EffectiveLineWidth(info);
+                if (lineWidth > 1f)
+                {
+                    (projection1, projection2) = WidenEnvelope(projection1, projection2, lineWidth);
+                    polygon = ProjectPolygon(projection1, projection2);
+                }
             }
 
-            if (DrawnProjection1 != null && DrawnProjection2 != null)
+            if (polygon != null)
+            {
+                using Brush brush = new SolidBrush(InterpolateColour(info.Skin.BackgroundColour, info.View0.Colour, 0, 1));
+                graphics.FillPolygon(brush, polygon);
+            }
+
+            if (projection1 != null && projection2 != null)
             {
                 using Pen pen = new Pen(info.View0.Colour, width: 1);
-                PaintProjection(DrawnProjection1, graphics, pen);
-                PaintProjection(DrawnProjection2, graphics, pen);
+                PaintProjection(projection1, graphics, pen);
+                PaintProjection(projection2, graphics, pen);
             }
         }
 
