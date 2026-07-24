@@ -1,4 +1,5 @@
-﻿using SehensWerte.Maths;
+﻿using Microsoft.VisualStudio.TestTools.UnitTesting;
+using SehensWerte.Maths;
 using System.Drawing.Drawing2D;
 
 namespace SehensWerte.Controls.Sehens
@@ -24,7 +25,7 @@ namespace SehensWerte.Controls.Sehens
             return hotPoint;
         }
 
-        private float SampleToRatio(TraceGroupDisplay info, float sampleNumber)
+        internal float SampleToRatio(TraceGroupDisplay info, float sampleNumber)
         {
             if (info.YTTrace)
             {
@@ -34,7 +35,16 @@ namespace SehensWerte.Controls.Sehens
             {
                 float left = info.LeftSampleNumber + info.ViewOffsetOverride;
                 float right = info.RightSampleNumber + info.ViewOffsetOverride;
-                return (sampleNumber - left) / (right - left);
+                float within = (sampleNumber - left) / (right - left);
+                if (info.HMode == HorizontalMode.ValueAlign)
+                {
+                    // Map the sample's position within its own index range into this trace's value
+                    // sub-window, expressed as a fraction of the full pane (matches how samples are drawn).
+                    float paneWidth = info.ProjectionArea.Width;
+                    if (paneWidth <= 0) return within;
+                    return (info.ValueRect.Left - info.ProjectionArea.Left + within * info.ValueRect.Width) / paneWidth;
+                }
+                return within;
             }
         }
 
@@ -250,7 +260,7 @@ namespace SehensWerte.Controls.Sehens
         public virtual string GetHoverStatistics(TraceView trace, TraceView.MouseInfo info)
         {
             bool hasHorizontal = trace.Samples.InputSamplesPerSecond != 0.0
-                || (trace.Samples.HorizontalAxisValues is double[] h && h.Length != 0);
+                || trace.Samples.HasExplicitHorizontalAxis;
             string horizontal = hasHorizontal ? (" (" + trace.SampleNumberText(info) + ")") : "";
             return $"{info.SampleAtX.ToStringRound(5, 3)} {trace.ViewName}[{info.IndexBeforeTrim}]{horizontal}";
         }
@@ -258,20 +268,29 @@ namespace SehensWerte.Controls.Sehens
         ////////////////////////////////////////////
         // paint
 
+        // The gutter's tick POSITIONS must always follow the curve's mapping (log when IsLogX),
+        // even when the label VALUES are bare sample numbers (a trace with no sps/affine axis, or
+        // the gutter-hover peek that clears ShowHorizontalUnits) - only what is printed switches,
+        // never where the ticks sit. Gating log on ShowHorizontalUnits left a plain sample-number
+        // log-X trace with a linear gutter under a log curve.
+        internal static (double left, double right, bool log) HorizontalGutter(TraceGroupDisplay info)
+        {
+            double left = info.ShowHorizontalUnits ? info.LeftSampleNumberValue : info.LeftSampleNumber;
+            double right = info.ShowHorizontalUnits ? info.RightSampleNumberValue : info.RightSampleNumber;
+            return (left, right, info.View0.IsLogX && right > 0);
+        }
+
         public virtual void PaintHorizontalAxis(Graphics graphics, TraceGroupDisplay info)
         {
             if (info.LeftSampleNumber > info.RightSampleNumber) return;
-            if (info.View0.IsLogX && info.ShowHorizontalUnits && info.RightSampleNumberValue > 0)
+            var (left, right, log) = HorizontalGutter(info);
+            if (log)
             {
-                PaintGutterBottomPartitionLog(info, graphics, info.LeftSampleNumberValue, info.RightSampleNumberValue);
+                PaintGutterBottomPartitionLog(info, graphics, left, right);
             }
             else
             {
-                PaintGutterBottomPartition(
-                    info,
-                    graphics,
-                    left: (double)(info.ShowHorizontalUnits ? info.LeftSampleNumberValue : info.LeftSampleNumber),
-                    right: (double)(info.ShowHorizontalUnits ? info.RightSampleNumberValue : info.RightSampleNumber));
+                PaintGutterBottomPartition(info, graphics, left, right);
             }
         }
 
@@ -748,6 +767,17 @@ namespace SehensWerte.Controls.Sehens
             }
         }
 
+        // Left edge (absolute X) reserved for the horizontal axis title, so tick labels don't draw
+        // over it. Positive infinity when no title is set (no reservation). Mirrors the title
+        // position in PaintAxisTitleHorizontal (GroupArea.Right - titleWidth - 10).
+        internal float BottomTitleReservedRight(TraceGroupDisplay info, Graphics graphics)
+        {
+            string? title = info.View0?.Samples.AxisTitleBottom;
+            if (string.IsNullOrEmpty(title)) return float.PositiveInfinity;
+            using Font titleFont = info.Skin.AxisTitleFont.Font;
+            return info.GroupArea.Right - graphics.MeasureString(title, titleFont).Width - 14f;
+        }
+
         protected void PaintGutterBottomPartitionLog(TraceGroupDisplay info, Graphics graphics, double left, double right)
         {
             using Font font = info.Skin.AxisTextFont.Font;
@@ -757,6 +787,7 @@ namespace SehensWerte.Controls.Sehens
             double effectiveLeft = LogHEffectiveLeft(left, right, length);
             if (effectiveLeft <= 0 || right <= effectiveLeft) return;
             float width = info.ProjectionArea.Width;
+            float reservedRight = BottomTitleReservedRight(info, graphics);
             graphics.SetClip(new Rectangle(info.ProjectionArea.Left, info.ProjectionArea.Top, info.ProjectionArea.Width, info.BottomGutter.Bottom - info.ProjectionArea.Top));
             float lastLabelRight = float.NegativeInfinity;
             foreach (double value in GetLogPartitions(effectiveLeft, right))
@@ -768,7 +799,7 @@ namespace SehensWerte.Controls.Sehens
                 string text = ToHorizontalUnit(info, value);
                 SizeF sz = graphics.MeasureString(text, font);
                 float textLeft = info.ProjectionArea.Left + x - sz.Width / 2f;
-                if (textLeft > lastLabelRight)
+                if (textLeft > lastLabelRight && textLeft + sz.Width <= reservedRight) // don't overwrite the axis title
                 {
                     graphics.DrawString(text, font, brush, textLeft, info.BottomGutter.Top + 1);
                     lastLabelRight = textLeft + sz.Width;
@@ -801,6 +832,7 @@ namespace SehensWerte.Controls.Sehens
             int skip = (int)Math.Ceiling(maxWidth / typicalWidth);
             skip = ((skip == 0) ? 1 : skip);
             int textIndex = (int)(index % skip);
+            float reservedRight = BottomTitleReservedRight(info, graphics);
             graphics.SetClip(new Rectangle(info.ProjectionArea.Left, info.ProjectionArea.Top, info.ProjectionArea.Width, info.BottomGutter.Bottom - info.ProjectionArea.Top));
             foreach (double value in partitions)
             {
@@ -811,8 +843,9 @@ namespace SehensWerte.Controls.Sehens
                     pen.DashStyle = DashStyle.Dash;
                     graphics.DrawLine(pen, x + (float)info.ProjectionArea.Left, info.ProjectionArea.Bottom, x + (float)info.ProjectionArea.Left, info.ProjectionArea.Top);
                     string text = ToHorizontalUnit(info, value);
-                    x -= graphics.MeasureString(text, font).Width / 2f;
-                    if (textIndex == 0)
+                    float textWidth = graphics.MeasureString(text, font).Width;
+                    x -= textWidth / 2f;
+                    if (textIndex == 0 && info.ProjectionArea.Left + x + textWidth <= reservedRight) // don't overwrite the axis title
                     {
                         graphics.DrawString(text, font, brush, info.ProjectionArea.Left + x, info.BottomGutter.Top + 1);
                     }
@@ -856,6 +889,128 @@ namespace SehensWerte.Controls.Sehens
                 m_PictureInPicture!.Dispose();
                 m_PictureInPicture = null;
             }
+        }
+    }
+
+    // Tests for the forward sample->pane-fraction hub (features/handles) and the bottom axis-title
+    // label reservation. The inverse hub (Measure) is tested alongside since the two must agree.
+    [TestClass]
+    public class PaintTraceBaseMappingTests
+    {
+        [TestMethod]
+        public void SampleToRatioValueAlignMapsIntoSubWindow()
+        {
+            var scope = new SehensControl();
+            SehensTestHarness.AffineTrace(scope, "A", count: 100, offset: 0, multiplier: 1, unit: "u");  // 0..100
+            TraceView b = SehensTestHarness.AffineTrace(scope, "B", count: 50, offset: 50, multiplier: 1, unit: "u"); // right half
+            scope.GroupViews(new[] { "A", "B" });
+            SehensTestHarness.Layout(scope);
+
+            TraceGroupDisplay infoB = scope.PaintBox.TraceToGroupDisplayInfo(b);
+            var painter = (PaintTraceBase)b.Painter;
+            // B's drawn samples 0..50 must land in the right half of the pane, as fractions of the FULL pane
+            Assert.AreEqual(0.5, painter.SampleToRatio(infoB, 0), 0.01);
+            Assert.AreEqual(0.75, painter.SampleToRatio(infoB, 25), 0.01);
+            Assert.AreEqual(1.0, painter.SampleToRatio(infoB, 50), 0.01);
+        }
+
+        [TestMethod]
+        public void SampleToRatioStretchUnchanged()
+        {
+            var scope = new SehensControl();
+            scope["plain"].Update(SehensTestHarness.Ramp(100));
+            SehensTestHarness.Layout(scope);
+            TraceView view = SehensTestHarness.View(scope, "plain");
+            TraceGroupDisplay info = scope.PaintBox.TraceToGroupDisplayInfo(view);
+            var painter = (PaintTraceBase)view.Painter;
+            Assert.AreEqual(0.0, painter.SampleToRatio(info, 0), 1e-6);
+            Assert.AreEqual(0.5, painter.SampleToRatio(info, 50), 1e-6);
+            Assert.AreEqual(1.0, painter.SampleToRatio(info, 100), 1e-6);
+        }
+
+        [TestMethod]
+        public void MeasureInvertsTheValueAlignedMapping()
+        {
+            var scope = new SehensControl();
+            SehensTestHarness.AffineTrace(scope, "A", count: 100, offset: 0, multiplier: 1, unit: "u");
+            TraceView b = SehensTestHarness.AffineTrace(scope, "B", count: 50, offset: 50, multiplier: 1, unit: "u");
+            scope.GroupViews(new[] { "A", "B" });
+            SehensTestHarness.Layout(scope);
+
+            TraceGroupDisplay infoB = scope.PaintBox.TraceToGroupDisplayInfo(b);
+            // click in the middle of B's sub-window (3/4 of the pane) -> the middle of B's samples
+            int x = infoB.ValueRect.Left + infoB.ValueRect.Width / 2;
+            int y = infoB.ProjectionArea.Top + infoB.ProjectionArea.Height / 2;
+            TraceView.MouseInfo click = b.Measure(new MouseEventArgs(MouseButtons.Left, 0, x, y, 0));
+            Assert.AreEqual(0.5, click.XRatio, 0.02);
+            Assert.IsTrue(Math.Abs(click.IndexBeforeTrim - 25) <= 1, $"index {click.IndexBeforeTrim}, expected ~25");
+            Assert.IsTrue(Math.Abs(click.SampleAtX - 25.0) <= 1.0, $"sample {click.SampleAtX}, expected ~25");
+            // forward (SampleToRatio) and inverse (Measure) agree through the same sub-window
+            float forward = ((PaintTraceBase)b.Painter).SampleToRatio(infoB, (float)click.IndexBeforeTrim);
+            Assert.AreEqual((x - infoB.ProjectionArea.Left) / (double)infoB.ProjectionArea.Width, forward, 0.02);
+        }
+
+        [TestMethod]
+        public void HorizontalGutterFollowsCurveLogMapping()
+        {
+            // Field report: a plain sample-number trace switched to log-X kept a LINEAR gutter
+            // (sample numbers did not move) while the curve drew log; with sps set they moved.
+            // The gutter's positions must follow IsLogX regardless of label kind.
+            var scope = new SehensControl();
+            scope["plain"].Update(SehensTestHarness.Ramp(100));
+            SehensTestHarness.Layout(scope);
+            TraceView plain = SehensTestHarness.View(scope, "plain");
+
+            var linear = PaintTraceBase.HorizontalGutter(scope.PaintBox.TraceToGroupDisplayInfo(plain));
+            Assert.IsFalse(linear.log);
+
+            plain.LogHorizontal = TraceView.LogHorizontalMode.Log;
+            var logged = PaintTraceBase.HorizontalGutter(scope.PaintBox.TraceToGroupDisplayInfo(plain));
+            Assert.IsTrue(logged.log, "no-sps log-X trace must get a LOG gutter (sample numbers move)");
+            Assert.AreEqual(0.0, logged.left, 1e-9);    // labels stay bare sample numbers
+            Assert.AreEqual(100.0, logged.right, 1e-9);
+
+            // with sps the labels switch to seconds but the log decision is the same
+            scope["timed"].Update(SehensTestHarness.Ramp(100));
+            scope["timed"].InputSamplesPerSecond = 10.0;
+            TraceView timed = SehensTestHarness.View(scope, "timed");
+            timed.LogHorizontal = TraceView.LogHorizontalMode.Log;
+            SehensTestHarness.Layout(scope);
+            TraceGroupDisplay infoTimed = scope.PaintBox.TraceToGroupDisplayInfo(timed);
+            var seconds = PaintTraceBase.HorizontalGutter(infoTimed);
+            Assert.IsTrue(seconds.log);
+            Assert.AreEqual(10.0, seconds.right, 1e-9); // 100 samples at 10 sps -> 10 s
+
+            // the gutter-hover peek (ShowHorizontalUnits false) switches LABELS to raw sample
+            // numbers but must keep the log POSITIONS, or ticks slide out from under the curve
+            infoTimed.ShowHorizontalUnits = false;
+            var peek = PaintTraceBase.HorizontalGutter(infoTimed);
+            Assert.IsTrue(peek.log, "hover peek must not flip the gutter to linear");
+            Assert.AreEqual(100.0, peek.right, 1e-9);   // raw sample numbers
+        }
+
+        [TestMethod]
+        public void BottomTitleReservesGutterSpace()
+        {
+            var scope = new SehensControl();
+            scope["t"].Update(SehensTestHarness.Ramp(100));
+            SehensTestHarness.Layout(scope);
+            TraceView view = SehensTestHarness.View(scope, "t");
+            var painter = (PaintTraceBase)view.Painter;
+            using var bmp = new Bitmap(8, 8);
+            using var graphics = Graphics.FromImage(bmp);
+
+            TraceGroupDisplay info = scope.PaintBox.TraceToGroupDisplayInfo(view);
+            Assert.IsTrue(float.IsPositiveInfinity(painter.BottomTitleReservedRight(info, graphics)),
+                "no title -> no reservation");
+
+            view.Samples.AxisTitleBottom = "rpm";
+            float shortTitle = painter.BottomTitleReservedRight(info, graphics);
+            Assert.IsTrue(shortTitle < info.GroupArea.Right, "title must reserve space left of the group edge");
+
+            view.Samples.AxisTitleBottom = "a much longer axis title (rpm)";
+            float longTitle = painter.BottomTitleReservedRight(info, graphics);
+            Assert.IsTrue(longTitle < shortTitle, "longer title -> more reserved space");
         }
     }
 }

@@ -296,6 +296,59 @@ namespace SehensWerte.Utils
             }
         }
 
+        public struct TestRunResult { public int Passed; public int Failed; public int Matched; }
+
+        public static TestRunResult RunTests(string? classFilter = null, string? methodFilter = null,
+            Action<string>? report = null, Action<string>? detail = null)
+        {
+            var result = new TestRunResult();
+            foreach (var asm in AppDomain.CurrentDomain.GetAssemblies())
+            {
+                string name = asm.GetName().Name ?? "";
+                if (name.StartsWith("System.", StringComparison.OrdinalIgnoreCase)
+                    || name.StartsWith("Microsoft.", StringComparison.OrdinalIgnoreCase)
+                    || name.StartsWith("Windows.", StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
+                Type[] types;
+                try { types = asm.GetTypes(); } catch { continue; }
+                foreach (var t in types.Where(t => t.CustomAttributes.Any(a => a.AttributeType.Name == "TestClassAttribute")))
+                {
+                    if (classFilter != null && !t.Name.Contains(classFilter, StringComparison.OrdinalIgnoreCase)) continue;
+                    object? instance = null;
+                    foreach (var method in t.GetMethods().Where(m => m.GetCustomAttributes().Any(a => a.GetType().Name == "TestMethodAttribute")))
+                    {
+                        if (methodFilter != null && !method.Name.Contains(methodFilter, StringComparison.OrdinalIgnoreCase)) continue;
+                        var dataRows = method.GetCustomAttributes().Where(a => a.GetType().Name == "DataRowAttribute").ToList();
+                        IEnumerable<object[]?> argSets = dataRows.Count > 0
+                            ? dataRows.Select(r => (object[]?)r.GetType().GetProperty("Data")?.GetValue(r))
+                            : new object[]?[] { null };
+                        foreach (var args in argSets)
+                        {
+                            result.Matched++;
+                            string label = $"{t.Name}.{method.Name}" + (args != null ? $"({string.Join(", ", args)})" : "");
+                            try
+                            {
+                                instance ??= Activator.CreateInstance(t);
+                                method.Invoke(instance, args);
+                                report?.Invoke($"PASS {label}");
+                                result.Passed++;
+                            }
+                            catch (Exception ex)
+                            {
+                                Exception inner = (ex as TargetInvocationException)?.InnerException ?? ex;
+                                report?.Invoke($"FAIL {label}: {inner.Message}");
+                                detail?.Invoke(inner.ToString());
+                                result.Failed++;
+                            }
+                        }
+                    }
+                }
+            }
+            return result;
+        }
+
         public static int GetPhysicalCoreCount()
         {
             // not number of logical cores

@@ -339,8 +339,17 @@ namespace SehensWerte.Controls.Sehens
         {
             double[] samples = SnapshotProjection(info.View0);
 
+            // Value-aligned traces draw into a narrower pixel sub-window (ValueRect); == ProjectionArea
+            // for the legacy stretch/incompatible path. The projection cache is keyed on data + log-H
+            // values, NOT on the rect, so a change in the sub-window (sibling added/hidden/rescaled,
+            // group range shift) must force a reprojection or the trace would draw at the stale width.
+            Rectangle valueRect = info.ValueRect;
             if (info.View0.IsLogX
                 && (PaintLeftHValue != info.LeftSampleNumberValue || PaintRightHValue != info.RightSampleNumberValue))
+            {
+                SnapshotReprojectionRequired = true;
+            }
+            if (PaintProjectionArea != valueRect)
             {
                 SnapshotReprojectionRequired = true;
             }
@@ -350,7 +359,7 @@ namespace SehensWerte.Controls.Sehens
                 LastTraceLowestValue = double.NegativeInfinity;
                 SnapshotReprojectionRequired = false;
                 DrawnPolygon = null;
-                Project2dCurves(samples, info.View0, info.ProjectionArea, info.View0.HighestValue, info.View0.LowestValue, info.LeftSampleNumberValue, info.RightSampleNumberValue);
+                Project2dCurves(samples, info.View0, valueRect, info.View0.HighestValue, info.View0.LowestValue, info.LeftSampleNumberValue, info.RightSampleNumberValue);
             }
 
             if (info.View0.PaintMode == TraceView.PaintModes.Spectral)
@@ -1173,6 +1182,154 @@ namespace SehensWerte.Controls.Sehens
                 $"peak at {inside.peakHz:0.0} Hz (inside the {PaintTraceBase.LogHorizontalMaxDecades}-decade window) should be drawn");
             Assert.IsFalse(below.drawnHasPeak,
                 $"peak at {below.peakHz:0.00} Hz (below the {effLeft:0.##} Hz left edge) should be off-screen");
+        }
+    }
+
+    // Projection-cache and stretch-equivalence tests for the full paint path (real Graphics on a
+    // bitmap; assertions on the public DrawnProjection arrays, same introspection surface as
+    // LogHorizontalLeftEdgeTests).
+    [TestClass]
+    public class Paint2dProjectionTests
+    {
+        [TestMethod]
+        public void StretchProjectionMatchesLegacyIndexMath()
+        {
+            // A lone plain trace (Stretch) must project exactly as the old index math did - one column per pixel,
+            // X == ProjectionArea.Left + column, column i covering samples [i*len/W, (i+1)*len/W).
+            var scope = new SehensControl();
+            const int count = 20000; // > 10x pane width -> the min/max decimation path
+            scope["ramp"].Update(SehensTestHarness.Ramp(count));
+            SehensTestHarness.Layout(scope);
+            TraceView view = SehensTestHarness.View(scope, "ramp");
+            view.PaintMode = TraceView.PaintModes.PolygonDigital;
+            view.SetHighLow(count, 0);
+            SehensTestHarness.Layout(scope);
+
+            TraceGroupDisplay info = scope.PaintBox.TraceToGroupDisplayInfo(view);
+            Assert.AreEqual(HorizontalMode.Stretch, info.HMode);
+            Assert.AreEqual(info.ProjectionArea, info.ValueRect);
+
+            using var bmp = new Bitmap(SehensTestHarness.Width, SehensTestHarness.Height);
+            using var graphics = Graphics.FromImage(bmp);
+            view.Painter.PaintProjection(graphics, info);
+
+            var painter = (Paint2dTrace)view.Painter;
+            PointF[] minEnv = painter.DrawnProjection1 ?? throw new AssertFailedException("no min envelope");
+            PointF[] maxEnv = painter.DrawnProjection2 ?? throw new AssertFailedException("no max envelope");
+            int width = info.ProjectionArea.Width;
+            Assert.AreEqual(width, minEnv.Length, "one column per pixel");
+            Assert.AreEqual(width, maxEnv.Length);
+
+            double binSize = (double)count / width;
+            double height = info.ProjectionArea.Height;
+            double DecodeValue(float y) => count * (1.0 - (y - info.ProjectionArea.Top) / height);
+            for (int loop = 0; loop < width; loop++)
+            {
+                Assert.AreEqual(info.ProjectionArea.Left + loop, minEnv[loop].X, 0.01, "legacy X grid");
+                // ramp: column min ~= first index in the bucket, column max ~= last
+                Assert.AreEqual(loop * binSize, DecodeValue(minEnv[loop].Y), binSize * 2 + 2,
+                    $"column {loop} min envelope value");
+                Assert.AreEqual(Math.Min((loop + 1) * binSize, count - 1), DecodeValue(maxEnv[loop].Y), binSize * 2 + 2,
+                    $"column {loop} max envelope value");
+            }
+        }
+
+        [TestMethod]
+        public void ValueRectChangeForcesReprojection()
+        {
+            // The projection cache is keyed on data + log-H values, not the target rect; the rect
+            // comparison in PaintProjectionY is what forces a reproject when the sub-window moves
+            // (sibling added/hidden/rescaled). Remove that guard and this test fails with a
+            // stale half-width projection.
+            var scope = new SehensControl();
+            SehensTestHarness.AffineTrace(scope, "A", count: 8000, offset: 0, multiplier: 1, unit: "u");    // 0..8000
+            TraceView b = SehensTestHarness.AffineTrace(scope, "B", count: 4000, offset: 4000, multiplier: 1, unit: "u"); // right half
+            scope.GroupViews(new[] { "A", "B" });
+            SehensTestHarness.Layout(scope);
+            b.PaintMode = TraceView.PaintModes.PolygonDigital;
+            b.SetHighLow(4000, 0);
+            SehensTestHarness.Layout(scope);
+
+            TraceGroupDisplay infoHalf = scope.PaintBox.TraceToGroupDisplayInfo(b);
+            Assert.AreEqual(HorizontalMode.ValueAlign, infoHalf.HMode);
+            Assert.IsTrue(infoHalf.ValueRect.Width < infoHalf.ProjectionArea.Width * 0.6, "B should occupy ~half the pane");
+
+            using var bmp = new Bitmap(SehensTestHarness.Width, SehensTestHarness.Height);
+            using var graphics = Graphics.FromImage(bmp);
+            var painter = (Paint2dTrace)b.Painter;
+
+            b.Painter.PaintProjection(graphics, infoHalf);
+            PointF[] half = painter.DrawnProjection1 ?? throw new AssertFailedException("no projection");
+            Assert.AreEqual(infoHalf.ValueRect.Width, half.Length, "projection fills the sub-window");
+            Assert.AreEqual(infoHalf.ValueRect.Left, half[0].X, 0.01);
+
+            // unchanged rect -> the cache holds (no rebuild)
+            b.Painter.PaintProjection(graphics, infoHalf);
+            Assert.AreSame(half, painter.DrawnProjection1, "same rect must not reproject");
+
+            // widen the sub-window (what a hidden/removed sibling does) -> must reproject at once
+            var infoFull = (TraceGroupDisplay)infoHalf.Clone();
+            infoFull.ValueRect = infoFull.ProjectionArea;
+            b.Painter.PaintProjection(graphics, infoFull);
+            PointF[] full = painter.DrawnProjection1 ?? throw new AssertFailedException("no projection");
+            Assert.AreEqual(infoFull.ProjectionArea.Width, full.Length, "projection must re-span the new rect");
+            Assert.AreEqual(infoFull.ProjectionArea.Left, full[0].X, 0.01);
+        }
+
+        [TestMethod]
+        public void LogAffineSpikeLandsAtTheLogAxisPixel()
+        {
+            // A lone affine trace with LogHorizontal=Log, through the FULL pipeline (group
+            // machinery, ValueRect, PaintProjection): a spike at a known axis value must land at
+            // the closed-form log pixel and the axis inverse must read the same value back.
+            var scope = new SehensControl();
+            const int count = 8000;
+            const double mult = 1.5; // domain 0..12000 "Hz"
+            double[] samples = new double[count];
+            const int spikeIndex = 800; // 1200 Hz
+            samples[spikeIndex] = 100.0;
+            scope["logaffine"].Update(samples);
+            scope["logaffine"].SetHorizontalAffine(0.0, mult, "Hz");
+            TraceView view = SehensTestHarness.View(scope, "logaffine");
+            view.LogHorizontal = TraceView.LogHorizontalMode.Log;
+            view.PaintMode = TraceView.PaintModes.PolygonDigital;
+            view.SetHighLow(100.0, 0.0);
+            SehensTestHarness.Layout(scope);
+
+            TraceGroupDisplay info = scope.PaintBox.TraceToGroupDisplayInfo(view);
+            Assert.AreEqual(0.0, info.LeftSampleNumberValue, 1e-9);
+            Assert.AreEqual(count * mult, info.RightSampleNumberValue, 1e-9);
+
+            using var bmp = new Bitmap(SehensTestHarness.Width, SehensTestHarness.Height);
+            using var graphics = Graphics.FromImage(bmp);
+            view.Painter.PaintProjection(graphics, info);
+
+            var painter = (Paint2dTrace)view.Painter;
+            PointF[] maxEnv = painter.DrawnProjection2 ?? throw new AssertFailedException("no max envelope");
+            int width = info.ProjectionArea.Width;
+            Assert.AreEqual(width, maxEnv.Length);
+            int peakPixel = -1;
+            float minY = float.PositiveInfinity;
+            for (int loop = 0; loop < maxEnv.Length; loop++)
+            {
+                if (maxEnv[loop].Y < minY) { minY = maxEnv[loop].Y; peakPixel = loop; }
+            }
+            double drawnValue = 100.0 * (1.0 - (minY - info.ProjectionArea.Top) / info.ProjectionArea.Height);
+            Assert.IsTrue(drawnValue >= 50.0, $"spike must be drawn (drawn value {drawnValue:0.0})");
+
+            // closed-form expected pixel, independent of the maps under test (the painter models
+            // the sample value as left + i/(len-1)*range)
+            double right = count * mult;
+            double spikeHz = (double)spikeIndex / (count - 1) * right;
+            double effLeft = PaintTraceBase.LogHEffectiveLeft(0.0, right, count);
+            int expectedPixel = (int)(PaintTraceBase.LogHValueToFraction(spikeHz, effLeft, right) * width);
+            Assert.IsTrue(Math.Abs(peakPixel - expectedPixel) <= 2,
+                $"spike at {spikeHz:0.0} Hz drawn at pixel {peakPixel}, expected ~{expectedPixel}");
+
+            // the value the gutter/hover assigns to that pixel matches the spike's value
+            double axisHz = PaintTraceBase.LogHFractionToValue((peakPixel + 0.5) / width, effLeft, right);
+            Assert.IsTrue(axisHz / spikeHz <= 1.1 && spikeHz / axisHz <= 1.1,
+                $"axis shows {axisHz:0.0} Hz under a {spikeHz:0.0} Hz spike");
         }
     }
 }

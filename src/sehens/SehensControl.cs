@@ -1580,7 +1580,7 @@ namespace SehensWerte.Controls
         {
             m_HoldZoomPan = true;
             m_ZoomValue = Math.Max(0.0, Math.Min(1.0, zoom));
-            m_PanValue = Math.Max(0.0, Math.Min(1.0, pan));
+            m_PanValue = Math.Max(0.0, Math.Min(1.0 - m_ZoomValue, pan));
             var result = CalculateZoomPanScrollbar();
             if (result.zoomBarValue != m_ZoomBarValue || result.panBarValue != m_PanBarValue)
             {

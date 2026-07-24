@@ -543,14 +543,13 @@ namespace SehensWerte.Controls.Sehens
                     else
                     {
                         double[]? item = drawnSamples ? traceView.DrawnSamples : traceView.CalculatedBeforeZoom;
-                        double[]? hax = traceView.Samples.HorizontalAxisValues;
-                        if (item != null && hax != null && hax.Length != 0)
+                        if (item != null && traceView.Samples.HasExplicitHorizontalAxis)
                         {
                             int start = drawnSamples ? traceView.DrawnStartPosition : 0;
                             double[] horizontal = new double[item.Length];
                             for (int i = 0; i < item.Length; i++)
                             {
-                                horizontal[i] = hax[Math.Clamp(start + i, 0, hax.Length - 1)];
+                                horizontal[i] = traceView.Samples.HorizontalValueAt(start + i);
                             }
                             string unit = traceView.Samples.HorizontalAxisUnit;
                             add(horizontal, traceView.ViewName + (string.IsNullOrEmpty(unit) ? ".X" : "." + unit));

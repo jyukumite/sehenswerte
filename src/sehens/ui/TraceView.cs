@@ -1,4 +1,5 @@
-﻿using SehensWerte.Files;
+﻿using Microsoft.VisualStudio.TestTools.UnitTesting;
+using SehensWerte.Files;
 using SehensWerte.Filters;
 using SehensWerte.Maths;
 using SehensWerte.Utils;
@@ -336,7 +337,7 @@ namespace SehensWerte.Controls.Sehens
 
         private bool m_HoldPanZoom = false;
         [XmlSave]
-        [AutoEditor.DisplayOrder(5)]
+        [AutoEditor.DisplayOrder(6.8)] // horizontal-axis band
         public bool HoldPanZoom
         {
             get => m_HoldPanZoom;
@@ -366,7 +367,7 @@ namespace SehensWerte.Controls.Sehens
 
         private bool m_AutoReduceRange;
         [XmlSave]
-        [AutoEditor.DisplayOrder(5)]
+        [AutoEditor.DisplayOrder(7.2)] // data-range band
         public bool AutoReduceRange
         {
             get => m_AutoReduceRange;
@@ -426,7 +427,7 @@ namespace SehensWerte.Controls.Sehens
 
         private bool m_PadLeftWithFirstValue;
         [XmlSave]
-        [AutoEditor.DisplayOrder(5)]
+        [AutoEditor.DisplayOrder(6.7)] // horizontal-axis band
         public bool PadLeftWithFirstValue
         {
             get => m_PadLeftWithFirstValue;
@@ -440,7 +441,7 @@ namespace SehensWerte.Controls.Sehens
 
         private bool m_PadRightWithLastValue;
         [XmlSave]
-        [AutoEditor.DisplayOrder(5)]
+        [AutoEditor.DisplayOrder(6.75)] // horizontal-axis band
         public bool PadRightWithLastValue
         {
             get
@@ -514,6 +515,39 @@ namespace SehensWerte.Controls.Sehens
                 Scope.ViewNeedsRepaint(this);
                 GuiUpdateControls?.Invoke(this);
             }
+        }
+
+        // Horizontal Axis editor band. The axis terms live on TraceData, which is
+        // [AutoEditor.Hidden]; these proxies expose them in the double-click trace editor.
+        // There is no enable toggle: the identity map (0, 1, "") IS the sample-number axis, so the
+        // values take effect as typed. Composition: sps wins the scale (multiplier ignored while
+        // sps > 0), the offset composes with either scale, the unit overrides the "s" default.
+        // Persistence stays on the trace (SehensSave.Trace), so no [XmlSave] here.
+        [AutoEditor.DisplayOrder(6, "Horizontal Axis")]
+        [AutoEditor.DisplayName("Offset")]
+        [AutoEditor.Tooltip("Shifts the axis by this many samples\nvalue = (sample + offset) / sps, or (sample + offset) * multiplier.")]
+        public double HorizontalAxisOffset
+        {
+            get => m_Samples.HorizontalOffset;
+            set => m_Samples.SetHorizontalAffine(value, m_Samples.HorizontalMultiplier, m_Samples.HorizontalAxisUnit);
+        }
+
+        [AutoEditor.DisplayOrder(6.1)]
+        [AutoEditor.DisplayName("Multiplier")]
+        [AutoEditor.Tooltip("Axis value per sample (value = offset + multiplier * sample).\nIgnored while Samples Per Second > 0 - a rate already sets the scale.")]
+        public double HorizontalAxisMultiplier
+        {
+            get => m_Samples.HorizontalMultiplier;
+            set => m_Samples.SetHorizontalAffine(m_Samples.HorizontalOffset, value, m_Samples.HorizontalAxisUnit);
+        }
+
+        [AutoEditor.DisplayOrder(6.2)]
+        [AutoEditor.DisplayName("Unit")]
+        [AutoEditor.Tooltip("Axis unit label. Overrides the \"s\" default when Samples Per Second is set.")]
+        public string HorizontalAxisUnit
+        {
+            get => m_Samples.HorizontalAxisUnit;
+            set => m_Samples.SetHorizontalAffine(m_Samples.HorizontalOffset, m_Samples.HorizontalMultiplier, value);
         }
 
         private bool m_ShowPictureInPicture;
@@ -675,16 +709,14 @@ namespace SehensWerte.Controls.Sehens
             {
                 if (m_ViewOverrideEnabled == value) return;
                 m_ViewOverrideEnabled = value;
-                BeforeZoomCalculateRequired();
-                Scope.ViewNeedsRepaint(this);
-                GuiUpdateControls?.Invoke(this);
+                ViewOverrideChanged();
             }
         }
 
         private int m_ViewLengthOverride;
         [XmlSave]
         [AutoEditor.DisplayName("View Length")]
-        [AutoEditor.DisplayOrder(5, "View and Navigation")]
+        [AutoEditor.DisplayOrder(6.6)] // horizontal-axis band: crops the sample window
         public int ViewLengthOverride
         {
             get => m_ViewLengthOverride;
@@ -693,16 +725,14 @@ namespace SehensWerte.Controls.Sehens
                 if (m_ViewLengthOverride == value) return;
                 m_ViewLengthOverride = (value >= 0) ? value : 0;
                 m_ViewOverrideEnabled = m_ViewLengthOverride != 0 || m_ViewOffsetOverride != 0;
-                BeforeZoomCalculateRequired();
-                Scope.ViewNeedsRepaint(this);
-                GuiUpdateControls?.Invoke(this);
+                ViewOverrideChanged();
             }
         }
 
         private int m_ViewOffsetOverride;
         [XmlSave]
         [AutoEditor.DisplayName("View Offset")]
-        [AutoEditor.DisplayOrder(5)]
+        [AutoEditor.DisplayOrder(6.65)] // horizontal-axis band: shifts the sample window
         public int ViewOffsetOverride
         {
             get => m_ViewOffsetOverride;
@@ -711,10 +741,19 @@ namespace SehensWerte.Controls.Sehens
                 if (m_ViewOffsetOverride == value) return;
                 m_ViewOffsetOverride = value;
                 m_ViewOverrideEnabled = m_ViewLengthOverride != 0 || m_ViewOffsetOverride != 0;
-                BeforeZoomCalculateRequired();
-                Scope.ViewNeedsRepaint(this);
-                GuiUpdateControls?.Invoke(this);
+                ViewOverrideChanged();
             }
+        }
+
+        // A view length/offset change moves the horizontal extents, so the whole group must
+        // reproject (the projection cache holds the OLD extents; without this the axis and curves
+        // only caught up on the next zoom nudge).
+        private void ViewOverrideChanged()
+        {
+            BeforeZoomCalculateRequired();
+            Scope.GroupedTraces(this).ForEach(x => x.RecalculateProjectionRequired());
+            Scope.ViewNeedsRepaint(this);
+            GuiUpdateControls?.Invoke(this);
         }
 
         bool m_OverrideSamplesUnixTime = false;
@@ -1216,7 +1255,8 @@ namespace SehensWerte.Controls.Sehens
             set { Samples.InputLeftmostUnixTime = value; }
         }
 
-        [AutoEditor.DisplayOrder(1.1)]
+        [AutoEditor.DisplayOrder(6.4)] // horizontal-axis band, next to the affine settings
+        [AutoEditor.Tooltip("Seconds axis when > 0 (offset still applies; multiplier is ignored - a rate already sets the scale).\n0 = sample-number or affine axis. Not editable on YT traces.")]
         public double SamplesPerSecond
         {
             get => Samples.InputSamplesPerSecond;
@@ -1248,7 +1288,8 @@ namespace SehensWerte.Controls.Sehens
         }
 
         [AutoEditor.DisplayName("Display Sample Offset")]
-        [AutoEditor.DisplayOrder(5)]
+        [AutoEditor.DisplayOrder(6.5)] // horizontal-axis band: shifts sample numbering / the seconds axis
+        [AutoEditor.Tooltip("Added to the displayed sample number (and to the seconds axis when Samples Per Second is set)")]
         public int SamplesNumberDisplayOffset
         {
             get => Samples.InputSampleNumberDisplayOffset;
@@ -1538,6 +1579,13 @@ namespace SehensWerte.Controls.Sehens
             };
         }
 
+        // How this trace defines its horizontal axis, for grouped-trace alignment (GroupHorizontal).
+        internal HorizontalKind HorizontalKind =>
+            IsFftTrace ? HorizontalKind.Fft
+            : m_Samples.HasExplicitHorizontalAxis ? HorizontalKind.Affine
+            : m_Samples.InputSamplesPerSecond != 0.0 ? HorizontalKind.Time
+            : HorizontalKind.None;
+
         internal (int leftSampleNumber, int rightSampleNumber, double leftSampleNumberValue, double rightSampleNumberValue, double leftUnixTime, double rightUnixTime, string sampleValueUnit, int viewLengthOverride, int viewOffsetOverride) DrawnExtents()
         {
             int leftSampleNumber;
@@ -1595,18 +1643,17 @@ namespace SehensWerte.Controls.Sehens
                             rightSampleNumberValue = rightSampleNumber * ratio;
                             sampleValueUnit = ((m_Samples.InputSamplesPerSecond != 0.0) ? "Hz" : "");
                         }
-                        else if (m_Samples.InputSamplesPerSecond != 0.0)
+                        else if (m_Samples.InputSamplesPerSecond != 0.0 || m_Samples.HasExplicitHorizontalAxis)
                         {
-                            leftSampleNumberValue = (leftSampleNumber + num) / m_Samples.InputSamplesPerSecond;
-                            rightSampleNumberValue = (rightSampleNumber + num) / m_Samples.InputSamplesPerSecond;
-                            sampleValueUnit = "s";
-                        }
-                        else if (m_Samples.HorizontalAxisValues is double[] hax && hax.Length != 0)
-                        {
-                            int lastIndex = hax.Length - 1;
-                            leftSampleNumberValue = hax[Math.Clamp(leftSampleNumber, 0, lastIndex)];
-                            rightSampleNumberValue = hax[Math.Clamp(rightSampleNumber, 0, lastIndex)];
-                            sampleValueUnit = m_Samples.HorizontalAxisUnit;
+                            // Canonical map (TraceData.HorizontalValueAt): seconds when sps is set
+                            // (offset composes, multiplier deferred to the rate), else the affine
+                            // map. One code path so the extents can never disagree with
+                            // FullHorizontalAffine (a units mismatch put the ValueRect off-pane).
+                            // rightSampleNumber is one-past-last; num applies the display/view
+                            // offsets to both scales.
+                            leftSampleNumberValue = m_Samples.HorizontalValueAt(leftSampleNumber + num);
+                            rightSampleNumberValue = m_Samples.HorizontalValueAt(rightSampleNumber + num);
+                            sampleValueUnit = m_Samples.HorizontalUnitEffective;
                         }
                         else
                         {
@@ -1947,7 +1994,9 @@ namespace SehensWerte.Controls.Sehens
             {
                 TraceGroupDisplay traceDivision = Scope.PaintBox.TraceToGroupDisplayInfo(this);
 
-                result.XRatio = (x - traceDivision.ProjectionArea.Left) / traceDivision.ProjectionArea.Width;
+                // X maps against this trace's value sub-window (== ProjectionArea unless value-aligned),
+                // so hover/click on a ragged grouped trace resolves to the correct sample. Y stays full-height.
+                result.XRatio = (x - traceDivision.ValueRect.Left) / traceDivision.ValueRect.Width;
                 result.YRatio = (y - traceDivision.ProjectionArea.Top) / traceDivision.ProjectionArea.Height;
                 result.XRatio = Math.Min(result.XRatio, 1.0);
                 result.XValue = (m_HighestValue - m_LowestValue) * result.XRatio + m_LowestValue;
@@ -2005,9 +2054,9 @@ namespace SehensWerte.Controls.Sehens
                     ? $"{value.ToStringRound(5, 3)} of N"
                     : value.ToStringRound(5, 3, "Hz");
             }
-            else if (m_Samples.HorizontalAxisValues is double[] hax && hax.Length != 0)
+            else if (m_Samples.HasExplicitHorizontalAxis)
             {
-                return m_Samples.HorizontalValueAt(click.IndexBeforeTrim).ToStringRound(5, 3, m_Samples.HorizontalAxisUnit);
+                return m_Samples.HorizontalValueAt(click.IndexBeforeTrim).ToStringRound(5, 3, m_Samples.HorizontalUnitEffective);
             }
             else if (Samples.ViewedIsYTTrace)
             {
@@ -2015,8 +2064,9 @@ namespace SehensWerte.Controls.Sehens
             }
             else
             {
+                // seconds axis via the canonical map, so the readout includes the axis offset
                 return m_Samples.InputSamplesPerSecond != 0.0
-                    ? click.UnixTimeAtX.ToStringRound(5, 3, "s")
+                    ? m_Samples.HorizontalValueAt(click.IndexBeforeTrim).ToStringRound(5, 3, m_Samples.HorizontalUnitEffective)
                     : m_Samples.InputSamplesPerSecond.ToString();
             }
         }
@@ -2090,7 +2140,7 @@ namespace SehensWerte.Controls.Sehens
             double delta01 = Clicks[0].YValue - Clicks[1].YValue;
             double delta23 = Clicks[2].YValue - Clicks[3].YValue;
             StringBuilder text = new StringBuilder();
-            bool hasHorizontal = Samples.InputSamplesPerSecond != 0.0 || Samples.HorizontalAxisValues != null;
+            bool hasHorizontal = Samples.InputSamplesPerSecond != 0.0 || Samples.HasExplicitHorizontalAxis;
             var time = hasHorizontal ? $" ({SampleNumberText(Clicks[0])})" : "";
             text.Append($"{ViewName}[{Clicks[0].IndexBeforeTrim}/{Clicks[0].CountBeforeTrim}{time}]");
             text.Append(@"
@@ -2146,6 +2196,14 @@ value=" + string.Format(VerticalUnitFormat, Clicks[0].SampleAtX.ToStringRound(5,
             {
                 array = new double[0];
             }
+            else if (TryGroupValueWindow(count, out int vStart, out int vCount))
+            {
+                // Value-aligned group: zoom/pan select a shared value window of the group's full domain
+                int sc = Math.Max(1, Math.Min(vCount, count));
+                int st = Math.Clamp(vStart, 0, count - sc);
+                array = samples.Skip(st).Take(sc).ToArray();
+                drawnStart = st;
+            }
             else
             {
                 sampleCount = Math.Min(sampleCount, (int)(count * m_ZoomValue));
@@ -2157,6 +2215,72 @@ value=" + string.Format(VerticalUnitFormat, Clicks[0].SampleAtX.ToStringRound(5,
                 drawnStart = start;
             }
             return array;
+        }
+
+        // This trace's FULL (pre-zoom) horizontal axis as an affine map value = a + b*sampleNumber, plus
+        // its kind/unit/value-range, for group value-domain classification. b > 0 for Time/Affine.
+        // Must agree with DrawnExtents / TraceData.HorizontalValueAt (same composition rules and the
+        // same display/view offsets), or SubWindow places the ValueRect off-pane.
+        internal (HorizontalKind kind, string unit, double left, double right, double a, double b) FullHorizontalAffine()
+        {
+            int fullCount = m_CalculatedBeforeZoom?.Length ?? m_Samples.ViewedSampleCount;
+            int num = m_Samples.InputSampleNumberDisplayOffset + (ViewOverrideEnabled ? ViewOffsetOverride : 0);
+            HorizontalKind kind = HorizontalKind;
+            double a, b;
+            string unit;
+            double offset = double.IsFinite(m_Samples.HorizontalOffset) ? m_Samples.HorizontalOffset : 0.0;
+            switch (kind)
+            {
+                case HorizontalKind.Affine:
+                    // offset is in samples: value = b * (sample + offset + num)
+                    b = m_Samples.HorizontalMultiplier;
+                    a = b * (offset + num);
+                    unit = m_Samples.HorizontalAxisUnit;
+                    break;
+                case HorizontalKind.Time:
+                    double sps = m_Samples.InputSamplesPerSecond;
+                    b = 1.0 / sps;
+                    a = b * (offset + num);
+                    unit = m_Samples.HorizontalUnitEffective;
+                    break;
+                default: // None / Fft - value == sample number; not used for value-align
+                    a = 0.0;
+                    b = 1.0;
+                    unit = "";
+                    break;
+            }
+            return (kind, unit, a, a + b * fullCount, a, b);
+        }
+
+        // If this trace is in a value-aligned group, resolve the shared zoom/pan value window and return
+        // this trace's sample slice [vStart, vStart+vCount) covering it. False for stretch/incompatible
+        // groups (keep the legacy count-fraction zoom).
+        private bool TryGroupValueWindow(int count, out int vStart, out int vCount)
+        {
+            vStart = 0;
+            vCount = count;
+            if (count <= 0) return false;
+            TraceView[] group = Scope.GroupedTraces(this);
+            var members = new List<GroupHorizontal.Member>(group.Length);
+            foreach (TraceView v in group)
+            {
+                if (!v.Visible) continue;
+                var f = v.FullHorizontalAffine();
+                members.Add(new GroupHorizontal.Member(f.kind, f.unit, f.left, f.right, v.IsLogX));
+            }
+            if (members.Count == 0) return false;
+            GroupHorizontal.Domain window = GroupHorizontal.Window(members, m_ZoomValue, m_PanValue);
+            if (window.Mode != HorizontalMode.ValueAlign) return false;
+            var self = FullHorizontalAffine();
+            if (self.b == 0.0) return false;
+            int s = (int)Math.Round((window.Left - self.a) / self.b);
+            int e = (int)Math.Round((window.Right - self.a) / self.b);
+            if (e < s) (s, e) = (e, s);
+            s = Math.Clamp(s, 0, count);
+            e = Math.Clamp(e, 0, count);
+            vStart = s;
+            vCount = Math.Max(1, e - s);
+            return true;
         }
 
         internal SnapshotYT SnapshotYTProjection(double leftTime, double rightTime, out bool recalculateProjectionRequired)
@@ -2402,6 +2526,235 @@ value=" + string.Format(VerticalUnitFormat, Clicks[0].SampleAtX.ToStringRound(5,
                 m_Fft = null;
 
             });
+        }
+    }
+
+    // Tests for the per-kind axis probe and the value-window zoom/pan slice of value-aligned groups.
+    [TestClass]
+    public class TraceViewHorizontalTests
+    {
+        [TestMethod]
+        public void FullHorizontalAffinePerKind()
+        {
+            var scope = new SehensControl();
+
+            TraceView affine = SehensTestHarness.AffineTrace(scope, "affine", count: 5, offset: 100, multiplier: 10, unit: "rpm");
+            affine.CalculateTrace();
+            var fa = affine.FullHorizontalAffine();
+            Assert.AreEqual(HorizontalKind.Affine, fa.kind);
+            Assert.AreEqual("rpm", fa.unit);
+            Assert.AreEqual(1000.0, fa.a, 1e-9); // offset is in samples: 10 * (0 + 100)
+            Assert.AreEqual(10.0, fa.b, 1e-9);
+            Assert.AreEqual(1000.0, fa.left, 1e-9);
+            Assert.AreEqual(1050.0, fa.right, 1e-9); // a + b * count (one past last sample)
+
+            scope["time"].Update(SehensTestHarness.Ramp(50));
+            scope["time"].InputSamplesPerSecond = 10.0;
+            TraceView time = SehensTestHarness.View(scope, "time");
+            time.CalculateTrace();
+            var ft = time.FullHorizontalAffine();
+            Assert.AreEqual(HorizontalKind.Time, ft.kind);
+            Assert.AreEqual("s", ft.unit);
+            Assert.AreEqual(0.0, ft.left, 1e-9);
+            Assert.AreEqual(5.0, ft.right, 1e-9);
+            Assert.AreEqual(0.1, ft.b, 1e-9);
+
+            scope["time"].InputSampleNumberDisplayOffset = 20; // 2 s display offset
+            var fo = time.FullHorizontalAffine();
+            Assert.AreEqual(2.0, fo.a, 1e-9);
+            Assert.AreEqual(2.0, fo.left, 1e-9);
+            Assert.AreEqual(7.0, fo.right, 1e-9);
+
+            scope["plain"].Update(SehensTestHarness.Ramp(100));
+            TraceView plain = SehensTestHarness.View(scope, "plain");
+            plain.CalculateTrace();
+            var fp = plain.FullHorizontalAffine();
+            Assert.AreEqual(HorizontalKind.None, fp.kind);
+            Assert.AreEqual(0.0, fp.left, 1e-9);
+            Assert.AreEqual(100.0, fp.right, 1e-9);
+
+            // invalid multiplier -> unusable axis -> classifies as plain index (None), not Affine
+            scope["bad"].Update(SehensTestHarness.Ramp(10));
+            scope["bad"].SetHorizontalAffine(0.0, 0.0, "rpm");
+            Assert.AreEqual(HorizontalKind.None, SehensTestHarness.View(scope, "bad").HorizontalKind);
+        }
+
+        [TestMethod]
+        public void ValueAlignZoomWindowSlicesByValue()
+        {
+            var scope = new SehensControl();
+            TraceView a = SehensTestHarness.AffineTrace(scope, "A", count: 100, offset: 0, multiplier: 1, unit: "u");  // 0..100
+            TraceView b = SehensTestHarness.AffineTrace(scope, "B", count: 50, offset: 50, multiplier: 1, unit: "u");  // 50..100
+            scope.GroupViews(new[] { "A", "B" });
+            SehensTestHarness.ZoomPan(scope, zoom: 0.5, pan: 0.25); // shared value window [25, 75]
+            SehensTestHarness.Layout(scope);
+
+            Assert.AreEqual(25, a.DrawnStartPosition);
+            Assert.AreEqual(50, a.DrawnSamples!.Length);
+            // B has no data before 50: it draws only its 50..75 slice instead of sliding (legacy
+            // count-fraction zoom would show a different value range per member)
+            Assert.AreEqual(0, b.DrawnStartPosition);
+            Assert.AreEqual(25, b.DrawnSamples!.Length);
+            Assert.AreEqual(75.0, b.Samples.HorizontalValueAt(b.DrawnStartPosition + b.DrawnSamples!.Length), 1e-9);
+        }
+
+        [TestMethod]
+        public void ValueAlignPanKeepsMembersOnTheSameWindow()
+        {
+            var scope = new SehensControl();
+            TraceView a = SehensTestHarness.AffineTrace(scope, "A", count: 100, offset: 0, multiplier: 1, unit: "u");
+            TraceView b = SehensTestHarness.AffineTrace(scope, "B", count: 50, offset: 50, multiplier: 1, unit: "u");
+            scope.GroupViews(new[] { "A", "B" });
+            SehensTestHarness.ZoomPan(scope, zoom: 0.5, pan: 0.5); // window [50, 100]
+            SehensTestHarness.Layout(scope);
+
+            // both members show exactly the values 50..100
+            Assert.AreEqual(50.0, a.Samples.HorizontalValueAt(a.DrawnStartPosition), 1e-9);
+            Assert.AreEqual(100.0, a.Samples.HorizontalValueAt(a.DrawnStartPosition + a.DrawnSamples!.Length), 1e-9);
+            Assert.AreEqual(50.0, b.Samples.HorizontalValueAt(b.DrawnStartPosition), 1e-9);
+            Assert.AreEqual(100.0, b.Samples.HorizontalValueAt(b.DrawnStartPosition + b.DrawnSamples!.Length), 1e-9);
+        }
+
+        [TestMethod]
+        public void StretchZoomKeepsLegacyCountFractionBehaviour()
+        {
+            var scope = new SehensControl();
+            scope["plain"].Update(SehensTestHarness.Ramp(100)); // no axis -> Stretch -> legacy branch
+            TraceView view = SehensTestHarness.View(scope, "plain");
+
+            SehensTestHarness.ZoomPan(scope, zoom: 0.5, pan: 0.0);
+            SehensTestHarness.Layout(scope);
+            Assert.AreEqual(0, view.DrawnStartPosition);
+            Assert.AreEqual(50, view.DrawnSamples!.Length);
+
+            SehensTestHarness.ZoomPan(scope, zoom: 0.5, pan: 0.5);
+            SehensTestHarness.Layout(scope);
+            Assert.AreEqual(50, view.DrawnStartPosition);
+            Assert.AreEqual(50, view.DrawnSamples!.Length);
+        }
+
+        [TestMethod]
+        public void GutterWindowMatchesDrawnWindow()
+        {
+            // The gutter domain comes from TraceGroupDisplay (Painted.Group + scope zoom) while the
+            // drawn slice comes from TryGroupValueWindow (Scope.GroupedTraces + view zoom). If those
+            // two ever diverge, ticks and curves silently disagree - pin them to each other.
+            var scope = new SehensControl();
+            TraceView a = SehensTestHarness.AffineTrace(scope, "A", count: 100, offset: 0, multiplier: 1, unit: "u");
+            TraceView b = SehensTestHarness.AffineTrace(scope, "B", count: 50, offset: 50, multiplier: 1, unit: "u");
+            scope.GroupViews(new[] { "A", "B" });
+            SehensTestHarness.ZoomPan(scope, zoom: 0.5, pan: 0.25); // window [25, 75]
+            SehensTestHarness.Layout(scope);
+
+            TraceGroupDisplay info = scope.PaintBox.TraceToGroupDisplayInfo(a);
+            Assert.AreEqual(HorizontalMode.ValueAlign, info.HMode);
+            Assert.AreEqual(25.0, info.GroupHLeft, 1e-9);
+            Assert.AreEqual(75.0, info.GroupHRight, 1e-9);
+            // gutter endpoints == the value range A actually drew
+            Assert.AreEqual(info.GroupHLeft, a.Samples.HorizontalValueAt(a.DrawnStartPosition), 1e-9);
+            Assert.AreEqual(info.GroupHRight, a.Samples.HorizontalValueAt(a.DrawnStartPosition + a.DrawnSamples!.Length), 1e-9);
+        }
+
+        [TestMethod]
+        public void AffineEditorProxiesDriveTheTraceAxis()
+        {
+            // the double-click trace editor binds these TraceView proxies (TraceData is hidden);
+            // there is no enable toggle - typed values take effect immediately, identity == off
+            var scope = new SehensControl();
+            scope["t"].Update(SehensTestHarness.Ramp(10));
+            TraceView view = SehensTestHarness.View(scope, "t");
+            Assert.IsFalse(view.Samples.HasExplicitHorizontalAxis);
+
+            view.HorizontalAxisOffset = 1000.0; // in samples
+            view.HorizontalAxisMultiplier = 7.0;
+            view.HorizontalAxisUnit = "f";
+            Assert.AreEqual(7021.0, view.Samples.HorizontalValueAt(3), 1e-9); // 7 * (3 + 1000)
+            Assert.AreEqual("f", view.Samples.HorizontalAxisUnit);
+
+            view.HorizontalAxisMultiplier = -1.0; // kept as typed, flagged, warning paints
+            Assert.AreEqual(-1.0, view.HorizontalAxisMultiplier, 1e-9);
+            Assert.IsTrue(view.Samples.HorizontalAffineInvalid);
+            Assert.IsFalse(view.Samples.HasExplicitHorizontalAxis);
+            view.HorizontalAxisMultiplier = 7.0;
+
+            view.SamplesPerSecond = 10.0; // rate takes the scale; the sample offset still applies
+            Assert.AreEqual(100.3, view.Samples.HorizontalValueAt(3), 1e-9); // (3 + 1000) / 10
+            Assert.IsFalse(view.Samples.HorizontalAffineInvalid); // ignored multiplier is not an error
+
+            view.SamplesPerSecond = 0.0; // back to the affine scale
+            Assert.AreEqual(7021.0, view.Samples.HorizontalValueAt(3), 1e-9);
+
+            view.HorizontalAxisOffset = 0.0; // typing the identity turns the axis off
+            view.HorizontalAxisMultiplier = 1.0;
+            view.HorizontalAxisUnit = "";
+            Assert.IsFalse(view.Samples.HasExplicitHorizontalAxis);
+            Assert.AreEqual(3.0, view.Samples.HorizontalValueAt(3), 1e-9);
+        }
+
+        [TestMethod]
+        public void SpsWinsTheScaleOffsetComposesAndTheTraceStaysVisible()
+        {
+            // Field report: sps > 0 plus an affine offset made the trace vanish (the group domain
+            // and DrawnExtents used different units, pushing the ValueRect off-pane). Composition
+            // now: sps supplies the scale, the offset shifts it, the multiplier waits for sps == 0
+            // - and extents/FullHorizontalAffine share one canonical map so they cannot diverge.
+            var scope = new SehensControl();
+            scope["both"].Update(SehensTestHarness.Ramp(100));
+            scope["both"].InputSamplesPerSecond = 10.0;
+            scope["both"].SetHorizontalAffine(1000.0, 7.0, "f");
+            SehensTestHarness.Layout(scope);
+            TraceView view = SehensTestHarness.View(scope, "both");
+
+            Assert.AreEqual(HorizontalKind.Time, view.HorizontalKind);
+            var ext = view.DrawnExtents();
+            Assert.AreEqual(100.0, ext.leftSampleNumberValue, 1e-9);  // (0 + 1000) / 10
+            Assert.AreEqual(110.0, ext.rightSampleNumberValue, 1e-9); // (100 + 1000) / 10, mult idle
+            Assert.AreEqual("f", ext.sampleValueUnit); // explicit unit beats the "s" default
+
+            TraceGroupDisplay info = scope.PaintBox.TraceToGroupDisplayInfo(view);
+            Assert.AreEqual(HorizontalMode.ValueAlign, info.HMode);
+            Assert.AreEqual(info.ProjectionArea, info.ValueRect); // ON pane - the trace draws
+            Assert.AreEqual(100.0, info.GroupHLeft, 1e-9);
+            Assert.AreEqual(110.0, info.GroupHRight, 1e-9);
+
+            scope["both"].InputSamplesPerSecond = 0.0; // rate removed: the multiplier takes over
+            SehensTestHarness.Layout(scope);
+            var affine = view.DrawnExtents();
+            Assert.AreEqual(HorizontalKind.Affine, view.HorizontalKind);
+            Assert.AreEqual(7700.0, affine.rightSampleNumberValue, 1e-9); // 7 * (100 + 1000)
+            Assert.AreEqual("f", affine.sampleValueUnit);
+        }
+
+        [TestMethod]
+        public void PanClampsToTheVisibleWindow()
+        {
+            // pan is the LEFT edge fraction, ceiling 1 - zoom: the drag path calls SetZoomPan
+            // directly, and a [0,1] clamp let a drag over-pan past the data then snap back on
+            // release when the scrollbar path re-clamped.
+            var scope = new SehensControl();
+            scope.SetZoomPan(0.5, 0.9);
+            Assert.AreEqual(0.5, scope.PanValue, 1e-9);
+            scope.SetZoomPan(1.0, 0.3); // full view: no pan headroom at all
+            Assert.AreEqual(0.0, scope.PanValue, 1e-9);
+        }
+
+        [TestMethod]
+        public void ViewLengthChangeInvalidatesTheGroupProjection()
+        {
+            // Field report: changing View Length did not recalculate the horizontal axis until a
+            // zoom nudge - the setter recalculated the drawn samples but never invalidated the
+            // (extent-keyed) projection cache.
+            var scope = new SehensControl();
+            TraceView a = SehensTestHarness.AffineTrace(scope, "A", count: 100, offset: 0, multiplier: 1, unit: "u");
+            TraceView b = SehensTestHarness.AffineTrace(scope, "B", count: 100, offset: 0, multiplier: 1, unit: "u");
+            scope.GroupViews(new[] { "A", "B" });
+            SehensTestHarness.Layout(scope);
+            a.SnapshotProjection(); // consume the initial recalculate flags
+            b.SnapshotProjection();
+
+            a.ViewLengthOverride = 50; // crops A: extents move, the whole group must reproject
+            Assert.IsTrue(a.SnapshotProjection().recalculate, "changed view must reproject");
+            Assert.IsTrue(b.SnapshotProjection().recalculate, "group sibling must reproject too");
         }
     }
 }

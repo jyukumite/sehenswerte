@@ -1,4 +1,5 @@
-﻿using SehensWerte.Files;
+﻿using Microsoft.VisualStudio.TestTools.UnitTesting;
+using SehensWerte.Files;
 using SehensWerte.Maths;
 using SehensWerte.Utils;
 using System.Drawing.Drawing2D;
@@ -609,6 +610,12 @@ namespace SehensWerte.Controls.Sehens
                 view.Painter.PaintInitial(graphics, viewInfo);
                 PaintGutters(viewInfo, graphics);
                 PaintHorizontalAxis(graphics, viewInfo);
+                if (viewInfo.HMode == HorizontalMode.Incompatible)
+                {
+                    // Members carry horizontal axes that cannot converge (mixed units, or a real axis
+                    // grouped with a plain one): fall back to the leader's axis + index stretch, and say so.
+                    PaintWarning(graphics, viewInfo, "mixed horizontal axes");
+                }
                 PaintAxesTitles(graphics, viewInfo);
                 PaintVerticalAxis(graphics, viewInfo);
                 bool xyGroup = views[0].IsXYMode;
@@ -780,7 +787,8 @@ namespace SehensWerte.Controls.Sehens
                 string text =
                     (view.HoldPanZoom ? " (Hold)" : "")
                     + ((info.ViewLengthOverride != 0 || info.ViewOffsetOverride != 0) ? " (Offset)" : "")
-                    + (view.CalculateType == TraceView.CalculatedTypes.None ? "" : " (Calc)");
+                    + (view.CalculateType == TraceView.CalculatedTypes.None ? "" : " (Calc)")
+                    + (view.Samples.HorizontalAffineInvalid ? " (bad horizontal axis)" : "");
                 if (text.Length > 0)
                 {
                     PaintWarning(graphics, info, text);
@@ -854,7 +862,7 @@ namespace SehensWerte.Controls.Sehens
                 using Pen pen = Scope.ActiveSkin.HoverTextFont.Pen;
                 using Font font = Scope.ActiveSkin.HoverTextFont.Font;
 
-                bool[] rows = new bool[PaintBoxVirtualHeight];
+                List<(int Y, string Text)> stats = new List<(int Y, string Text)>();
                 foreach (TraceView item in PaintedTraces.VisibleTraceGroupList.SelectMany(x => x))
                 {
                     TraceGroupDisplay info = TraceToGroupDisplayInfo(item);
@@ -863,53 +871,74 @@ namespace SehensWerte.Controls.Sehens
                         TraceView.MouseInfo clickInfo = item.Measure(mouse.Click);
                         string text = item.TraceHoverStatistics(clickInfo);
                         if (string.IsNullOrEmpty(text)) continue;
-
-                        int y = item.Painter.HoverLabelYFromOffsetX(info, mouseX) + info.GroupArea.Top;
-                        SizeF sizeF = graphics.MeasureString(text, font);
-
-                        Rectangle rect = new Rectangle(mouseX, y, (int)sizeF.Width + 3, (int)sizeF.Height + 3);
-                        for (int loop = rect.Top; loop < rect.Bottom && loop + PaintBoxVirtualOffset < PaintBoxVirtualHeight; loop++)
-                        {
-                            int row = loop + PaintBoxVirtualOffset;
-                            if (row >= 0 && row < rows.Length && rows[row])
-                            {
-                                loop = rect.Top;
-                                rect.Y++;
-                            }
-                        }
-
-                        if (rect.Bottom >= PaintBoxVirtualHeight - 1)
-                        {
-                            rect.Y -= rect.Bottom - PaintBoxVirtualHeight + 1;
-                        }
-                        if (rect.Right >= PaintBoxWidth - 4)
-                        {
-                            rect.X -= rect.Right - PaintBoxWidth + 4;
-                        }
-                        if (rect.X < 0)
-                        {
-                            rect.X = 0;
-                        }
-                        if (rect.Y < 0)
-                        {
-                            rect.Y = 0;
-                        }
-
-                        for (int row = rect.Top + PaintBoxVirtualOffset; row < rect.Bottom + PaintBoxVirtualOffset && row < PaintBoxVirtualHeight; row++)
-                        {
-                            rows[row] = true;
-                        }
-
-                        graphics.FillRectangle(labelBrush, rect);
-                        graphics.DrawRectangle(pen, rect);
-                        graphics.DrawString(text, font, fontBrush, rect.Left + 1, rect.Top + 1);
+                        stats.Add((item.Painter.HoverLabelYFromOffsetX(info, mouseX) + info.GroupArea.Top, text));
                     }
+                }
+
+                foreach ((string text, Rectangle rect) in LayoutHoverLabels(
+                    stats, text => graphics.MeasureString(text, font),
+                    mouseX, PaintBoxWidth, PaintBoxVirtualHeight, PaintBoxVirtualOffset))
+                {
+                    graphics.FillRectangle(labelBrush, rect);
+                    graphics.DrawRectangle(pen, rect);
+                    graphics.DrawString(text, font, fontBrush, rect.Left + 1, rect.Top + 1);
                 }
             }
             finally
             {
                 Profile.Exit();
             }
+        }
+
+        internal static List<(string Text, Rectangle Rect)> LayoutHoverLabels(
+            List<(int Y, string Text)> stats, Func<string, SizeF> measure,
+            int mouseX, int paintBoxWidth, int virtualHeight, int virtualOffset)
+        {
+            var result = new List<(string Text, Rectangle Rect)>();
+            bool[] rows = new bool[Math.Max(1, virtualHeight)];
+            foreach ((int y, string text) in stats.OrderBy(x => x.Y))
+            {
+                SizeF sizeF = measure(text);
+
+                Rectangle rect = new Rectangle(mouseX, y, (int)sizeF.Width + 3, (int)sizeF.Height + 3);
+                for (int loop = rect.Top; loop < rect.Bottom && loop + virtualOffset < virtualHeight; loop++)
+                {
+                    int row = loop + virtualOffset;
+                    if (row >= 0 && row < rows.Length && rows[row])
+                    {
+                        loop = rect.Top;
+                        rect.Y++;
+                    }
+                }
+
+                if (rect.Bottom >= virtualHeight - 1)
+                {
+                    rect.Y -= rect.Bottom - virtualHeight + 1;
+                }
+                if (rect.Right >= paintBoxWidth - 4)
+                {
+                    rect.X -= rect.Right - paintBoxWidth + 4;
+                }
+                if (rect.X < 0)
+                {
+                    rect.X = 0;
+                }
+                if (rect.Y < 0)
+                {
+                    rect.Y = 0;
+                }
+
+                for (int row = rect.Top + virtualOffset; row < rect.Bottom + virtualOffset && row < virtualHeight; row++)
+                {
+                    if (row >= 0)
+                    {
+                        rows[row] = true;
+                    }
+                }
+
+                result.Add((text, rect));
+            }
+            return result;
         }
 
         ////////////////////////////////////////////////////////////////
@@ -962,7 +991,7 @@ namespace SehensWerte.Controls.Sehens
         {
             var info = new TraceGroupDisplay(Scope.PaintBoxMouse, PaintBoxScreenRect, this, trace, flags);
             info.ShowHorizontalUnits = (info.View0.Samples.InputSamplesPerSecond != 0.0
-                    || info.View0.Samples.HorizontalAxisValues != null)
+                    || info.View0.Samples.HasExplicitHorizontalAxis)
                 && Scope.PaintBoxMouse.MouseGuiSection != PaintBoxMouseInfo.GuiSection.BottomGutter;
             return info;
         }
@@ -978,5 +1007,76 @@ namespace SehensWerte.Controls.Sehens
             base.Dispose(disposing);
         }
 
+    }
+
+    [TestClass]
+    public class SehensPaintBoxTests
+    {
+        [TestMethod]
+        public void HoverLabelsStackTopDownInAnchorOrder()
+        {
+            // anchors deliberately out of order and overlapping: (int)12 + 3 = 15 px tall each
+            var stats = new List<(int Y, string Text)> { (100, "b"), (95, "a"), (98, "c") };
+            var laidOut = SehensPaintBox.LayoutHoverLabels(
+                stats, text => new SizeF(50f, 12f),
+                mouseX: 10, paintBoxWidth: 800, virtualHeight: 400, virtualOffset: 0);
+
+            CollectionAssert.AreEqual(new[] { "a", "c", "b" },
+                laidOut.Select(x => x.Text).ToArray(), "labels must be processed in anchor order");
+            Assert.AreEqual(95, laidOut[0].Rect.Top);
+            Assert.AreEqual(110, laidOut[1].Rect.Top, "pushed below the first label");
+            Assert.AreEqual(125, laidOut[2].Rect.Top, "pushed below the second label");
+            for (int loop = 1; loop < laidOut.Count; loop++)
+            {
+                Assert.IsTrue(laidOut[loop].Rect.Top >= laidOut[loop - 1].Rect.Bottom, "no overlap");
+            }
+        }
+
+        [TestMethod]
+        public void HoverLabelsClampIntoThePaintBox()
+        {
+            var stats = new List<(int Y, string Text)> { (390, "bottom") };
+            var bottom = SehensPaintBox.LayoutHoverLabels(
+                stats, text => new SizeF(50f, 12f),
+                mouseX: 780, paintBoxWidth: 800, virtualHeight: 400, virtualOffset: 0);
+            Assert.IsTrue(bottom[0].Rect.Bottom <= 400, "label clamped above the bottom edge");
+            Assert.IsTrue(bottom[0].Rect.Right <= 796, "label clamped left of the right edge");
+            Assert.IsTrue(bottom[0].Rect.X >= 0 && bottom[0].Rect.Y >= 0);
+        }
+
+        [TestMethod]
+        public void MixedAxesGroupPaintsWarningWithoutThrowing()
+        {
+            var scope = new SehensControl();
+            SehensTestHarness.AffineTrace(scope, "A", count: 100, offset: 0, multiplier: 10, unit: "rpm");
+            SehensTestHarness.AffineTrace(scope, "C", count: 100, offset: 0, multiplier: 5, unit: "kph");
+            scope["A"].AxisTitleBottom = "speed sweep"; // also exercises the gutter title reservation
+            scope.GroupViews(new[] { "A", "C" });
+            SehensTestHarness.Layout(scope);
+            Assert.AreEqual(HorizontalMode.Incompatible,
+                scope.PaintBox.TraceToGroupDisplayInfo(SehensTestHarness.View(scope, "A")).HMode);
+
+            scope.ActiveSkin.ExportTraces = Skin.TraceSelections.VisibleTraces; // default exports selected-only
+            using Bitmap bmp = scope.PaintBox.ScreenshotToBitmap(scope.ActiveSkin, null);
+            Assert.IsTrue(bmp.Width > 1 && bmp.Height > 1, "full paint incl. the warning must succeed");
+        }
+
+        [TestMethod]
+        public void InvalidAffinePaintsWarningAndRendersAsPlain()
+        {
+            var scope = new SehensControl();
+            scope["bad"].Update(SehensTestHarness.Ramp(10));
+            scope["bad"].SetHorizontalAffine(0.0, -2.0, "rpm"); // invalid: multiplier must be > 0
+            TraceData trace = scope["bad"];
+            Assert.IsTrue(trace.HorizontalAffineInvalid, "invalid multiplier must be flagged, not coerced");
+            Assert.AreEqual(-2.0, trace.HorizontalMultiplier, 1e-9, "stored as given (no silent =1 rewrite)");
+            Assert.IsFalse(trace.HasExplicitHorizontalAxis);
+            Assert.AreEqual(3.0, trace.HorizontalValueAt(3), 1e-9); // falls back to sample number
+
+            SehensTestHarness.Layout(scope);
+            scope.ActiveSkin.ExportTraces = Skin.TraceSelections.VisibleTraces; // default exports selected-only
+            using Bitmap bmp = scope.PaintBox.ScreenshotToBitmap(scope.ActiveSkin, null);
+            Assert.IsTrue(bmp.Width > 1 && bmp.Height > 1, "paint incl. the (bad horizontal axis) warning must succeed");
+        }
     }
 }

@@ -320,7 +320,8 @@ namespace SehensWerte
             public Data InputData = new Data();
             public Data? ViewedData = new Data(); // never deserialises as null
             public string Name = "";
-            public double[]? HorizontalAxisValues = null;
+            public double HorizontalOffset = 0.0;
+            public double HorizontalMultiplier = 1.0;
             public string HorizontalAxisUnit = "";
 
             public Trace() { }
@@ -336,7 +337,8 @@ namespace SehensWerte
                     ViewedData = saveViewedData == null ? null : new Data(saveViewedData, copySamples);
                     if (copySamples)
                     {
-                        HorizontalAxisValues = obj.HorizontalAxisValues;
+                        HorizontalOffset = obj.HorizontalOffset;
+                        HorizontalMultiplier = obj.HorizontalMultiplier;
                         HorizontalAxisUnit = obj.HorizontalAxisUnit;
                     }
                 }
@@ -348,10 +350,7 @@ namespace SehensWerte
                 {
                     obj.Name = Name;
                     XmlSaveAttribute.Inject(obj, OtherElements);
-                    if (HorizontalAxisValues != null)
-                    {
-                        obj.SetHorizontalAxis(HorizontalAxisValues, HorizontalAxisUnit);
-                    }
+                    obj.SetHorizontalAffine(HorizontalOffset, HorizontalMultiplier, HorizontalAxisUnit);
 
                     var inputData = new DataStore();
                     InputData.SaveTo(inputData);
@@ -613,6 +612,31 @@ namespace SehensWerte
             // each construction code-gens a dynamic assembly (5-20ms); 300 views x 2
             // nested members made save and load take seconds each
             Assert.IsTrue(captureMs + applyMs < 2000, $"round trip too slow: {captureMs}+{applyMs}ms");
+        }
+
+        [TestMethod]
+        public void AffineAxisRoundTripsThroughSave()
+        {
+            var scope1 = new SehensControl();
+            scope1["A"].Update(new double[] { 1, 2, 3 });
+            scope1["A"].SetHorizontalAffine(5.0, 2.0, "rpm");
+            string xml = new SehensSave.Sehens(scope1, copySamples: true).ToXml(compact: true);
+
+            SehensSave.Sehens loaded = xml.FromXml<SehensSave.Sehens>()
+                ?? throw new AssertFailedException("state xml failed to parse");
+            // sample arrays are [XmlIgnore] (they ride the binary side-file); re-attach them the way
+            // LoadStateBinary does before the destructive restore
+            loaded.Traces.Single(t => t.Name == "A").InputData.InputSamples = new double[] { 1, 2, 3 };
+            var scope2 = new SehensControl();
+            loaded.SaveTo(scope2);
+
+            TraceData trace = scope2.TraceByName("A") ?? throw new AssertFailedException("trace A missing");
+            Assert.IsTrue(trace.HasExplicitHorizontalAxis);
+            Assert.AreEqual(5.0, trace.HorizontalOffset, 1e-9);
+            Assert.AreEqual(2.0, trace.HorizontalMultiplier, 1e-9);
+            Assert.AreEqual("rpm", trace.HorizontalAxisUnit);
+            Assert.AreEqual(14.0, trace.HorizontalValueAt(2), 1e-9); // 2 * (2 + 5), offset in samples
+            Assert.AreEqual(3, trace.InputSampleCount);
         }
 
         private static TraceView RequireView(SehensControl scope, string name)

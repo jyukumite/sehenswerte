@@ -1,3 +1,4 @@
+using Microsoft.VisualStudio.TestTools.UnitTesting;
 using SehensWerte.Maths;
 using SehensWerte.Utils;
 using System.Collections;
@@ -132,31 +133,100 @@ namespace SehensWerte.Controls.Sehens
             }
         }
 
-        // Optional horizontal-axis values, one per input sample (monotonic, increasing)
-        // Not valid on time/YT or FFT trace
-        public double[]? HorizontalAxisValues { get; private set; }
+        // MINIPLAN (future): a genuinely NON-uniform horizontal axis (e.g. a nonlinear rpm-vs-speed curve) is
+        // not representable affine; today the caller must pre-resample onto a uniform grid. A monotonic
+        // per-sample axis is structurally the same as the YT (per-sample unix-time) axis - the intended
+        // end-state is to make YT unit-agnostic (carry any unit, not just seconds) so it subsumes the
+        // non-uniform case, leaving "affine + unit-agnostic YT" to cover everything with no separate
+        // per-sample value array.
+        
+        // SamplesPerSecond takes precidence over Multiplier
+        // The offset is always samples
+        // Unit overrides the seconds default when set.
+        //   sps > 0:  value = (sample + HorizontalOffset) / sps   (unit: HorizontalAxisUnit or "s")
+        //   sps == 0: value = (sample + HorizontalOffset) * HorizontalMultiplier
+        public double HorizontalOffset { get; private set; }
+        public double HorizontalMultiplier { get; private set; } = 1.0;
         public string HorizontalAxisUnit { get; private set; } = "";
 
-        public void SetHorizontalAxis(double[]? values, string unit = "")
+        private bool HorizontalAffineIsIdentity =>
+            HorizontalOffset == 0.0 && HorizontalMultiplier == 1.0 && HorizontalAxisUnit.Length == 0;
+
+        // True when the AFFINE map positions the samples: no sps (sps takes precedence for
+        // positioning; the offset still shifts the seconds axis), a usable map, not the identity.
+        public bool HasExplicitHorizontalAxis =>
+            InputSamplesPerSecond == 0.0 && !HorizontalAffineInvalid && !HorizontalAffineIsIdentity;
+
+        // The axis terms are unusable where they matter: a bad multiplier only matters without sps
+        // (sps supplies the scale); a non-finite offset always poisons. The trace paints a
+        // "(bad horizontal axis)" warning and falls back to sample numbers.
+        public bool HorizontalAffineInvalid =>
+            !double.IsFinite(HorizontalOffset)
+            || (InputSamplesPerSecond == 0.0
+                && !(HorizontalOffset == 0.0 && HorizontalMultiplier == 1.0 && HorizontalAxisUnit.Length == 0)
+                && !(HorizontalMultiplier > 0.0 && double.IsFinite(HorizontalMultiplier)));
+
+        public void SetHorizontalAffine(double offset, double multiplier, string unit = "")
         {
             lock (DataLock)
             {
-                HorizontalAxisValues = values;
+                HorizontalOffset = offset;
+                HorizontalMultiplier = multiplier;
                 HorizontalAxisUnit = unit ?? "";
             }
             ForEachViewer(x => x.TraceDataSettingsChanged(this));
         }
 
-        // Interpolated horizontal value at a (possibly fractional) sample number, for hover readout.
+        public void ClearHorizontalAxis()
+        {
+            lock (DataLock)
+            {
+                HorizontalOffset = 0.0;
+                HorizontalMultiplier = 1.0;
+                HorizontalAxisUnit = "";
+            }
+            ForEachViewer(x => x.TraceDataSettingsChanged(this));
+        }
+
+        // The unit the horizontal axis displays: the explicit unit, or "s" for a rate-based axis.
+        public string HorizontalUnitEffective =>
+            HorizontalAxisUnit.Length != 0 ? HorizontalAxisUnit
+            : InputSamplesPerSecond != 0.0 ? "s"
+            : "";
+
+        // Canonical sample -> axis-value map (see the composition rules above the fields).
         public double HorizontalValueAt(double sampleNumber)
         {
-            double[]? v = HorizontalAxisValues;
-            if (v == null || v.Length == 0) return sampleNumber;
-            if (sampleNumber <= 0) return v[0];
-            if (sampleNumber >= v.Length - 1) return v[v.Length - 1];
-            int i = (int)sampleNumber;
-            double frac = sampleNumber - i;
-            return v[i] + (v[i + 1] - v[i]) * frac;
+            double sps = InputSamplesPerSecond;
+            double offset = double.IsFinite(HorizontalOffset) ? HorizontalOffset : 0.0;
+            if (sps != 0.0)
+            {
+                return (sampleNumber + offset) / sps;
+            }
+            else
+            {
+                return HasExplicitHorizontalAxis ? (sampleNumber + offset) * HorizontalMultiplier : sampleNumber;
+            }
+        }
+
+        // Inverse of HorizontalValueAt, clamped to [0, count-1].
+        public double SampleAtHorizontalValue(double value, int count)
+        {
+            if (count <= 1) return 0.0;
+            double sps = InputSamplesPerSecond;
+            double offset = double.IsFinite(HorizontalOffset) ? HorizontalOffset : 0.0;
+            if (sps != 0.0)
+            {
+                return Math.Clamp(value * sps - offset, 0.0, count - 1);
+            }
+            else if (HasExplicitHorizontalAxis)
+            {
+                return Math.Clamp(value / HorizontalMultiplier - offset, 0.0, count - 1);
+            }
+            else
+            {
+                return Math.Clamp(value, 0.0, count - 1);
+            }
         }
 
         [XmlSave]
@@ -902,6 +972,115 @@ namespace SehensWerte.Controls.Sehens
             {
                 return (Left.GetHashCode() ^ Right.GetHashCode());
             }
+        }
+    }
+
+    [TestClass]
+    public class HorizontalAffineTests
+    {
+        [TestMethod]
+        public void AffineValueAndInverse()
+        {
+            var td = new TraceData("t");
+            td.SetHorizontalAffine(offset: 5.0, multiplier: 2.0, unit: "rpm"); // offset is in samples
+            Assert.IsTrue(td.HasExplicitHorizontalAxis);
+            Assert.AreEqual("rpm", td.HorizontalAxisUnit);
+            Assert.AreEqual(10.0, td.HorizontalValueAt(0), 1e-9); // 2 * (0 + 5)
+            Assert.AreEqual(16.0, td.HorizontalValueAt(3), 1e-9);
+            Assert.AreEqual(20.0, td.HorizontalValueAt(5), 1e-9);
+            // inverse round-trips within the sample range
+            Assert.AreEqual(3.0, td.SampleAtHorizontalValue(16.0, count: 10), 1e-9);
+            Assert.AreEqual(0.0, td.SampleAtHorizontalValue(10.0, count: 10), 1e-9);
+        }
+
+        [TestMethod]
+        public void AffineInverseClampsToRange()
+        {
+            var td = new TraceData("t");
+            td.SetHorizontalAffine(0.0, 1.0, "s");
+            Assert.AreEqual(0.0, td.SampleAtHorizontalValue(-100.0, count: 8), 1e-9); // below -> 0
+            Assert.AreEqual(7.0, td.SampleAtHorizontalValue(1000.0, count: 8), 1e-9); // above -> count-1
+            Assert.AreEqual(0.0, td.SampleAtHorizontalValue(42.0, count: 1), 1e-9);   // degenerate count
+        }
+
+        [TestMethod]
+        public void NoExplicitAxisIsSampleNumber()
+        {
+            var td = new TraceData("t");
+            Assert.IsFalse(td.HasExplicitHorizontalAxis);
+            Assert.AreEqual(4.0, td.HorizontalValueAt(4), 1e-9);              // identity
+            Assert.AreEqual(4.0, td.SampleAtHorizontalValue(4.0, 10), 1e-9);  // identity, in range
+            Assert.AreEqual(9.0, td.SampleAtHorizontalValue(42.0, 10), 1e-9); // clamps to count-1
+        }
+
+        [TestMethod]
+        public void SpsWinsTheScaleOffsetComposes()
+        {
+            // sps > 0: value = (sample + offset)/sps - the multiplier cannot compose with a rate
+            // and is ignored; the offset is always in samples so it means the same thing under
+            // either scale; the unit overrides the "s" default.
+            var td = new TraceData("t");
+            td.Update(new double[100]);
+            td.SetHorizontalAffine(1000.0, 7.0, "f");
+            td.InputSamplesPerSecond = 10.0;
+            Assert.IsFalse(td.HorizontalAffineInvalid); // multiplier is ignored, not an error
+            Assert.IsFalse(td.HasExplicitHorizontalAxis); // sps positions; affine does not
+            Assert.AreEqual(100.3, td.HorizontalValueAt(3), 1e-9); // (3 + 1000) / 10, multiplier unused
+            Assert.AreEqual(5.0, td.SampleAtHorizontalValue(100.5, 100), 1e-9);
+            Assert.AreEqual("f", td.HorizontalUnitEffective); // explicit unit beats the "s" default
+
+            td.InputSamplesPerSecond = 0.0; // rate removed: the affine scale takes over
+            Assert.IsTrue(td.HasExplicitHorizontalAxis);
+            Assert.AreEqual(7021.0, td.HorizontalValueAt(3), 1e-9); // 7 * (3 + 1000)
+        }
+
+        [TestMethod]
+        public void IdentityAffineIsNoAxisAndUnitAloneIsExplicit()
+        {
+            var td = new TraceData("t");
+            td.SetHorizontalAffine(0.0, 1.0, ""); // identity == the plain sample-number axis
+            Assert.IsFalse(td.HasExplicitHorizontalAxis);
+            Assert.AreEqual(4.0, td.HorizontalValueAt(4), 1e-9);
+
+            td.SetHorizontalAffine(0.0, 1.0, "km/h"); // a bare unit labels the sample axis (RideTime)
+            Assert.IsTrue(td.HasExplicitHorizontalAxis);
+            Assert.AreEqual(4.0, td.HorizontalValueAt(4), 1e-9);
+            Assert.AreEqual("km/h", td.HorizontalUnitEffective);
+        }
+
+        [TestMethod]
+        public void InvalidMultiplierFlagsErrorAndFallsBack()
+        {
+            var td = new TraceData("t");
+            td.SetHorizontalAffine(5.0, 0.0, "rpm"); // zero multiplier: invalid, stored as given
+            Assert.IsTrue(td.HorizontalAffineInvalid);
+            Assert.IsFalse(td.HasExplicitHorizontalAxis);
+            Assert.AreEqual(0.0, td.HorizontalMultiplier, 1e-9); // no silent =1 coercion
+            Assert.AreEqual(7.0, td.HorizontalValueAt(7), 1e-9); // sample-number fallback
+            Assert.AreEqual(4.0, td.SampleAtHorizontalValue(4.0, 10), 1e-9);
+
+            td.SetHorizontalAffine(5.0, -3.0, "rpm"); // negative multiplier
+            Assert.IsTrue(td.HorizontalAffineInvalid);
+            Assert.AreEqual(-3.0, td.HorizontalMultiplier, 1e-9);
+
+            td.SetHorizontalAffine(double.NaN, 2.0, "rpm"); // non-finite offset
+            Assert.IsTrue(td.HorizontalAffineInvalid);
+
+            td.SetHorizontalAffine(0.0, 2.0, "rpm"); // valid map clears the error
+            Assert.IsFalse(td.HorizontalAffineInvalid);
+            Assert.IsTrue(td.HasExplicitHorizontalAxis);
+        }
+
+        [TestMethod]
+        public void ClearRevertsToImplicit()
+        {
+            var td = new TraceData("t");
+            td.SetHorizontalAffine(10.0, 3.0, "kph");
+            Assert.IsTrue(td.HasExplicitHorizontalAxis);
+            td.ClearHorizontalAxis();
+            Assert.IsFalse(td.HasExplicitHorizontalAxis);
+            Assert.AreEqual("", td.HorizontalAxisUnit);
+            Assert.AreEqual(6.0, td.HorizontalValueAt(6), 1e-9); // back to sample number
         }
     }
 }
