@@ -329,6 +329,7 @@ namespace SehensWerte.Controls.Sehens
         [AutoEditor.Hidden]
         public double XYZPan { get => m_XYZPan; set { double v = Math.Max(0.0, Math.Min(1.0, value)); if (m_XYZPan != v) { m_XYZPan = v; Scope?.ViewNeedsRepaint(this); } } }
 
+        [AutoEditor.Hidden] // derived from PaintMode - not an editable setting
         public bool IsXYMode =>
             m_PaintMode == PaintModes.XYLine
             || m_PaintMode == PaintModes.XYPoints
