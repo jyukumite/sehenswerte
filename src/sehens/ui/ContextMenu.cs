@@ -90,6 +90,7 @@ namespace SehensWerte.Controls.Sehens
             public Action<DropDownArgs>? GetStyle;
             public string SubMenuText = "";
             public string Text = "";
+            public int Sort;
             public ShowWhen ShownWhenTrace;
             public TextDisplay ShownText = TextDisplay.NoChange;
             public CallWhen Call;
@@ -184,7 +185,10 @@ namespace SehensWerte.Controls.Sehens
             ContextMenus.AddContextMenus(ContextMenuList, EmbeddedContextMenuList);
             ImportExport.AddContextMenus(ContextMenuList, EmbeddedContextMenuList);
 
-            ContextMenuList.Sort((a, b) => string.IsNullOrEmpty(a.SubMenuText) || string.IsNullOrEmpty(b.SubMenuText) ? 0 : b.Text.Replace("&", "").CompareTo(a.Text.Replace("&", "")));
+            // items are Insert(0)ed while building, so display order is the reversed
+            ContextMenuList.Sort((a, b) => string.IsNullOrEmpty(a.SubMenuText) || string.IsNullOrEmpty(b.SubMenuText) ? 0
+                : b.Sort != a.Sort ? (b.Sort - a.Sort)
+                : b.Text.Replace("&", "").CompareTo(a.Text.Replace("&", "")));
             EmbeddedContextMenuList.Sort((a, b) => b.Sort == a.Sort ? b.Text.Replace("&", "").CompareTo(a.Text.Replace("&", "")) : (b.Sort - a.Sort));
 
             ScopeMenuStrip = new ContextMenuStrip();

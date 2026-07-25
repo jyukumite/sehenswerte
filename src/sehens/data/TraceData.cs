@@ -557,7 +557,7 @@ namespace SehensWerte.Controls.Sehens
             return UpdateByRef(samples, null, samplesPerSecond);
         }
 
-        public TraceData UpdateByRef(object samples, double[]? unixTime = null, double samplesPerSecond = double.NaN)
+        public TraceData UpdateByRef(object samples, double[]? unixTime, double samplesPerSecond = double.NaN)
         {
             bool guiChange = false;
             lock (DataLock)
@@ -653,10 +653,11 @@ namespace SehensWerte.Controls.Sehens
                 if (m_ViewedData.UnixTime == null)
                 {
                     time = DoubleVectorExtensions.Range(m_InputData.LeftmostUnixTime, samples.Length, 1.0 / m_InputData.SamplesPerSecond).ToArray();
+                    int lastIndex = Math.Max(0, samples.Length - 1);
                     left = (int)Math.Round((leftTime - m_InputData.LeftmostUnixTime) * m_InputData.SamplesPerSecond);
-                    left = (left < 0) ? 0 : (left > samples.Length) ? samples.Length : left;
+                    left = Math.Clamp(left, 0, lastIndex);
                     right = (int)Math.Round((rightTime - m_InputData.LeftmostUnixTime) * m_InputData.SamplesPerSecond);
-                    right = (right < left) ? left : (right > samples.Length) ? samples.Length : right;
+                    right = Math.Clamp(right, left, lastIndex);
                 }
                 else
                 {
@@ -697,8 +698,11 @@ namespace SehensWerte.Controls.Sehens
                 {
                     m_ViewedData.CalculateSamplesPerSecond();
                     index = (int)Math.Round((time - m_ViewedData.LeftmostUnixTime) * m_ViewedData.SamplesPerSecond);
-                    value = time >= m_ViewedData.LeftmostUnixTime && index < samples.Length ? samples[index] : 0.0;
-                    time = (index * m_ViewedData.SamplesPerSecond) + m_ViewedData.LeftmostUnixTime;
+                    index = Math.Clamp(index, 0, Math.Max(0, samples.Length - 1));
+                    value = samples.Length == 0 ? 0.0 : samples[index];
+                    time = m_ViewedData.SamplesPerSecond == 0.0
+                        ? m_ViewedData.LeftmostUnixTime
+                        : (index / m_ViewedData.SamplesPerSecond) + m_ViewedData.LeftmostUnixTime;
                 }
                 else
                 {
@@ -914,7 +918,8 @@ namespace SehensWerte.Controls.Sehens
 
             public override string ToString()
             {
-                return string.Join(",", AsList().Select(x => x.Item1 + "=" + x.Item2.ToStringRound(5, 3, trimRight: false)));
+                return string.Join(",", AsList().Select(x => x.Item1 + "="
+                    + (x.Item1 == "Count" ? ((long)x.Item2).ToString() : x.Item2.ToStringRound(5, 3, trimRight: false))));
             }
 
             public Statistics(double[] samples, double[]? unixTime = null)

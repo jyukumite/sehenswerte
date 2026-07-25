@@ -1,3 +1,4 @@
+using Microsoft.VisualStudio.TestTools.UnitTesting;
 using SehensWerte.Files;
 using SehensWerte.Filters;
 using SehensWerte.Generators;
@@ -10,6 +11,290 @@ namespace SehensWerte.Controls.Sehens
 {
     public class ContextMenus
     {
+        private const int MinimumTestTraceSamples = 250_000;
+        private const int MaximumTestTraceSamples = 10_000_000;
+
+        // Weighted random length for bulk test traces: min..max, cubically biased toward the minimum.
+        private static int RandomTestTraceSampleCount()
+        {
+            double weight = Random.Shared.NextDouble();
+            double lowBiasedWeight = weight * weight * weight;
+            return MinimumTestTraceSamples
+                + (int)(lowBiasedWeight * (MaximumTestTraceSamples - MinimumTestTraceSamples + 1));
+        }
+
+        // Sine test data: `cycles` full cycles across the trace, so alignment and overlap are
+        // visually obvious when traces are grouped.
+        private static double[] TestSine(int count, double cycles, double amplitude = 1.0)
+        {
+            double[] result = new double[count];
+            for (int loop = 0; loop < count; loop++)
+            {
+                result[loop] = amplitude * Math.Sin(2.0 * Math.PI * cycles * loop / count);
+            }
+            return result;
+        }
+
+        // Monotonic random-walk times for YT test traces (mean step ~0.5s, never zero).
+        private static double[] RandomWalkTimes(int count, Random random)
+        {
+            double[] result = new double[count];
+            double t = 0.0;
+            for (int loop = 0; loop < count; loop++)
+            {
+                t += random.NextDouble() + 0.01;
+                result[loop] = t;
+            }
+            return result;
+        }
+
+        // One small deterministic group per row of the horizontal-axis grouping taxonomy
+        // (horizontal-axis-value-positioning-plan.md): aligned / ragged / gapped / incompatible
+        // affine, time (rate, count, sample-offset), fake and real YT, FFT, log-X, and the
+        // bad-axis warning. Distinct cycle counts per member make alignment errors obvious.
+        // internal for the smoke test below.
+        internal static void GenerateAxisTestMatrix(SehensControl scope)
+        {
+            scope.BeginUpdate();
+            try
+            {
+                TraceView Add(string name, double[] samples, double sps = double.NaN)
+                {
+                    scope[name].Update(samples, sps);
+                    TraceView view = scope[name].FirstView ?? throw new InvalidOperationException(name);
+                    view.PaintMode = TraceView.PaintModes.PolygonDigital;
+                    return view;
+                }
+                void Pair(string groupA, string groupB) => scope.GroupViews(new[] { groupA, groupB });
+
+                // ax01 Stretch: no axes, SAME counts - sample numbers line up, no warning.
+                // (Differing counts warn "mixed horizontal axes" - the shared sample-number
+                // gutter would only be right for the leader; see the ax20 zoo.)
+                Add("ax01 stretch A", TestSine(500, 3));
+                Add("ax01 stretch B", TestSine(500, 5, 0.5));
+                Pair("ax01 stretch A", "ax01 stretch B");
+
+                // ax02 ValueAlign identical: same affine axis - overlap exactly
+                Add("ax02 align A", TestSine(500, 3)).Samples.SetHorizontalAffine(0, 10, "rpm");
+                Add("ax02 align B", TestSine(500, 5, 0.5)).Samples.SetHorizontalAffine(0, 10, "rpm");
+                Pair("ax02 align A", "ax02 align B");
+
+                // ax03 ValueAlign ragged: same unit, B covers only the upper half of A's range
+                Add("ax03 ragged full", TestSine(500, 3)).Samples.SetHorizontalAffine(0, 10, "rpm");     // 0..5000
+                Add("ax03 ragged upper", TestSine(250, 5, 0.5)).Samples.SetHorizontalAffine(250, 10, "rpm"); // 2500..5000
+                Pair("ax03 ragged full", "ax03 ragged upper");
+
+                // ax04 ValueAlign gap: same unit, non-overlapping ranges - a visible gap is correct
+                Add("ax04 gap low", TestSine(200, 3)).Samples.SetHorizontalAffine(0, 10, "rpm");   // 0..2000
+                Add("ax04 gap high", TestSine(200, 5, 0.5)).Samples.SetHorizontalAffine(400, 10, "rpm"); // 4000..6000
+                Pair("ax04 gap low", "ax04 gap high");
+
+                // ax05 Incompatible: same shape, different units -> "mixed horizontal axes"
+                Add("ax05 unit rpm", TestSine(500, 3)).Samples.SetHorizontalAffine(0, 10, "rpm");
+                Add("ax05 unit kph", TestSine(500, 5, 0.5)).Samples.SetHorizontalAffine(0, 5, "kph");
+                Pair("ax05 unit rpm", "ax05 unit kph");
+
+                // ax06 Incompatible: plain index grouped with a real axis -> warn
+                Add("ax06 plain", TestSine(500, 3));
+                Add("ax06 affine", TestSine(500, 5, 0.5)).Samples.SetHorizontalAffine(0, 10, "rpm");
+                Pair("ax06 plain", "ax06 affine");
+
+                // ax07 Time, same rate, different counts - align left, short ends early
+                Add("ax07 time long", TestSine(5000, 3), sps: 1000);  // 0..5 s
+                Add("ax07 time short", TestSine(2000, 5, 0.5), sps: 1000); // 0..2 s
+                Pair("ax07 time long", "ax07 time short");
+
+                // ax08 Time, different rates, same count - ragged by duration
+                Add("ax08 rate fast", TestSine(2000, 3), sps: 1000); // 0..2 s
+                Add("ax08 rate slow", TestSine(2000, 5, 0.5), sps: 250); // 0..8 s
+                Pair("ax08 rate fast", "ax08 rate slow");
+
+                // ax09 Time, same rate, B shifted by a SAMPLE offset - ragged right
+                Add("ax09 shift base", TestSine(5000, 3), sps: 1000); // 0..5 s
+                Add("ax09 shift late", TestSine(2000, 5, 0.5), sps: 1000).Samples.SetHorizontalAffine(2000, 1, ""); // 2..4 s
+                Pair("ax09 shift base", "ax09 shift late");
+
+                // ax10 Time + affine-"s": sps and an explicit seconds axis are compatible
+                Add("ax10 sps seconds", TestSine(2000, 3), sps: 1000); // 0..2 s
+                Add("ax10 affine seconds", TestSine(3000, 5, 0.5)).Samples.SetHorizontalAffine(0, 0.001, "s"); // 0..3 s
+                Pair("ax10 sps seconds", "ax10 affine seconds");
+
+                // ax11 Incompatible: lin-X grouped with log-X -> warn
+                Add("ax11 lin", TestSine(500, 3)).Samples.SetHorizontalAffine(0, 10, "rpm");
+                TraceView ax11log = Add("ax11 log", TestSine(500, 5, 0.5));
+                ax11log.Samples.SetHorizontalAffine(0, 10, "rpm");
+                ax11log.LogHorizontal = TraceView.LogHorizontalMode.Log;
+                Pair("ax11 lin", "ax11 log");
+
+                // ax12 Log pair: identical ranges, both log-X - aligned
+                TraceView ax12a = Add("ax12 log A", TestSine(500, 3));
+                ax12a.Samples.SetHorizontalAffine(0, 10, "Hz");
+                ax12a.LogHorizontal = TraceView.LogHorizontalMode.Log;
+                TraceView ax12b = Add("ax12 log B", TestSine(500, 5, 0.5));
+                ax12b.Samples.SetHorizontalAffine(0, 10, "Hz");
+                ax12b.LogHorizontal = TraceView.LogHorizontalMode.Log;
+                Pair("ax12 log A", "ax12 log B");
+
+                // ax13 fake YT: sps + start time; B starts halfway through A - overlap by time
+                Add("ax13 fakeyt A", TestSine(1000, 3), sps: 100).Samples.InputLeftmostUnixTime = 1_700_000_000; // 10 s
+                Add("ax13 fakeyt B", TestSine(600, 5, 0.5), sps: 100).Samples.InputLeftmostUnixTime = 1_700_000_005; // 6 s, +5 s
+                Pair("ax13 fakeyt A", "ax13 fakeyt B");
+
+                // ax14 real YT: random-walk times, B lags into the second half of A
+                Random random = new Random(12345); // deterministic so re-runs are comparable
+                double[] walkA = RandomWalkTimes(800, random);
+                double halfway = walkA[walkA.Length / 2];
+                double[] walkB = RandomWalkTimes(500, random).Select(t => t + halfway).ToArray();
+                scope["ax14 realyt A"].Update(walkA.Select(Math.Sin), walkA);
+                scope["ax14 realyt B"].Update(walkB.Select(t => 0.5 * Math.Cos(t)), walkB);
+                Pair("ax14 realyt A", "ax14 realyt B");
+
+                // ax15 fake YT grouped with a plain trace
+                Add("ax15 yt", TestSine(1000, 3), sps: 100).Samples.InputLeftmostUnixTime = 1_700_000_000;
+                Add("ax15 plain", TestSine(400, 5, 0.5));
+                Pair("ax15 yt", "ax15 plain");
+
+                // ax16 FFT pair: two tones - Hz-aligned by the FFT painter's own path
+                Add("ax16 fft 500Hz", ToneSamples(8000, 2048, 500), sps: 8000).MathType = TraceView.MathTypes.FFTMagnitude;
+                Add("ax16 fft 1500Hz", ToneSamples(8000, 2048, 1500), sps: 8000).MathType = TraceView.MathTypes.FFTMagnitude;
+                Pair("ax16 fft 500Hz", "ax16 fft 1500Hz");
+
+                // ax17 FFT grouped with a plain trace -> warn
+                Add("ax17 fft", ToneSamples(8000, 2048, 500), sps: 8000).MathType = TraceView.MathTypes.FFTMagnitude;
+                Add("ax17 plain", TestSine(500, 3));
+                Pair("ax17 fft", "ax17 plain");
+
+                // ax18 YT grouped with FFT - the taxonomy's deepest mismatch
+                Add("ax18 yt", TestSine(1000, 3), sps: 100).Samples.InputLeftmostUnixTime = 1_700_000_000;
+                Add("ax18 fft", ToneSamples(8000, 2048, 500), sps: 8000).MathType = TraceView.MathTypes.FFTMagnitude;
+                Pair("ax18 yt", "ax18 fft");
+
+                // ax19 bad axis: invalid multiplier -> "(bad horizontal axis)" warning, sample fallback
+                Add("ax19 bad multiplier", TestSine(500, 3)).Samples.SetHorizontalAffine(0, -5, "rpm");
+
+                // ax20 window zoo: IDENTICAL source data, one member per view-window reshape, so
+                // each override's effect is directly comparable. Offset N drops/trims the left
+                // (source[N] at index 0), negative offset opens a left region, length trims or
+                // extends the right. Pads fill only the regions the window creates (DC-shifted
+                // data so the flat pads are visible; pad-right skips a last value of exactly 0).
+                // The members' drawn counts differ, so the group deliberately carries the
+                // "mixed horizontal axes" warning - the sample-number gutter fits only the leader.
+                double[] ax20base = TestSine(500, 2.5, 0.4).Select(v => v + 0.5).ToArray();
+                TraceView Window20(string name, int offset, int length, bool pads = false)
+                {
+                    TraceView v = Add(name, ax20base);
+                    v.ViewOffsetOverride = offset;
+                    v.ViewLengthOverride = length;
+                    if (pads)
+                    {
+                        v.PadLeftWithFirstValue = true;
+                        v.PadRightWithLastValue = true;
+                    }
+                    return v;
+                }
+                Add("ax20 base", ax20base);
+                Window20("ax20 trim left", offset: 150, length: 350);
+                Window20("ax20 trim right", offset: 0, length: 350);
+                Window20("ax20 trim both", offset: 100, length: 300);
+                Window20("ax20 slide", offset: -150, length: 0);            // zeros lead in, tail lost
+                Window20("ax20 pad left", offset: -150, length: 650, pads: true);
+                Window20("ax20 pad right", offset: 0, length: 650, pads: true);
+                Window20("ax20 pad both", offset: -150, length: 800, pads: true);
+                scope.GroupViews(new[]
+                {
+                    "ax20 base", "ax20 trim left", "ax20 trim right", "ax20 trim both",
+                    "ax20 slide", "ax20 pad left", "ax20 pad right", "ax20 pad both",
+                });
+
+                // ax21 view length/offset on an affine group: B MOVES source samples 100..350 to
+                // its start (view offset/length reshape the data; the axis does not follow), so it
+                // reads 0..2500 rpm at the left of A's 0..5000, plus the "(Offset)" warning
+                Add("ax21 window full", TestSine(500, 3)).Samples.SetHorizontalAffine(0, 10, "rpm");
+                TraceView ax21crop = Add("ax21 window cropped", TestSine(500, 5, 0.5));
+                ax21crop.Samples.SetHorizontalAffine(0, 10, "rpm");
+                ax21crop.ViewOffsetOverride = 100;
+                ax21crop.ViewLengthOverride = 250;
+                Pair("ax21 window full", "ax21 window cropped");
+
+                // ax22 view length/offset on a time group: B moves 2 s of a 5 s trace to its
+                // start - drawn as 0..1 s alongside A
+                Add("ax22 time full", TestSine(5000, 3), sps: 1000);
+                TraceView ax22crop = Add("ax22 time cropped", TestSine(5000, 5, 0.5), sps: 1000);
+                ax22crop.ViewOffsetOverride = 2000;
+                ax22crop.ViewLengthOverride = 1000;
+                Pair("ax22 time full", "ax22 time cropped");
+
+                // ax23 EVERYTHING affine: offset+multiplier+unit AND a view window. Both share
+                // value = 10 * (sample + 50) rpm; the window member draws source samples 100..350
+                // and reads 500..3000 rpm inside the full member's 500..5500
+                TraceView ax23full = Add("ax23 combo full", TestSine(500, 3));
+                ax23full.Samples.SetHorizontalAffine(50, 10, "rpm");
+                TraceView ax23win = Add("ax23 combo window", TestSine(500, 5, 0.5));
+                ax23win.Samples.SetHorizontalAffine(50, 10, "rpm");
+                ax23win.ViewOffsetOverride = 100;
+                ax23win.ViewLengthOverride = 250;
+                Pair("ax23 combo full", "ax23 combo window");
+
+                // ax24 EVERYTHING time: sps + affine sample-offset AND a view window. Both share
+                // value = (sample + 500)/1000 s; the window member shows 0.5..1.5 s of 0.5..5.5 s
+                TraceView ax24full = Add("ax24 combo time full", TestSine(5000, 3), sps: 1000);
+                ax24full.Samples.SetHorizontalAffine(500, 1, "");
+                TraceView ax24win = Add("ax24 combo time window", TestSine(5000, 5, 0.5), sps: 1000);
+                ax24win.Samples.SetHorizontalAffine(500, 1, "");
+                ax24win.ViewOffsetOverride = 2000;
+                ax24win.ViewLengthOverride = 1000;
+                Pair("ax24 combo time full", "ax24 combo time window");
+
+                // ax25 FFT of a real-YT trace: non-uniformly timed samples are RESAMPLED onto a
+                // uniform grid (TraceData.InterpolateYT feeds ViewedSamplesInterpolatedAsDouble)
+                // before the FFT. The grid rate comes from the SMALLEST positive time gap
+                // (CalculateSamplesPerSecond), so the densest region loses nothing and sparse
+                // stretches are upsampled - the walk's ~0.01 s min step gives ~50 Hz Nyquist.
+                // The tone is in WALK time, surviving the resample as a clean ~0.3 Hz peak.
+                // Grouped with the untransformed YT source for comparison.
+                double[] walk25 = RandomWalkTimes(2048, random);
+                double[] tone25 = walk25.Select(t => Math.Sin(2.0 * Math.PI * 0.3 * t)).ToArray();
+                scope["ax25 yt source"].Update(tone25, walk25);
+                scope["ax25 yt source"].FirstView!.PaintMode = TraceView.PaintModes.PolygonDigital;
+                scope["ax25 yt fft"].Update(tone25, walk25);
+                TraceView ax25fft = scope["ax25 yt fft"].FirstView ?? throw new InvalidOperationException("ax25");
+                ax25fft.PaintMode = TraceView.PaintModes.PolygonDigital;
+                ax25fft.MathType = TraceView.MathTypes.FFTMagnitude;
+                Pair("ax25 yt source", "ax25 yt fft");
+
+                // ax26 fake YT with DIFFERENT sample rates: alignment is by wall clock, so a
+                // 100 sps and a 25 sps member line up by start time regardless of rate
+                Add("ax26 fakeyt fast", TestSine(1000, 3), sps: 100).Samples.InputLeftmostUnixTime = 1_700_000_000;   // 10 s
+                Add("ax26 fakeyt slow", TestSine(150, 5, 0.5), sps: 25).Samples.InputLeftmostUnixTime = 1_700_000_002; // 6 s, +2 s
+                Pair("ax26 fakeyt fast", "ax26 fakeyt slow");
+
+                // ax27 fake YT pads: paint-level for YT traces - the first/last value is held
+                // flat to the edges of the visible time window (the array pads never run for YT)
+                TraceView ax27early = Add("ax27 ytpad early", TestSine(1000, 3), sps: 100); // 0..10 s of 0..11
+                ax27early.Samples.InputLeftmostUnixTime = 1_700_000_000;
+                ax27early.PadRightWithLastValue = true;
+                TraceView ax27late = Add("ax27 ytpad late", TestSine(600, 5, 0.5), sps: 100); // 5..11 s
+                ax27late.Samples.InputLeftmostUnixTime = 1_700_000_005;
+                ax27late.PadLeftWithFirstValue = true;
+                Pair("ax27 ytpad early", "ax27 ytpad late");
+            }
+            finally
+            {
+                scope.EndUpdate();
+            }
+
+            double[] ToneSamples(double sps, int count, double frequencyHz)
+            {
+                return new ToneGenerator
+                {
+                    SamplesPerSecond = sps,
+                    FrequencyStart = frequencyHz,
+                    FrequencyEnd = frequencyHz,
+                    Amplitude = 1.0,
+                }.Generate(count);
+            }
+        }
+
         private class NoiseTraceForm
         {
             [AutoEditor.DisplayName("Name")]
@@ -941,6 +1226,7 @@ namespace SehensWerte.Controls.Sehens
             {
                 SubMenuText = subMenuText,
                 Text = "Filter Coefficients",
+                Sort = 8,
                 ShownWhenTrace = ScopeContextMenu.MenuItem.ShowWhen.Always,
                 ShownWhenMouse = PaintBoxMouseInfo.GuiSection.Anywhere,
                 Call = ScopeContextMenu.MenuItem.CallWhen.Once,
@@ -1000,6 +1286,7 @@ namespace SehensWerte.Controls.Sehens
             {
                 SubMenuText = subMenuText,
                 Text = "Window",
+                Sort = 5,
                 ShownWhenTrace = ScopeContextMenu.MenuItem.ShowWhen.Always,
                 ShownWhenMouse = PaintBoxMouseInfo.GuiSection.Anywhere,
                 Call = ScopeContextMenu.MenuItem.CallWhen.Once,
@@ -1019,6 +1306,7 @@ namespace SehensWerte.Controls.Sehens
             {
                 SubMenuText = subMenuText,
                 Text = "Noise",
+                Sort = 3,
                 ShownWhenTrace = ScopeContextMenu.MenuItem.ShowWhen.Always,
                 ShownWhenMouse = PaintBoxMouseInfo.GuiSection.Anywhere,
                 Call = ScopeContextMenu.MenuItem.CallWhen.Once,
@@ -1038,6 +1326,7 @@ namespace SehensWerte.Controls.Sehens
             {
                 SubMenuText = subMenuText,
                 Text = "Tone",
+                Sort = 1, // signal generators first
                 ShownWhenTrace = ScopeContextMenu.MenuItem.ShowWhen.Always,
                 ShownWhenMouse = PaintBoxMouseInfo.GuiSection.Anywhere,
                 Call = ScopeContextMenu.MenuItem.CallWhen.Once,
@@ -1066,6 +1355,7 @@ namespace SehensWerte.Controls.Sehens
             {
                 SubMenuText = subMenuText,
                 Text = "Sweep",
+                Sort = 2,
                 ShownWhenTrace = ScopeContextMenu.MenuItem.ShowWhen.Always,
                 ShownWhenMouse = PaintBoxMouseInfo.GuiSection.Anywhere,
                 Call = ScopeContextMenu.MenuItem.CallWhen.Once,
@@ -1093,6 +1383,7 @@ namespace SehensWerte.Controls.Sehens
             {
                 SubMenuText = subMenuText,
                 Text = "Sin Cardinal (sinc)",
+                Sort = 4,
                 ShownWhenTrace = ScopeContextMenu.MenuItem.ShowWhen.Always,
                 ShownWhenMouse = PaintBoxMouseInfo.GuiSection.Anywhere,
                 Call = ScopeContextMenu.MenuItem.CallWhen.Once,
@@ -1112,6 +1403,7 @@ namespace SehensWerte.Controls.Sehens
             {
                 SubMenuText = subMenuText,
                 Text = "100 test traces",
+                Sort = 12,
                 ShownWhenTrace = ScopeContextMenu.MenuItem.ShowWhen.Always,
                 ShownWhenMouse = PaintBoxMouseInfo.GuiSection.Anywhere,
                 Call = ScopeContextMenu.MenuItem.CallWhen.Once,
@@ -1121,13 +1413,13 @@ namespace SehensWerte.Controls.Sehens
                     a.Scope.BeginUpdate();
                     try
                     {
-                        Random random = new Random();
-                        Parallel.For(0, 99, (x) =>
+                        Parallel.For(0, 99, (loop) =>
                         {
-                            TraceData data = a.Scope["Test" + x];
-                            data.Update(new NoiseGenerator().Generate(250000));
+                            TraceData data = a.Scope["Test" + loop];
+                            int sampleCount = RandomTestTraceSampleCount();
+                            data.UpdateByRef(new NoiseGenerator().Generate(sampleCount), double.NaN);
                             TraceData[] traceList = a.Scope.AllTraces;
-                            data.FirstView!.GroupWithView = traceList[random.Next(traceList.Length)].Name;
+                            data.FirstView!.GroupWithView = traceList[Random.Shared.Next(traceList.Length)].Name;
                         });
                     }
                     finally
@@ -1141,6 +1433,7 @@ namespace SehensWerte.Controls.Sehens
             {
                 SubMenuText = subMenuText,
                 Text = "YT test traces",
+                Sort = 11,
                 ShownWhenTrace = ScopeContextMenu.MenuItem.ShowWhen.Always,
                 ShownWhenMouse = PaintBoxMouseInfo.GuiSection.Anywhere,
                 Call = ScopeContextMenu.MenuItem.CallWhen.Once,
@@ -1149,20 +1442,12 @@ namespace SehensWerte.Controls.Sehens
                 {
                     new Thread((ThreadStart)delegate
                     {
-                        double[] yt3y = new double[1000];
-                        double[] yt3t = new double[1000];
-                        double[] yt4y = new double[1000];
-                        double[] yt4t = new double[1000];
                         Random random = new Random();
-                        double t = 0.0;
-                        for (int i = 0; i < yt3y.Length; i++)
-                        {
-                            t += random.NextDouble() + 0.01;
-                            yt3t[i] = t * 2;
-                            yt4t[i] = t - 3;
-                            yt3y[i] = random.NextDouble();
-                            yt4y[i] = Math.Sin(t);
-                        }
+                        double[] walk = RandomWalkTimes(1000, random);
+                        double[] yt3t = walk.Select(t => t * 2).ToArray();
+                        double[] yt4t = walk.Select(t => t - 3).ToArray();
+                        double[] yt3y = walk.Select(t => random.NextDouble()).ToArray();
+                        double[] yt4y = walk.Select(Math.Sin).ToArray();
                         a.Scope["yt test 1"].Update(DoubleVectorExtensions.Range(1, 15, 2), DoubleVectorExtensions.Range(4, 15, 1));
                         a.Scope["yt test 2"].Update(DoubleVectorExtensions.Range(1, 5, 2), new double[5] { 10.0, 15.0, 19.0, 22.0, 23.0 });
                         a.Scope["yt test 3"].Update(yt3y, yt3t);
@@ -1181,8 +1466,21 @@ namespace SehensWerte.Controls.Sehens
 
             contextMenu.Add(new ScopeContextMenu.MenuItem
             {
+                SubMenuText = subMenuText,
+                Text = "Axis test matrix",
+                Sort = 10, // bulk test data last
+                ShownWhenTrace = ScopeContextMenu.MenuItem.ShowWhen.Always,
+                ShownWhenMouse = PaintBoxMouseInfo.GuiSection.Anywhere,
+                Call = ScopeContextMenu.MenuItem.CallWhen.Once,
+                ShownText = ScopeContextMenu.MenuItem.TextDisplay.NoChange,
+                Clicked = (a) => GenerateAxisTestMatrix(a.Scope),
+            });
+
+            contextMenu.Add(new ScopeContextMenu.MenuItem
+            {
                 SubMenuText = "Generate",
                 Text = "All filters",
+                Sort = 7,
                 ShownWhenTrace = ScopeContextMenu.MenuItem.ShowWhen.Always,
                 ShownWhenMouse = PaintBoxMouseInfo.GuiSection.Anywhere,
                 Call = ScopeContextMenu.MenuItem.CallWhen.Once,
@@ -1204,6 +1502,7 @@ namespace SehensWerte.Controls.Sehens
             {
                 SubMenuText = "Generate",
                 Text = "All windows",
+                Sort = 6, // reference sets
                 ShownWhenTrace = ScopeContextMenu.MenuItem.ShowWhen.Always,
                 ShownWhenMouse = PaintBoxMouseInfo.GuiSection.Anywhere,
                 Call = ScopeContextMenu.MenuItem.CallWhen.Once,
@@ -2003,6 +2302,110 @@ namespace SehensWerte.Controls.Sehens
                 ShownText = ScopeContextMenu.MenuItem.TextDisplay.NoChange,
                 Clicked = (a) => Add(a),
             });
+        }
+    }
+
+    // Smoke test for the axis test matrix: every group classifies as its taxonomy row intends,
+    // and the whole board paints.
+    [TestClass]
+    public class AxisTestMatrixTests
+    {
+        [TestMethod]
+        public void MatrixGeneratesEveryTaxonomyRow()
+        {
+            var scope = new SehensControl();
+            ContextMenus.GenerateAxisTestMatrix(scope);
+            SehensTestHarness.Layout(scope);
+            Assert.AreEqual(59, scope.AllViews.Length); // 25 pairs + the ax20 zoo of 8 + lone ax19
+
+            TraceGroupDisplay Info(string name) => scope.PaintBox.TraceToGroupDisplayInfo(
+                scope.ViewByName(name) ?? throw new AssertFailedException($"view {name} missing"));
+
+            Assert.AreEqual(HorizontalMode.Stretch, Info("ax01 stretch A").HMode);
+            Assert.AreEqual(HorizontalMode.ValueAlign, Info("ax02 align A").HMode);
+            Assert.AreEqual(HorizontalMode.ValueAlign, Info("ax03 ragged full").HMode);
+            Assert.AreEqual(HorizontalMode.ValueAlign, Info("ax04 gap low").HMode);
+            Assert.AreEqual(HorizontalMode.Incompatible, Info("ax05 unit rpm").HMode);
+            Assert.AreEqual(HorizontalMode.Incompatible, Info("ax06 plain").HMode);
+            Assert.AreEqual(HorizontalMode.ValueAlign, Info("ax07 time long").HMode);
+            Assert.AreEqual(HorizontalMode.ValueAlign, Info("ax08 rate fast").HMode);
+            Assert.AreEqual(HorizontalMode.ValueAlign, Info("ax09 shift base").HMode);
+            Assert.AreEqual(HorizontalMode.ValueAlign, Info("ax10 sps seconds").HMode);
+            Assert.AreEqual(HorizontalMode.Incompatible, Info("ax11 lin").HMode);
+            Assert.AreEqual(HorizontalMode.ValueAlign, Info("ax12 log A").HMode);
+            Assert.IsTrue(Info("ax13 fakeyt A").YTTrace);
+            Assert.AreEqual(HorizontalMode.Stretch, Info("ax13 fakeyt A").HMode); // YT pair keeps its own time window
+            Assert.IsTrue(Info("ax14 realyt A").YTTrace);
+            Assert.AreEqual(HorizontalMode.Stretch, Info("ax14 realyt A").HMode);
+            Assert.AreEqual(HorizontalMode.Incompatible, Info("ax15 yt").HMode); // YT + plain -> warn
+            Assert.AreEqual(HorizontalMode.Stretch, Info("ax16 fft 500Hz").HMode); // FFT pair keeps its own path
+            Assert.AreEqual(HorizontalMode.Incompatible, Info("ax17 fft").HMode);
+            Assert.IsTrue(Info("ax18 yt").YTTrace);
+            Assert.AreEqual(HorizontalMode.Incompatible, Info("ax18 yt").HMode); // YT + FFT -> warn even YT-led
+            var bad = scope.ViewByName("ax19 bad multiplier") ?? throw new AssertFailedException("ax19 missing");
+            Assert.IsTrue(bad.Samples.HorizontalAffineInvalid);
+            Assert.AreEqual(HorizontalMode.Incompatible, Info("ax20 base").HMode); // differing counts warn
+            double[] Drawn(string name) => (scope.ViewByName(name)
+                ?? throw new AssertFailedException($"view {name} missing")).DrawnSamples
+                ?? throw new AssertFailedException($"view {name} drew nothing");
+            double[] ax20base = Drawn("ax20 base");
+            Assert.AreEqual(350, Drawn("ax20 trim left").Length);
+            Assert.AreEqual(ax20base[150], Drawn("ax20 trim left")[0], 1e-9);  // source[150] at index 0
+            Assert.AreEqual(350, Drawn("ax20 trim right").Length);
+            Assert.AreEqual(300, Drawn("ax20 trim both").Length);
+            Assert.AreEqual(500, Drawn("ax20 slide").Length);
+            Assert.AreEqual(0.0, Drawn("ax20 slide")[0], 1e-9);                // unpadded lead-in is zeros
+            Assert.AreEqual(ax20base[0], Drawn("ax20 slide")[150], 1e-9);      // source[0] at index 150
+            Assert.AreEqual(650, Drawn("ax20 pad left").Length);
+            Assert.AreEqual(ax20base[0], Drawn("ax20 pad left")[0], 1e-9);     // pad-left holds first value
+            Assert.AreEqual(650, Drawn("ax20 pad right").Length);
+            Assert.AreEqual(ax20base[499], Drawn("ax20 pad right")[649], 1e-9); // pad-right holds last value
+            double[] padBoth = Drawn("ax20 pad both");
+            Assert.AreEqual(800, padBoth.Length);
+            Assert.AreEqual(padBoth[150], padBoth[0], 1e-9);
+            Assert.AreEqual(padBoth[649], padBoth[799], 1e-9);
+            Assert.AreEqual(HorizontalMode.ValueAlign, Info("ax21 window full").HMode);
+            Assert.AreEqual(HorizontalMode.ValueAlign, Info("ax22 time full").HMode);
+            // ax23/ax24: affine offset+multiplier / sps+offset combined with a view window
+            Assert.AreEqual(HorizontalMode.ValueAlign, Info("ax23 combo full").HMode);
+            var combo = (scope.ViewByName("ax23 combo window") ?? throw new AssertFailedException("ax23 missing")).DrawnExtents();
+            Assert.AreEqual(500.0, combo.leftSampleNumberValue, 1e-9);   // 10 * (0 + 50)
+            Assert.AreEqual(3000.0, combo.rightSampleNumberValue, 1e-9); // 10 * (250 + 50)
+            Assert.AreEqual(HorizontalMode.ValueAlign, Info("ax24 combo time full").HMode);
+            var comboTime = (scope.ViewByName("ax24 combo time window") ?? throw new AssertFailedException("ax24 missing")).DrawnExtents();
+            Assert.AreEqual(0.5, comboTime.leftSampleNumberValue, 1e-9); // (0 + 500) / 1000
+            Assert.AreEqual(1.5, comboTime.rightSampleNumberValue, 1e-9);
+            Assert.AreEqual("s", comboTime.sampleValueUnit);
+            // ax25: FFT of a real-YT trace - resampled onto a uniform grid whose rate comes from
+            // the SMALLEST time gap (walk min step ~0.01 s -> Nyquist ~50 Hz), peak at 0.3 Hz
+            TraceView ytFft = scope.ViewByName("ax25 yt fft") ?? throw new AssertFailedException("ax25 missing");
+            Assert.AreEqual(HorizontalKind.Fft, ytFft.HorizontalKind);
+            var ytExt = ytFft.DrawnExtents();
+            Assert.AreEqual("Hz", ytExt.sampleValueUnit);
+            Assert.IsTrue(ytExt.rightSampleNumberValue > 10.0 && ytExt.rightSampleNumberValue < 60.0,
+                $"Nyquist from the min-gap-derived rate, got {ytExt.rightSampleNumberValue:0.###} Hz");
+            double[] spectrum = ytFft.DrawnSamples ?? throw new AssertFailedException("ax25 drew nothing");
+            int ytPeak = 1;
+            for (int loop = 1; loop < spectrum.Length; loop++)
+            {
+                if (spectrum[loop] > spectrum[ytPeak]) ytPeak = loop;
+            }
+            double ytPeakHz = ytPeak * ytExt.rightSampleNumberValue / spectrum.Length;
+            Assert.AreEqual(0.3, ytPeakHz, 0.1, $"resampled tone peak at {ytPeakHz:0.###} Hz");
+            // ax26: mixed-rate fake YT still time-aligns; group window is the union of both
+            TraceGroupDisplay mixedRate = Info("ax26 fakeyt fast");
+            Assert.IsTrue(mixedRate.YTTrace);
+            Assert.AreEqual(1_700_000_000.0, mixedRate.LeftUnixTime, 0.1);
+            Assert.AreEqual(1_700_000_010.0, mixedRate.RightUnixTime, 0.1);
+            Assert.IsTrue(Info("ax27 ytpad early").YTTrace);
+
+            scope.ActiveSkin.ExportTraces = Skin.TraceSelections.VisibleTraces;
+            using Bitmap bmp = scope.PaintBox.ScreenshotToBitmap(scope.ActiveSkin, null);
+            Assert.IsTrue(bmp.Width > 1 && bmp.Height > 1, "the whole matrix must paint");
+            // paint exceptions are caught and painted as pixels; the counter makes them fail tests
+            // (this is how the fake-YT IndexOutOfRange would have been caught)
+            Assert.AreEqual(0, scope.PaintBox.PaintExceptionCount,
+                scope.PaintBox.LastPaintExceptionText ?? "paint exception recorded");
         }
     }
 }

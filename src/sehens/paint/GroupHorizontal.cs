@@ -6,8 +6,9 @@ namespace SehensWerte.Controls.Sehens
     {
         None,   // no explicit axis, no sample rate - intent is "stretch to fill the pane"
         Time,   // InputSamplesPerSecond != 0; value is seconds (unit "s"). SPS is affine (mult 1/sps).
-        Affine, // SetHorizontalAffine(offset, multiplier, unit); value = offset + multiplier*sample
+        Affine, // SetHorizontalAffine(offset, multiplier, unit); value = multiplier*(sample+offset)
         Fft,    // frequency (Hz) - its own painter/axis path
+        Yt,     // draws as YT (unix time) - its own group-shared time window path
     }
 
     public enum HorizontalMode
@@ -50,8 +51,10 @@ namespace SehensWerte.Controls.Sehens
         // Classify a group and, when ValueAlign, return the union value-domain [Left, Right] + unit.
         //  - all None                         -> Stretch (legacy per-trace fill)
         //  - all FFT                          -> Stretch (FFT's own Hz path handles alignment)
+        //  - all YT                           -> Stretch (YT's own group-shared time window)
         //  - all Time/Affine, one shared unit  -> ValueAlign over the union of member ranges
-        //  - anything else (None mixed with a domain, differing units, FFT + non-FFT) -> Incompatible
+        //  - anything else (None mixed with a domain, differing units, FFT or YT mixed with
+        //    anything else) -> Incompatible
         // Log-X: a lin-X member cannot share a value->pixel map with a log-X member -> Incompatible.
         // All-log members ValueAlign only when their ranges are IDENTICAL (full-pane sub-windows):
         // SubWindow's linear pixel placement cannot compose with the per-trace log projection.
@@ -64,13 +67,15 @@ namespace SehensWerte.Controls.Sehens
             bool allNone = true;
             bool allValue = true;
             bool allFft = true;
+            bool allYt = true;
             foreach (var m in members)
             {
                 if (m.Kind != HorizontalKind.None) allNone = false;
                 if (m.Kind != HorizontalKind.Time && m.Kind != HorizontalKind.Affine) allValue = false;
                 if (m.Kind != HorizontalKind.Fft) allFft = false;
+                if (m.Kind != HorizontalKind.Yt) allYt = false;
             }
-            if (allFft)
+            if (allFft || allYt)
             {
                 return new Domain { Mode = HorizontalMode.Stretch, Unit = "" };
             }
@@ -79,6 +84,10 @@ namespace SehensWerte.Controls.Sehens
                 foreach (var m in members)
                 {
                     if (m.Log != members[0].Log) // lin-X + log-X sample-number traces: one gutter cannot serve both
+                    {
+                        return new Domain { Mode = HorizontalMode.Incompatible, Unit = "" };
+                    }
+                    if (m.Left != members[0].Left || m.Right != members[0].Right)
                     {
                         return new Domain { Mode = HorizontalMode.Incompatible, Unit = "" };
                     }
@@ -158,8 +167,15 @@ namespace SehensWerte.Controls.Sehens
         [TestMethod]
         public void AllNoneStretches()
         {
-            var d = GroupHorizontal.Classify(new[] { M(HorizontalKind.None, "", 0, 100), M(HorizontalKind.None, "", 0, 50) });
+            var d = GroupHorizontal.Classify(new[] { M(HorizontalKind.None, "", 0, 100), M(HorizontalKind.None, "", 0, 100) });
             Assert.AreEqual(HorizontalMode.Stretch, d.Mode);
+        }
+
+        [TestMethod]
+        public void NoneDifferingCountsIncompatible()
+        {
+            var d = GroupHorizontal.Classify(new[] { M(HorizontalKind.None, "", 0, 100), M(HorizontalKind.None, "", 0, 50) });
+            Assert.AreEqual(HorizontalMode.Incompatible, d.Mode);
         }
 
         [TestMethod]
@@ -251,7 +267,7 @@ namespace SehensWerte.Controls.Sehens
         [TestMethod]
         public void WindowNonValueAlignUnchanged()
         {
-            var members = new[] { M(HorizontalKind.None, "", 0, 100), M(HorizontalKind.None, "", 0, 50) };
+            var members = new[] { M(HorizontalKind.None, "", 0, 100), M(HorizontalKind.None, "", 0, 100) };
             var d = GroupHorizontal.Window(members, zoom: 0.5, pan: 0.1);
             Assert.AreEqual(HorizontalMode.Stretch, d.Mode);
         }
@@ -315,7 +331,7 @@ namespace SehensWerte.Controls.Sehens
             var d = GroupHorizontal.Classify(new[]
             {
                 M(HorizontalKind.None, "", 0, 100, log: true),
-                M(HorizontalKind.None, "", 0, 50, log: true),
+                M(HorizontalKind.None, "", 0, 100, log: true),
             });
             Assert.AreEqual(HorizontalMode.Stretch, d.Mode);
         }
@@ -331,6 +347,40 @@ namespace SehensWerte.Controls.Sehens
                 M(HorizontalKind.None, "", 0, 100),
             });
             Assert.AreEqual(HorizontalMode.Incompatible, d.Mode);
+        }
+
+        [TestMethod]
+        public void AllYtGroupLeftToItsOwnTimeWindow()
+        {
+            var d = GroupHorizontal.Classify(new[]
+            {
+                M(HorizontalKind.Yt, "", 0, 1000),
+                M(HorizontalKind.Yt, "", 0, 600),
+            });
+            Assert.AreEqual(HorizontalMode.Stretch, d.Mode);
+        }
+
+        [TestMethod]
+        public void YtMixedWithAnythingIncompatible()
+        {
+            var ytPlusTime = GroupHorizontal.Classify(new[]
+            {
+                M(HorizontalKind.Yt, "", 0, 1000),
+                M(HorizontalKind.Time, "", 0, 10),
+            });
+            Assert.AreEqual(HorizontalMode.Incompatible, ytPlusTime.Mode);
+            var ytPlusFft = GroupHorizontal.Classify(new[]
+            {
+                M(HorizontalKind.Yt, "", 0, 1000),
+                M(HorizontalKind.Fft, "", 0, 4000),
+            });
+            Assert.AreEqual(HorizontalMode.Incompatible, ytPlusFft.Mode);
+            var ytPlusNone = GroupHorizontal.Classify(new[]
+            {
+                M(HorizontalKind.Yt, "", 0, 1000),
+                M(HorizontalKind.None, "", 0, 500),
+            });
+            Assert.AreEqual(HorizontalMode.Incompatible, ytPlusNone.Mode);
         }
 
         [TestMethod]

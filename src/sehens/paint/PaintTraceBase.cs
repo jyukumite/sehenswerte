@@ -788,6 +788,8 @@ namespace SehensWerte.Controls.Sehens
             if (effectiveLeft <= 0 || right <= effectiveLeft) return;
             float width = info.ProjectionArea.Width;
             float reservedRight = BottomTitleReservedRight(info, graphics);
+            SmoothingMode prevSmoothing = graphics.SmoothingMode;
+            graphics.SmoothingMode = SmoothingMode.None; // significantly slower when antialiased
             graphics.SetClip(new Rectangle(info.ProjectionArea.Left, info.ProjectionArea.Top, info.ProjectionArea.Width, info.BottomGutter.Bottom - info.ProjectionArea.Top));
             float lastLabelRight = float.NegativeInfinity;
             foreach (double value in GetLogPartitions(effectiveLeft, right))
@@ -806,6 +808,7 @@ namespace SehensWerte.Controls.Sehens
                 }
             }
             graphics.ResetClip();
+            graphics.SmoothingMode = prevSmoothing;
         }
 
         protected void PaintGutterBottomPartition(TraceGroupDisplay info, Graphics graphics, double left, double right)
@@ -833,6 +836,8 @@ namespace SehensWerte.Controls.Sehens
             skip = ((skip == 0) ? 1 : skip);
             int textIndex = (int)(index % skip);
             float reservedRight = BottomTitleReservedRight(info, graphics);
+            SmoothingMode prevSmoothing = graphics.SmoothingMode;
+            graphics.SmoothingMode = SmoothingMode.None; // significantly slower when antialiased
             graphics.SetClip(new Rectangle(info.ProjectionArea.Left, info.ProjectionArea.Top, info.ProjectionArea.Width, info.BottomGutter.Bottom - info.ProjectionArea.Top));
             foreach (double value in partitions)
             {
@@ -853,6 +858,7 @@ namespace SehensWerte.Controls.Sehens
                 }
             }
             graphics.ResetClip();
+            graphics.SmoothingMode = prevSmoothing;
         }
 
         protected void PaintDots(Graphics graphics, Brush brush, PointF[] zipped)

@@ -17,7 +17,7 @@ namespace SehensWerte.Controls
         public SehensControl Scope => View0.Scope;
 
         public Skin Skin => Scope.ActiveSkin;
-        public bool YTTrace => View0.Samples.ViewedIsYTTrace && (View0.CanShowRealYT || View0.CanShowFakeYT);
+        public bool YTTrace => View0.IsYtDisplay; // same predicate as HorizontalKind.Yt
         public int OverlayIndex => View0.Painted.TraceIndex;
 
 
@@ -143,10 +143,9 @@ namespace SehensWerte.Controls
             HMode = HorizontalMode.Stretch;
             GroupHLeft = LeftSampleNumberValue;
             GroupHRight = RightSampleNumberValue;
-            // Runs for FFT views too: an all-FFT group classifies Stretch (its own Hz path,
-            // untouched), but FFT + non-FFT must classify Incompatible so the warning paints
-            // even when the FFT trace is the group leader.
-            if (!YTTrace)
+            // Runs for FFT and YT views too: all-FFT and all-YT groups classify Stretch (their own
+            // Hz / group-time-window paths, untouched), but FFT or YT mixed with anything else must
+            // classify Incompatible so the warning paints whichever member leads the group.
             {
                 double ownLeft = LeftSampleNumberValue;
                 double ownRight = RightSampleNumberValue;

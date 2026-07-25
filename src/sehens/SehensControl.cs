@@ -1245,7 +1245,7 @@ namespace SehensWerte.Controls
                 int index = MouseToGroupIndex(e.Y);
                 if (index >= 0 && index < PaintBox.PaintedTraces.VisibleTraceGroupList.Count)
                 {
-                    PaintBox.PaintedTraces.VisibleTraceGroupList[index].ForEach(item => item.ShowControlForm());
+                    TraceView.ShowGroupControlForm(PaintBox.PaintedTraces.VisibleTraceGroupList[index]);
                 }
             }
         }

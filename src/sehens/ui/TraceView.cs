@@ -1198,6 +1198,7 @@ namespace SehensWerte.Controls.Sehens
             public double XRatio;
             public double YValue;
             public double XValue;
+            public bool BeyondDrawnData;
 
 
             public MouseInfo ShallowClone() { return (MouseInfo)MemberwiseClone(); }
@@ -1207,7 +1208,9 @@ namespace SehensWerte.Controls.Sehens
 
         internal string TraceHoverStatistics(MouseInfo clickInfo)
         {
-            return clickInfo.YRatio is >= 0.0 and <= 1.0 ? Painter.GetHoverStatistics(this, clickInfo) : "";
+            return clickInfo.YRatio is >= 0.0 and <= 1.0 && !clickInfo.BeyondDrawnData
+                ? Painter.GetHoverStatistics(this, clickInfo)
+                : "";
         }
 
         internal bool UseFftFilter => m_Samples.InputSamplesPerSecond != 0.0 && m_FftFilterType != FftFilterTypes.None;
@@ -1220,6 +1223,7 @@ namespace SehensWerte.Controls.Sehens
         internal bool ProcessAtDisplay => m_PaintMode != PaintModes.PeakHold;
         internal bool CanShowRealYT => CanShowYTInner ? Samples.ViewedUnixTime != null : false;
         internal bool CanShowFakeYT => CanShowYTInner ? (Samples.ViewedSamplesPerSecond == 0.0 ? false : Samples.ViewedLeftmostUnixTime != 0.0) : false;
+        internal bool IsYtDisplay => Samples.ViewedIsYTTrace && (CanShowRealYT || CanShowFakeYT);
         private bool CalculateAfterZoom => m_MathType != 0 && m_CalculatePhase == CalculatePhases.AfterZoom;
         private bool CalculateBeforeZoom => m_MathType != 0 && m_CalculatePhase == CalculatePhases.BeforeZoom;
 
@@ -1582,6 +1586,7 @@ namespace SehensWerte.Controls.Sehens
         // How this trace defines its horizontal axis, for grouped-trace alignment (GroupHorizontal).
         internal HorizontalKind HorizontalKind =>
             IsFftTrace ? HorizontalKind.Fft
+            : IsYtDisplay ? HorizontalKind.Yt
             : m_Samples.HasExplicitHorizontalAxis ? HorizontalKind.Affine
             : m_Samples.InputSamplesPerSecond != 0.0 ? HorizontalKind.Time
             : HorizontalKind.None;
@@ -1625,7 +1630,7 @@ namespace SehensWerte.Controls.Sehens
                         bool rebased = IsRebasedResult;
                         leftSampleNumber = rebased ? 0 : m_DrawnStartPosition;
                         rightSampleNumber = leftSampleNumber + m_DrawnSamples!.Length;
-                        int num = IsFftTrace ? 0 : (Samples.InputSampleNumberDisplayOffset + viewOffsetOverride);
+                        int num = IsFftTrace ? 0 : Samples.InputSampleNumberDisplayOffset;
                         if (IsFftTrace)
                         {
                             int sampleCount;
@@ -1998,6 +2003,7 @@ namespace SehensWerte.Controls.Sehens
                 // so hover/click on a ragged grouped trace resolves to the correct sample. Y stays full-height.
                 result.XRatio = (x - traceDivision.ValueRect.Left) / traceDivision.ValueRect.Width;
                 result.YRatio = (y - traceDivision.ProjectionArea.Top) / traceDivision.ProjectionArea.Height;
+                result.BeyondDrawnData = result.XRatio < 0.0 || result.XRatio > 1.0; // outside the sub-window
                 result.XRatio = Math.Min(result.XRatio, 1.0);
                 result.XValue = (m_HighestValue - m_LowestValue) * result.XRatio + m_LowestValue;
                 result.YValue = m_HighestValue - (m_HighestValue - m_LowestValue) * result.YRatio;
@@ -2006,6 +2012,23 @@ namespace SehensWerte.Controls.Sehens
                 {
                     var fineUnixTimeAtX = (double)YTClickToUnixTime(result.XRatio);
                     (result.SampleAtX, result.IndexBeforeTrim, result.UnixTimeAtX) = Samples.ViewedSampleAtUnixTime(fineUnixTimeAtX);
+                    double[]? drawnTimes = Samples.ViewedUnixTime;
+                    double firstTime;
+                    double lastTime;
+                    if (drawnTimes != null && drawnTimes.Length > 0)
+                    {
+                        firstTime = drawnTimes[0];
+                        lastTime = drawnTimes[drawnTimes.Length - 1];
+                    }
+                    else
+                    {
+                        double sps = Samples.ViewedSamplesPerSecond;
+                        firstTime = Samples.ViewedLeftmostUnixTime;
+                        lastTime = firstTime + (sps == 0 ? 0.0 : Math.Max(0, Samples.ViewedSampleCount - 1) / sps);
+                    }
+                    result.BeyondDrawnData =
+                        (fineUnixTimeAtX < firstTime && !PadLeftWithFirstValue)
+                        || (fineUnixTimeAtX > lastTime && !PadRightWithLastValue);
                 }
                 else if (m_DrawnSamples != null && m_DrawnSamples.Length > 0 && result.XRatio >= 0.0 && result.XRatio <= 1.0)
                 {
@@ -2056,7 +2079,8 @@ namespace SehensWerte.Controls.Sehens
             }
             else if (m_Samples.HasExplicitHorizontalAxis)
             {
-                return m_Samples.HorizontalValueAt(click.IndexBeforeTrim).ToStringRound(5, 3, m_Samples.HorizontalUnitEffective);
+                return m_Samples.HorizontalValueAt(click.IndexAfterTrim + m_Samples.InputSampleNumberDisplayOffset)
+                    .ToStringRound(5, 3, m_Samples.HorizontalUnitEffective);
             }
             else if (Samples.ViewedIsYTTrace)
             {
@@ -2066,7 +2090,8 @@ namespace SehensWerte.Controls.Sehens
             {
                 // seconds axis via the canonical map, so the readout includes the axis offset
                 return m_Samples.InputSamplesPerSecond != 0.0
-                    ? m_Samples.HorizontalValueAt(click.IndexBeforeTrim).ToStringRound(5, 3, m_Samples.HorizontalUnitEffective)
+                    ? m_Samples.HorizontalValueAt(click.IndexAfterTrim + m_Samples.InputSampleNumberDisplayOffset)
+                        .ToStringRound(5, 3, m_Samples.HorizontalUnitEffective)
                     : m_Samples.InputSamplesPerSecond.ToString();
             }
         }
@@ -2088,6 +2113,21 @@ namespace SehensWerte.Controls.Sehens
                 sourceData: this,
                 prompt: "View configuration",
                 title: DecoratedName);
+        }
+
+        public static void ShowGroupControlForm(IReadOnlyList<TraceView> views)
+        {
+            if (views.Count == 0) return;
+            if (views.Count == 1)
+            {
+                views[0].ShowControlForm();
+                return;
+            }
+            using var form = new AutoEditorGroupForm();
+            form.ShowDialog(
+                prompt: "View configuration",
+                title: $"Group of {views.Count} traces",
+                columns: views.Select(x => (x.DecoratedName, (object)x)).ToList());
         }
 
         public string TraceInfo()
@@ -2224,7 +2264,7 @@ value=" + string.Format(VerticalUnitFormat, Clicks[0].SampleAtX.ToStringRound(5,
         internal (HorizontalKind kind, string unit, double left, double right, double a, double b) FullHorizontalAffine()
         {
             int fullCount = m_CalculatedBeforeZoom?.Length ?? m_Samples.ViewedSampleCount;
-            int num = m_Samples.InputSampleNumberDisplayOffset + (ViewOverrideEnabled ? ViewOffsetOverride : 0);
+            int num = m_Samples.InputSampleNumberDisplayOffset; // view offset moved the DATA, not the axis
             HorizontalKind kind = HorizontalKind;
             double a, b;
             string unit;
@@ -2243,7 +2283,7 @@ value=" + string.Format(VerticalUnitFormat, Clicks[0].SampleAtX.ToStringRound(5,
                     a = b * (offset + num);
                     unit = m_Samples.HorizontalUnitEffective;
                     break;
-                default: // None / Fft - value == sample number; not used for value-align
+                default: // None / Fft / Yt - value == sample number; not used for value-align
                     a = 0.0;
                     b = 1.0;
                     unit = "";
@@ -2294,6 +2334,10 @@ value=" + string.Format(VerticalUnitFormat, Clicks[0].SampleAtX.ToStringRound(5,
             //fixme: recursive invalidate with YT traces
 
             double[][] sourceTraces = CalculatedSourceViews.Select(x => (x.CanShowRealYT ? x.Samples.ViewedSamplesInterpolatedAsDouble : x.CalculatedBeforeZoom) ?? new double[0]).ToArray();
+            if (sourceTraces.Length == 0)
+            {
+                return new double[0];
+            }
             int minLength = sourceTraces.Min(x => x.Length);
             int maxLength = sourceTraces.Max(x => x.Length);
             int traceCount = sourceTraces.Length;
@@ -2726,6 +2770,127 @@ value=" + string.Format(VerticalUnitFormat, Clicks[0].SampleAtX.ToStringRound(5,
         }
 
         [TestMethod]
+        public void FftAxisDerivesHzFromSps()
+        {
+            // sps is more than the seconds axis: an FFT trace derives its Hz axis from it
+            // (CalculatedNyquist), and the affine terms must not bend that axis.
+            const double sps = 8000.0;
+            const int n = 1024;
+            const int targetBin = 128; // 1000 Hz, bin-aligned so the peak has no leakage
+            var tone = new SehensWerte.Generators.ToneGenerator
+            {
+                SamplesPerSecond = sps,
+                FrequencyStart = targetBin * sps / n,
+                FrequencyEnd = targetBin * sps / n,
+                Amplitude = 1.0,
+            };
+            var scope = new SehensControl();
+            scope["fft"].Update(tone.Generate(n));
+            scope["fft"].InputSamplesPerSecond = sps;
+            TraceView view = SehensTestHarness.View(scope, "fft");
+            view.MathType = TraceView.MathTypes.FFTMagnitude;
+            SehensTestHarness.Layout(scope);
+
+            Assert.AreEqual(HorizontalKind.Fft, view.HorizontalKind);
+            var ext = view.DrawnExtents();
+            Assert.AreEqual("Hz", ext.sampleValueUnit);
+            double nyquist = sps / 2.0;
+            Assert.AreEqual(0.0, ext.leftSampleNumberValue, 1e-9);
+            Assert.AreEqual(nyquist, ext.rightSampleNumberValue, nyquist * 0.01, "right edge ~ Nyquist from sps");
+
+            // the drawn spectrum peaks at the tone's frequency on that Hz axis
+            double[] drawn = view.DrawnSamples ?? throw new AssertFailedException("no drawn FFT");
+            int peak = 1;
+            for (int loop = 1; loop < drawn.Length; loop++)
+            {
+                if (drawn[loop] > drawn[peak]) peak = loop;
+            }
+            double binWidth = sps / n;
+            double peakHz = peak * nyquist / (drawn.Length - 1);
+            Assert.AreEqual(1000.0, peakHz, binWidth * 1.5, $"peak at {peakHz:0.0} Hz");
+
+            // affine terms are ignored on an FFT trace - the Hz axis must not move
+            scope["fft"].SetHorizontalAffine(5.0, 2.0, "rpm");
+            Assert.AreEqual(HorizontalKind.Fft, view.HorizontalKind);
+            var ext2 = view.DrawnExtents();
+            Assert.AreEqual("Hz", ext2.sampleValueUnit);
+            Assert.AreEqual(ext.rightSampleNumberValue, ext2.rightSampleNumberValue, 1e-9);
+        }
+
+        [TestMethod]
+        public void FftAxisIsExactForOddAndPrimeWindowSizes()
+        {
+            // Real traces have arbitrary lengths (the demo noise generator makes ~250k-sample odd
+            // sizes) and ExecuteFft runs FFTW at the EXACT input length - no padding. For odd N
+            // there is no bin at Nyquist: the axis right edge is bins*sps/N (one-past-last) and
+            // bin k must still read k*sps/N Hz, whatever the size.
+            const double sps = 8000.0;
+            foreach (int n in new[] { 1024, 1000, 999, 997, 513, 4095 })
+            {
+                int targetBin = Math.Max(1, n / 8);
+                double toneHz = targetBin * sps / n; // bin-aligned on THIS size's grid
+                var tone = new SehensWerte.Generators.ToneGenerator
+                {
+                    SamplesPerSecond = sps,
+                    FrequencyStart = toneHz,
+                    FrequencyEnd = toneHz,
+                    Amplitude = 1.0,
+                };
+                var scope = new SehensControl();
+                scope["fft"].Update(tone.Generate(n));
+                scope["fft"].InputSamplesPerSecond = sps;
+                TraceView view = SehensTestHarness.View(scope, "fft");
+                view.MathType = TraceView.MathTypes.FFTMagnitude;
+                SehensTestHarness.Layout(scope);
+
+                double[] drawn = view.DrawnSamples ?? throw new AssertFailedException($"no FFT for N={n}");
+                int bins = Fftw.SampleCountToBinCount(n);
+                Assert.AreEqual(bins, drawn.Length, $"bin count for N={n}");
+
+                var ext = view.DrawnExtents();
+                Assert.AreEqual("Hz", ext.sampleValueUnit);
+                double binWidth = sps / n;
+                Assert.AreEqual(bins * binWidth, ext.rightSampleNumberValue, binWidth * 1e-6,
+                    $"right edge for N={n} (== Nyquist only when N is even)");
+
+                int peak = 1;
+                for (int loop = 1; loop < drawn.Length; loop++)
+                {
+                    if (drawn[loop] > drawn[peak]) peak = loop;
+                }
+                double peakHz = peak * ext.rightSampleNumberValue / drawn.Length;
+                Assert.AreEqual(toneHz, peakHz, binWidth * 1.5, $"peak Hz for N={n}");
+            }
+        }
+
+        [TestMethod]
+        public void FakeYtUsesSpsForTheTimeRangeAndSkipsValueAlign()
+        {
+            // sps + a nonzero start time make a fake-YT trace: the time range comes from sps, and
+            // the YT path must bypass the value-align machinery entirely.
+            var scope = new SehensControl();
+            scope["yt"].Update(SehensTestHarness.Ramp(100));
+            scope["yt"].InputSamplesPerSecond = 10.0;
+            scope["yt"].InputLeftmostUnixTime = 1000.0;
+            TraceView view = SehensTestHarness.View(scope, "yt");
+            view.PaintMode = TraceView.PaintModes.PolygonDigital; // fake-YT needs a plain paint mode
+            SehensTestHarness.Layout(scope);
+
+            Assert.IsTrue(view.CanShowFakeYT);
+            TraceData.TimeRange range = TraceView.GetGroupUnixTimeRange(new[] { view });
+            Assert.AreEqual(1000.0, range.Left, 1e-9);
+            Assert.AreEqual(1000.0 + 99 / 10.0, range.Right, 1e-9); // (count-1)/sps from the start time
+
+            TraceGroupDisplay info = scope.PaintBox.TraceToGroupDisplayInfo(view);
+            Assert.IsTrue(info.YTTrace);
+            Assert.AreEqual(HorizontalMode.Stretch, info.HMode, "YT traces bypass value alignment");
+            Assert.AreEqual(info.ProjectionArea, info.ValueRect);
+            var ext = view.DrawnExtents();
+            Assert.AreEqual(1000.0, ext.leftUnixTime, 0.1);
+            Assert.AreEqual(1009.9, ext.rightUnixTime, 0.1);
+        }
+
+        [TestMethod]
         public void PanClampsToTheVisibleWindow()
         {
             // pan is the LEFT edge fraction, ceiling 1 - zoom: the drag path calls SetZoomPan
@@ -2736,6 +2901,118 @@ value=" + string.Format(VerticalUnitFormat, Clicks[0].SampleAtX.ToStringRound(5,
             Assert.AreEqual(0.5, scope.PanValue, 1e-9);
             scope.SetZoomPan(1.0, 0.3); // full view: no pan headroom at all
             Assert.AreEqual(0.0, scope.PanValue, 1e-9);
+        }
+
+        [TestMethod]
+        public void HoverStatsSuppressedOutsideTheDrawnData()
+        {
+            // Field report: hovering right of a cropped member's data still showed its clamped
+            // last sample. A hover outside the trace's value sub-window must produce no stat.
+            var scope = new SehensControl();
+            SehensTestHarness.AffineTrace(scope, "full", count: 100, offset: 0, multiplier: 1, unit: "u"); // 0..100
+            SehensTestHarness.AffineTrace(scope, "half", count: 50, offset: 0, multiplier: 1, unit: "u");  // 0..50, left half
+            scope.GroupViews(new[] { "full", "half" });
+            SehensTestHarness.Layout(scope);
+            TraceView half = SehensTestHarness.View(scope, "half");
+            TraceGroupDisplay info = scope.PaintBox.TraceToGroupDisplayInfo(half);
+            int yMid = info.ProjectionArea.Top + info.ProjectionArea.Height / 2;
+
+            int xInside = info.ValueRect.Left + info.ValueRect.Width / 2;
+            TraceView.MouseInfo inside = half.Measure(new MouseEventArgs(MouseButtons.Left, 0, xInside, yMid, 0));
+            Assert.IsFalse(inside.BeyondDrawnData);
+            Assert.AreNotEqual("", half.TraceHoverStatistics(inside));
+
+            int xBeyond = info.ValueRect.Right + info.ValueRect.Width / 2; // over "full"'s data only
+            TraceView.MouseInfo beyond = half.Measure(new MouseEventArgs(MouseButtons.Left, 0, xBeyond, yMid, 0));
+            Assert.IsTrue(beyond.BeyondDrawnData);
+            Assert.AreEqual("", half.TraceHoverStatistics(beyond));
+        }
+
+        [TestMethod]
+        public void YtHoverSuppressedBeforeTheDataUnlessPadded()
+        {
+            // Field report: hovering before a late-starting fake-YT member's data showed index
+            // [-302] with value 0. Outside the trace's time extent there is no stat - unless the
+            // pad flag covers that side (the pad paints a flat line there, so the hover reads the
+            // held edge sample).
+            var scope = new SehensControl();
+            scope["early"].Update(SehensTestHarness.Ramp(1000), 100.0); // 0..10 s
+            scope["early"].InputLeftmostUnixTime = 1_700_000_000;
+            scope["late"].Update(SehensTestHarness.Ramp(600), 100.0);   // 5..11 s
+            scope["late"].InputLeftmostUnixTime = 1_700_000_005;
+            scope.GroupViews(new[] { "early", "late" });
+            TraceView late = SehensTestHarness.View(scope, "late");
+            late.PaintMode = TraceView.PaintModes.PolygonDigital;
+            SehensTestHarness.View(scope, "early").PaintMode = TraceView.PaintModes.PolygonDigital;
+            SehensTestHarness.Layout(scope);
+
+            TraceGroupDisplay info = scope.PaintBox.TraceToGroupDisplayInfo(late);
+            Assert.IsTrue(info.YTTrace);
+            int yMid = info.ProjectionArea.Top + info.ProjectionArea.Height / 2;
+            int xBeforeLate = info.ProjectionArea.Left + info.ProjectionArea.Width / 10; // ~1 s: early only
+
+            TraceView.MouseInfo beyond = late.Measure(new MouseEventArgs(MouseButtons.Left, 0, xBeforeLate, yMid, 0));
+            Assert.IsTrue(beyond.BeyondDrawnData);
+            Assert.AreEqual("", late.TraceHoverStatistics(beyond));
+
+            late.PadLeftWithFirstValue = true; // the pad paints there, so the hover follows
+            TraceView.MouseInfo padded = late.Measure(new MouseEventArgs(MouseButtons.Left, 0, xBeforeLate, yMid, 0));
+            Assert.IsFalse(padded.BeyondDrawnData);
+            Assert.AreEqual(0, padded.IndexBeforeTrim); // clamped to the first sample, not [-302]
+            Assert.AreEqual(1_700_000_005.0, padded.UnixTimeAtX, 1e-6); // index/sps, not index*sps
+            Assert.AreNotEqual("", late.TraceHoverStatistics(padded));
+        }
+
+        [TestMethod]
+        public void CalculatedViewWithoutSourcesDoesNotThrow()
+        {
+            // Field report: mouse-wheeling over the Calculate combo in the group editor set a
+            // CalculateType on a view with no source views; ExecuteCalculate's Min() over the
+            // empty source list threw InvalidOperationException on the paint thread.
+            var scope = new SehensControl();
+            scope["calc"].Update(SehensTestHarness.Ramp(100));
+            TraceView view = SehensTestHarness.View(scope, "calc");
+            view.CalculateType = TraceView.CalculatedTypes.Sum; // no CalculatedSourceViews yet
+            SehensTestHarness.Layout(scope); // runs CalculateTrace -> ExecuteCalculate
+            Assert.AreEqual(0, view.ExecuteCalculate().Length);
+        }
+
+        [TestMethod]
+        public void ViewOverridesMoveTrimAndPadTheData()
+        {
+            // View offset/length reshape the RAW samples and the axis must NOT follow the move:
+            // offset N puts source[N] at drawn index 0 (axis still starts at its own origin),
+            // negative offset pads left, length trims or extends (pads right).
+            var scope = new SehensControl();
+            scope["v"].Update(SehensTestHarness.Ramp(5000));
+            TraceView view = SehensTestHarness.View(scope, "v");
+
+            view.ViewOffsetOverride = 1000; // move: source[1000] becomes drawn index 0
+            SehensTestHarness.Layout(scope);
+            Assert.AreEqual(1000.0, view.DrawnSamples![0], 1e-9);
+            Assert.AreEqual(0.0, view.DrawnExtents().leftSampleNumberValue, 1e-9); // axis stays put
+
+            view.ViewOffsetOverride = -1000; // negative: pad left
+            SehensTestHarness.Layout(scope);
+            Assert.AreEqual(5000, view.DrawnSamples!.Length);
+            Assert.AreEqual(0.0, view.DrawnSamples![0], 1e-9);      // padding
+            Assert.AreEqual(500.0, view.DrawnSamples![1500], 1e-9); // source[500] at index 1500
+
+            view.ViewOffsetOverride = 0;
+            view.ViewLengthOverride = 8000; // extend: pad right
+            SehensTestHarness.Layout(scope);
+            Assert.AreEqual(8000, view.DrawnSamples!.Length);
+            Assert.AreEqual(0.0, view.DrawnSamples![7999], 1e-9);
+            Assert.AreEqual(8000.0, view.DrawnExtents().rightSampleNumberValue, 1e-9); // domain grows
+
+            view.ViewOffsetOverride = 100; // trim + move on an affine axis: reads from its origin
+            view.ViewLengthOverride = 250;
+            view.Samples.SetHorizontalAffine(0, 10, "rpm");
+            SehensTestHarness.Layout(scope);
+            Assert.AreEqual(100.0, view.DrawnSamples![0], 1e-9); // source[100] at index 0
+            var ext = view.DrawnExtents();
+            Assert.AreEqual(0.0, ext.leftSampleNumberValue, 1e-9);
+            Assert.AreEqual(2500.0, ext.rightSampleNumberValue, 1e-9); // 10 * 250 drawn samples
         }
 
         [TestMethod]

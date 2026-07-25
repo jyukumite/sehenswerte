@@ -52,6 +52,17 @@ namespace SehensWerte.Controls.Sehens
 
         public CodeProfile Profile = new CodeProfile();
 
+        public int PaintExceptionCount;
+        public string? LastPaintExceptionText;
+
+        private void RecordPaintException(Exception e, string where)
+        {
+            Interlocked.Increment(ref PaintExceptionCount);
+            LastPaintExceptionText = $"{where}: {e}";
+            System.Diagnostics.Debug.WriteLine($"Sehens paint exception ({where}): {e}");
+            OnLog?.Invoke(new CsvLog.Entry($"paint exception ({where}): {e}", CsvLog.Priority.Exception));
+        }
+
         public class PaintedTraceList
         {
             public List<List<TraceView>> VisibleTraceGroupList = new List<List<TraceView>>();
@@ -215,6 +226,7 @@ namespace SehensWerte.Controls.Sehens
             }
             catch (Exception ex)
             {
+                RecordPaintException(ex, "OnPaint");
                 using var font = Scope.ActiveSkin.WarningFont.Font;
                 using var brush = new SolidBrush(Scope.ActiveSkin.BackgroundColour);
                 pe.Graphics.DrawString(ex.ToString(), font, brush, 5f, 5f);
@@ -249,7 +261,10 @@ namespace SehensWerte.Controls.Sehens
                                 BeginInvoke(base.Invalidate);
                             }
                         }
-                        catch { }
+                        catch (Exception ex)
+                        {
+                            RecordPaintException(ex, "PaintRun");
+                        }
                     }
                 }
                 m_PaintThreadSemaphore.WaitOne(1000 / 60);
@@ -269,12 +284,12 @@ namespace SehensWerte.Controls.Sehens
                 PaintGetRectangle();
                 CalculateBefore();
 
+                PaintTraces(e.Graphics, TraceGroupDisplay.PaintFlags.Parallel);
                 if (Scope.HighQualityRender)
                 {
                     e.Graphics.InterpolationMode = InterpolationMode.HighQualityBicubic;
                     e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
                 }
-                PaintTraces(e.Graphics, TraceGroupDisplay.PaintFlags.Parallel);
                 PaintCursor(e.Graphics);
                 PaintMouseOverStats(e.Graphics);
                 PaintMouseOver(e.Graphics);
@@ -312,7 +327,17 @@ namespace SehensWerte.Controls.Sehens
                 { // finish the parallel for each order
                     Parallel.ForEach<TraceView>(
                             list.Where(x => x.CalculateOrder == order && x != null && x.ProcessAtDisplay),
-                            trace => { trace.CalculateTrace(); });
+                            trace =>
+                            {
+                                try
+                                {
+                                    trace.CalculateTrace();
+                                }
+                                catch (Exception ex)
+                                {
+                                    RecordPaintException(ex, $"CalculateTrace({trace.ViewName})");
+                                }
+                            });
                 }
             }
             finally
@@ -466,7 +491,7 @@ namespace SehensWerte.Controls.Sehens
             graphics.DrawString(text, font, brush, Width - (int)sizeF.Width - 3, Height - (int)sizeF.Height - 3);
         }
 
-        internal Bitmap ScreenshotToBitmap(Skin skin, List<TraceView>? singleGroup)
+        internal Bitmap ScreenshotToBitmap(Skin skin, List<TraceView>? singleGroup, bool parallel = false)
         {
             Skin prevActiveSkin = Scope.ActiveSkin;
             Scope.ActiveSkin = skin;
@@ -485,14 +510,16 @@ namespace SehensWerte.Controls.Sehens
                 {
                     result = new Bitmap(rectangle.Width, rectangle.Height, PixelFormat.Format24bppRgb);
                     using Graphics graphics = Graphics.FromImage(result);
-                    graphics.SmoothingMode = SmoothingMode.AntiAlias;
+                    // match the live OnPaint: render quality follows HighQualityRender
+                    graphics.SmoothingMode = Scope.HighQualityRender ? SmoothingMode.AntiAlias : SmoothingMode.None;
                     PaintBoxWidth = rectangle.Width;
                     PaintBoxVirtualHeight = (PaintBoxRealHeight = rectangle.Height);
                     PaintBoxVirtualOffset = 0;
                     Scope.RecalculateProjection();
                     Scope.RecalculateProjectionIfRequired();
                     CalculateBefore();
-                    PaintTraces(graphics, TraceGroupDisplay.PaintFlags.Screenshot);
+                    PaintTraces(graphics, TraceGroupDisplay.PaintFlags.Screenshot
+                        | (parallel ? TraceGroupDisplay.PaintFlags.Parallel : TraceGroupDisplay.PaintFlags.None));
                     Scope.RecalculateProjection();
                 }
                 PaintedTraces = copyPaintedGroup;
@@ -545,33 +572,47 @@ namespace SehensWerte.Controls.Sehens
                 {
                     object graphicsLock = new object();
 
+                    SmoothingMode smoothing = graphics.SmoothingMode;
+                    InterpolationMode interpolation = graphics.InterpolationMode;
+                    System.Drawing.Text.TextRenderingHint textHint = graphics.TextRenderingHint;
+
                     int displayedGroupCount = 0;
                     int totalGroupCount = 0;
                     var action = delegate (List<TraceView> views)
                     {
                         if (views.Count > 0)
                         {
-                            TraceGroupDisplay info = TraceToGroupDisplayInfo(views[0], flags);
-                            if (info.IsOnScreen)
+                            try
                             {
-                                if (flags.HasFlag(TraceGroupDisplay.PaintFlags.Parallel))
-                                { // paint to a temporary bitmap
-                                    Rectangle rect = info.GroupArea;
-                                    using Bitmap bitmap = new Bitmap(rect.Width, rect.Height, PixelFormat.Format24bppRgb);
-                                    using Graphics bitmapGraphics = Graphics.FromImage(bitmap);
-                                    PaintTraceGroup(bitmapGraphics, flags, views);
-                                    lock (graphicsLock)
-                                    {
-                                        graphics.DrawImage(bitmap, 0, info.PaintVerticalOffset);
-                                    }
-                                }
-                                else
+                                TraceGroupDisplay info = TraceToGroupDisplayInfo(views[0], flags);
+                                if (info.IsOnScreen)
                                 {
-                                    PaintTraceGroup(graphics, flags, views);
+                                    if (flags.HasFlag(TraceGroupDisplay.PaintFlags.Parallel))
+                                    { // paint to a temporary bitmap
+                                        Rectangle rect = info.GroupArea;
+                                        using Bitmap bitmap = new Bitmap(Math.Max(1, rect.Width), Math.Max(1, rect.Height), PixelFormat.Format24bppRgb);
+                                        using Graphics bitmapGraphics = Graphics.FromImage(bitmap);
+                                        bitmapGraphics.SmoothingMode = smoothing;
+                                        bitmapGraphics.InterpolationMode = interpolation;
+                                        bitmapGraphics.TextRenderingHint = textHint;
+                                        PaintTraceGroup(bitmapGraphics, flags, views);
+                                        lock (graphicsLock)
+                                        {
+                                            graphics.DrawImage(bitmap, 0, info.PaintVerticalOffset);
+                                        }
+                                    }
+                                    else
+                                    {
+                                        PaintTraceGroup(graphics, flags, views);
+                                    }
+                                    Interlocked.Increment(ref displayedGroupCount);
                                 }
-                                Interlocked.Increment(ref displayedGroupCount);
+                                Interlocked.Increment(ref totalGroupCount);
                             }
-                            Interlocked.Increment(ref totalGroupCount);
+                            catch (Exception ex)
+                            {
+                                RecordPaintException(ex, $"PaintTraces({views[0].ViewName})");
+                            }
                         }
                     };
 
@@ -660,6 +701,7 @@ namespace SehensWerte.Controls.Sehens
             }
             catch (Exception ex)
             {
+                RecordPaintException(ex, "PaintTraceGroup");
                 using Font font = Scope.ActiveSkin.HoverTextFont.Font;
                 using Brush brush = Scope.ActiveSkin.HoverTextFont.Brush;
                 graphics.DrawString(ex.ToString(), font, brush, 5f, 5f);
@@ -800,6 +842,7 @@ namespace SehensWerte.Controls.Sehens
                 }
                 catch (PainterException e)
                 {
+                    RecordPaintException(e, "PaintProjection");
                     PaintException(graphics, info, e);
                 }
                 finally
@@ -1045,6 +1088,121 @@ namespace SehensWerte.Controls.Sehens
         }
 
         [TestMethod]
+        public void PaintBenchmarkFromLocalSehensFile()
+        {
+            // Diagnostic, machine-specific: times parallel painting of c:\temp\sehens.sehens with
+            // HighQualityRender on and off (prints to the test log; skips if the file is absent).
+            const string path = @"c:\temp\sehens.sehens";
+            if (!System.IO.File.Exists(path))
+            {
+                Assert.Inconclusive($"{path} not present");
+            }
+            var scope = new SehensControl();
+            SehensSave.LoadStateBinary(path, scope);
+            scope.ActiveSkin.ExportTraces = Skin.TraceSelections.VisibleTraces;
+            scope.PaintBox.ScreenshotToBitmap(scope.ActiveSkin, null, parallel: true).Dispose(); // prime
+
+            double Time(bool highQuality)
+            {
+                scope.HighQualityRender = highQuality;
+                var timer = System.Diagnostics.Stopwatch.StartNew();
+                const int passes = 10;
+                for (int loop = 0; loop < passes; loop++)
+                {
+                    scope.PaintBox.ScreenshotToBitmap(scope.ActiveSkin, null, parallel: true).Dispose();
+                }
+                return timer.Elapsed.TotalMilliseconds / passes;
+            }
+
+            double highMs = Time(true);
+            double lowMs = Time(false);
+            Console.WriteLine($"parallel paint avg: HighQualityRender=true {highMs:0.0} ms, false {lowMs:0.0} ms");
+            Assert.AreEqual(0, scope.PaintBox.PaintExceptionCount,
+                scope.PaintBox.LastPaintExceptionText ?? "paint exception recorded");
+        }
+
+        [TestMethod]
+        public void ParallelPaintMatchesSequential()
+        {
+            // The live OnPaint always paints with PaintFlags.Parallel (per-group bitmaps composited
+            // under a lock) but the tests only exercised the sequential Screenshot path. Paint the
+            // whole axis matrix both ways: no paint exceptions, and the pixels agree.
+            var scope = new SehensControl();
+            ContextMenus.GenerateAxisTestMatrix(scope); // maximal painter coverage incl. YT/FFT/warnings
+            scope.ActiveSkin.ExportTraces = Skin.TraceSelections.VisibleTraces;
+            // prime: the first paint auto-ranges traces (PaintTraceSamples -> AutoRange), which
+            // would make any second paint differ regardless of mode
+            scope.PaintBox.ScreenshotToBitmap(scope.ActiveSkin, null).Dispose();
+            using Bitmap sequential = scope.PaintBox.ScreenshotToBitmap(scope.ActiveSkin, null);
+            using Bitmap parallel = scope.PaintBox.ScreenshotToBitmap(scope.ActiveSkin, null, parallel: true);
+            Assert.AreEqual(0, scope.PaintBox.PaintExceptionCount,
+                scope.PaintBox.LastPaintExceptionText ?? "paint exception recorded");
+            Assert.AreEqual(sequential.Size, parallel.Size);
+            double differing = FractionOfDifferingPixels(sequential, parallel);
+            Assert.IsTrue(differing < 0.01, $"parallel and sequential paints diverge on {differing:P2} of pixels");
+        }
+
+        private static double FractionOfDifferingPixels(Bitmap a, Bitmap b)
+        {
+            var rect = new Rectangle(0, 0, a.Width, a.Height);
+            BitmapData dataA = a.LockBits(rect, ImageLockMode.ReadOnly, PixelFormat.Format24bppRgb);
+            BitmapData dataB = b.LockBits(rect, ImageLockMode.ReadOnly, PixelFormat.Format24bppRgb);
+            try
+            {
+                int byteCount = Math.Abs(dataA.Stride) * a.Height;
+                byte[] bytesA = new byte[byteCount];
+                byte[] bytesB = new byte[byteCount];
+                System.Runtime.InteropServices.Marshal.Copy(dataA.Scan0, bytesA, 0, byteCount);
+                System.Runtime.InteropServices.Marshal.Copy(dataB.Scan0, bytesB, 0, byteCount);
+                long differing = 0;
+                for (int y = 0; y < a.Height; y++)
+                {
+                    int row = y * dataA.Stride;
+                    for (int x = 0; x < a.Width; x++)
+                    {
+                        int index = row + x * 3;
+                        if (Math.Abs(bytesA[index] - bytesB[index]) > 8
+                            || Math.Abs(bytesA[index + 1] - bytesB[index + 1]) > 8
+                            || Math.Abs(bytesA[index + 2] - bytesB[index + 2]) > 8)
+                        {
+                            differing++;
+                        }
+                    }
+                }
+                return (double)differing / ((long)a.Width * a.Height);
+            }
+            finally
+            {
+                a.UnlockBits(dataA);
+                b.UnlockBits(dataB);
+            }
+        }
+
+        [TestMethod]
+        public void OneBadCalculatedTraceDoesNotAbortTheCalculatePass()
+        {
+            // CalculateBefore catches per trace: a throwing CalculateTrace (here Atan2 with only
+            // one source - "expects 2 traces") is recorded via the paint-exception seam while
+            // every other trace still calculates; previously the whole Parallel.ForEach pass
+            // died with an AggregateException.
+            var scope = new SehensControl();
+            scope["good1"].Update(SehensTestHarness.Ramp(100));
+            scope["bad"].Update(SehensTestHarness.Ramp(100));
+            scope["good2"].Update(SehensTestHarness.Ramp(100));
+            TraceView bad = SehensTestHarness.View(scope, "bad");
+            bad.CalculateType = TraceView.CalculatedTypes.Atan2; // expects exactly 2 sources
+            bad.CalculatedSourceViews.Add(SehensTestHarness.View(scope, "good1"));
+
+            scope.ActiveSkin.ExportTraces = Skin.TraceSelections.VisibleTraces;
+            using Bitmap bmp = scope.PaintBox.ScreenshotToBitmap(scope.ActiveSkin, null); // runs CalculateBefore
+            Assert.IsTrue(scope.PaintBox.PaintExceptionCount >= 1, "the bad trace must be recorded");
+            Assert.IsTrue(scope.PaintBox.LastPaintExceptionText?.Contains("bad") == true,
+                scope.PaintBox.LastPaintExceptionText ?? "no exception text");
+            Assert.IsNotNull(SehensTestHarness.View(scope, "good1").DrawnSamples, "siblings must still calculate");
+            Assert.IsNotNull(SehensTestHarness.View(scope, "good2").DrawnSamples, "siblings must still calculate");
+        }
+
+        [TestMethod]
         public void MixedAxesGroupPaintsWarningWithoutThrowing()
         {
             var scope = new SehensControl();
@@ -1059,6 +1217,8 @@ namespace SehensWerte.Controls.Sehens
             scope.ActiveSkin.ExportTraces = Skin.TraceSelections.VisibleTraces; // default exports selected-only
             using Bitmap bmp = scope.PaintBox.ScreenshotToBitmap(scope.ActiveSkin, null);
             Assert.IsTrue(bmp.Width > 1 && bmp.Height > 1, "full paint incl. the warning must succeed");
+            Assert.AreEqual(0, scope.PaintBox.PaintExceptionCount,
+                scope.PaintBox.LastPaintExceptionText ?? "paint exception recorded");
         }
 
         [TestMethod]
@@ -1077,6 +1237,8 @@ namespace SehensWerte.Controls.Sehens
             scope.ActiveSkin.ExportTraces = Skin.TraceSelections.VisibleTraces; // default exports selected-only
             using Bitmap bmp = scope.PaintBox.ScreenshotToBitmap(scope.ActiveSkin, null);
             Assert.IsTrue(bmp.Width > 1 && bmp.Height > 1, "paint incl. the (bad horizontal axis) warning must succeed");
+            Assert.AreEqual(0, scope.PaintBox.PaintExceptionCount,
+                scope.PaintBox.LastPaintExceptionText ?? "paint exception recorded");
         }
     }
 }

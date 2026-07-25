@@ -233,6 +233,13 @@ namespace SehensWerte.Controls.Sehens
 
             TraceData samplesYT = info.View0.Samples;
             double[] samples = samplesYT.ViewedSamplesAsDouble;
+            if (samples.Length == 0)
+            {
+                DrawnYT = new PointF[0];
+                return;
+            }
+            leftIndex = Math.Clamp(leftIndex, 0, samples.Length - 1);
+            rightIndex = Math.Clamp(rightIndex, leftIndex, samples.Length - 1);
             int length = rightIndex - leftIndex + 1;
 
             PointF[] path = new PointF[length];
@@ -283,6 +290,26 @@ namespace SehensWerte.Controls.Sehens
                 LastTraceHighestValue = Math.Max(leftValue, LastTraceHighestValue);
                 LastTraceLowestValue = Math.Min(leftValue, LastTraceLowestValue);
             }
+
+            bool padLeft = info.View0.PadLeftWithFirstValue;
+            bool padRight = info.View0.PadRightWithLastValue;
+            if ((padLeft || padRight) && length > 0)
+            {
+                double firstTime = unixTime == null ? viewedLeftmostUnixTime + leftIndex / resampleRate : unixTime[leftIndex];
+                double lastTime = unixTime == null ? viewedLeftmostUnixTime + rightIndex / resampleRate : unixTime[rightIndex];
+                var padded = new List<PointF>(path.Length + 2);
+                if (padLeft && firstTime > info.LeftUnixTime)
+                {
+                    padded.Add(Project(info, samples[leftIndex], info.LeftUnixTime));
+                }
+                padded.AddRange(path);
+                if (padRight && lastTime < info.RightUnixTime)
+                {
+                    padded.Add(Project(info, samples[rightIndex], info.RightUnixTime));
+                }
+                path = padded.ToArray();
+            }
+
             DrawnProjection1 = null;
             DrawnProjection2 = null;
             DrawnYT = path.ToArray();
@@ -495,6 +522,9 @@ namespace SehensWerte.Controls.Sehens
             {
                 TraceData samplesYT = info.View0.Samples;
                 double[] samples = samplesYT.ViewedSamplesAsDouble;
+                if (samples.Length == 0) return;
+                leftIndex = Math.Clamp(leftIndex, 0, samples.Length - 1);
+                rightIndex = Math.Clamp(rightIndex, leftIndex, samples.Length - 1);
                 int width = info.ProjectionArea.Width;
                 PointF[] path1 = new PointF[width + 2];
                 PointF[] path2 = new PointF[width + 2];
@@ -1274,6 +1304,74 @@ namespace SehensWerte.Controls.Sehens
             PointF[] full = painter.DrawnProjection1 ?? throw new AssertFailedException("no projection");
             Assert.AreEqual(infoFull.ProjectionArea.Width, full.Length, "projection must re-span the new rect");
             Assert.AreEqual(infoFull.ProjectionArea.Left, full[0].X, 0.01);
+        }
+
+        [TestMethod]
+        public void FakeYtGroupPaintsPastTheDataEnd()
+        {
+            var scope = new SehensControl();
+            scope["ytA"].Update(SehensTestHarness.Ramp(1000), 100.0); // 0..10 s
+            scope["ytA"].InputLeftmostUnixTime = 1_700_000_000;
+            scope["ytB"].Update(SehensTestHarness.Ramp(600), 100.0);  // +5..+11 s
+            scope["ytB"].InputLeftmostUnixTime = 1_700_000_005;
+            scope.GroupViews(new[] { "ytA", "ytB" });
+            TraceView a = SehensTestHarness.View(scope, "ytA");
+            TraceView b = SehensTestHarness.View(scope, "ytB");
+            a.PaintMode = TraceView.PaintModes.PolygonDigital;
+            b.PaintMode = TraceView.PaintModes.PolygonDigital;
+            a.SetHighLow(1000, 0);
+            b.SetHighLow(600, 0);
+            SehensTestHarness.Layout(scope);
+
+            using var bmp = new Bitmap(SehensTestHarness.Width, SehensTestHarness.Height);
+            using var graphics = Graphics.FromImage(bmp);
+            TraceGroupDisplay infoA = scope.PaintBox.TraceToGroupDisplayInfo(a);
+            Assert.IsTrue(infoA.YTTrace, "pair must classify as YT");
+            a.Painter.PaintProjection(graphics, infoA); // threw IndexOutOfRange before the clamp fix
+            TraceGroupDisplay infoB = scope.PaintBox.TraceToGroupDisplayInfo(b);
+            b.Painter.PaintProjection(graphics, infoB);
+
+            PointF[] drawnA = ((Paint2dTrace)a.Painter).DrawnYT ?? throw new AssertFailedException("A drew nothing");
+            Assert.IsTrue(drawnA.Length > 0);
+            PointF[] drawnB = ((Paint2dTrace)b.Painter).DrawnYT ?? throw new AssertFailedException("B drew nothing");
+            Assert.IsTrue(drawnB.Length > 0);
+        }
+
+        [TestMethod]
+        public void FakeYtPadsExtendToTheWindowEdges()
+        {
+            var scope = new SehensControl();
+            scope["padA"].Update(SehensTestHarness.Ramp(1000), 100.0); // 0..10 s of the 0..11 s window
+            scope["padA"].InputLeftmostUnixTime = 1_700_000_000;
+            scope["padB"].Update(SehensTestHarness.Ramp(600), 100.0);  // 5..11 s
+            scope["padB"].InputLeftmostUnixTime = 1_700_000_005;
+            scope.GroupViews(new[] { "padA", "padB" });
+            TraceView a = SehensTestHarness.View(scope, "padA");
+            TraceView b = SehensTestHarness.View(scope, "padB");
+            a.PaintMode = TraceView.PaintModes.PolygonDigital;
+            b.PaintMode = TraceView.PaintModes.PolygonDigital;
+            a.SetHighLow(1000, 0);
+            b.SetHighLow(600, 0);
+            a.PadRightWithLastValue = true; // A's data ends 1 s before the group window's right edge
+            b.PadLeftWithFirstValue = true; // B's data starts 5 s after the window's left edge
+            SehensTestHarness.Layout(scope);
+
+            using var bmp = new Bitmap(SehensTestHarness.Width, SehensTestHarness.Height);
+            using var graphics = Graphics.FromImage(bmp);
+            TraceGroupDisplay infoA = scope.PaintBox.TraceToGroupDisplayInfo(a);
+            a.Painter.PaintProjection(graphics, infoA);
+            PointF[] drawnA = ((Paint2dTrace)a.Painter).DrawnYT ?? throw new AssertFailedException("A drew nothing");
+            Assert.IsTrue(drawnA[drawnA.Length - 1].X >= infoA.ProjectionArea.Right - 2,
+                $"pad-right must reach the window edge (last X {drawnA[drawnA.Length - 1].X}, right {infoA.ProjectionArea.Right})");
+
+            TraceGroupDisplay infoB = scope.PaintBox.TraceToGroupDisplayInfo(b);
+            b.Painter.PaintProjection(graphics, infoB);
+            PointF[] drawnB = ((Paint2dTrace)b.Painter).DrawnYT ?? throw new AssertFailedException("B drew nothing");
+            Assert.IsTrue(drawnB[0].X <= infoB.ProjectionArea.Left + 2,
+                $"pad-left must reach the window edge (first X {drawnB[0].X}, left {infoB.ProjectionArea.Left})");
+            // and without the pad flag the other edge stays where the data ends (mid-pane)
+            Assert.IsTrue(drawnA[0].X <= infoA.ProjectionArea.Left + 2, "A starts at the window left anyway");
+            Assert.IsTrue(drawnB[drawnB.Length - 1].X >= infoB.ProjectionArea.Right - 2, "B ends at the window right anyway");
         }
 
         [TestMethod]
