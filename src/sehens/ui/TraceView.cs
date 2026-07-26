@@ -1209,7 +1209,9 @@ namespace SehensWerte.Controls.Sehens
 
         internal string TraceHoverStatistics(MouseInfo clickInfo)
         {
-            return clickInfo.YRatio is >= 0.0 and <= 1.0 && !clickInfo.BeyondDrawnData
+            return clickInfo.YRatio is >= 0.0 and <= 1.0
+                && !clickInfo.BeyondDrawnData
+                && double.IsFinite(clickInfo.SampleAtX)
                 ? Painter.GetHoverStatistics(this, clickInfo)
                 : "";
         }
@@ -1390,10 +1392,12 @@ namespace SehensWerte.Controls.Sehens
                 bool after = false;
                 double[]? samples = null;
                 double[]? view;
+                long generation;
 
                 lock (m_Samples.DataLock)
                 {
                     m_CachedStatistics = null;
+                    generation = m_Samples.SamplesGeneration;
                     view = m_Samples.ViewedSamplesInterpolatedAsDouble;
                     before = m_BeforeZoomCalculateRequired;
                     if (!before)
@@ -1447,6 +1451,7 @@ namespace SehensWerte.Controls.Sehens
                         }
                     }
 
+                    bool staleSnapshot = false;
                     if (FindTrigger(triggerSamples, ref sampleCount, ref sampleOffset))
                     {
                         projected = GetDrawnSamples(samples, sampleOffset, sampleCount, out drawnStart);
@@ -1460,15 +1465,27 @@ namespace SehensWerte.Controls.Sehens
                             PeakHoldAfterZoom(projected, ref peakMin, ref peakMax);
                             lock (m_Samples.DataLock)
                             {
-                                m_DrawnSamples = projected;
-                                m_CalculatedBeforeZoom = samples;
-                                m_PeakHoldDrawn = new TraceDataPeakHold(peakMin, peakMax);
-                                m_DrawnStartPosition = drawnStart;
+                                if (m_Samples.SamplesGeneration == generation)
+                                {
+                                    m_DrawnSamples = projected;
+                                    m_CalculatedBeforeZoom = samples;
+                                    m_PeakHoldDrawn = new TraceDataPeakHold(peakMin, peakMax);
+                                    m_DrawnStartPosition = drawnStart;
+                                }
+                                else
+                                {
+                                    staleSnapshot = true;
+                                    BeforeZoomCalculateRequired();
+                                }
                             }
                         }
                     }
 
                     RecalculateProjectionRequired();
+                    if (staleSnapshot)
+                    {
+                        Scope.ViewNeedsRepaint(this);
+                    }
                 }
 
                 if (before || after)
@@ -2962,6 +2979,32 @@ value=" + string.Format(VerticalUnitFormat, Clicks[0].SampleAtX.ToStringRound(5,
             Assert.AreEqual(0, padded.IndexBeforeTrim); // clamped to the first sample, not [-302]
             Assert.AreEqual(1_700_000_005.0, padded.UnixTimeAtX, 1e-6); // index/sps, not index*sps
             Assert.AreNotEqual("", late.TraceHoverStatistics(padded));
+        }
+
+        [TestMethod]
+        public void GapSampleHoverIsSuppressed()
+        {
+            var scope = new SehensControl();
+            const int count = 1000;
+            double[] samples = new double[count];
+            for (int loop = 0; loop < count; loop++)
+            {
+                samples[loop] = loop < count / 2 ? double.NaN : 1.0;
+            }
+            scope["gappy"].Update(samples);
+            SehensTestHarness.Layout(scope);
+            TraceView view = SehensTestHarness.View(scope, "gappy");
+
+            TraceGroupDisplay info = scope.PaintBox.TraceToGroupDisplayInfo(view);
+            int yMid = info.ProjectionArea.Top + info.ProjectionArea.Height / 2;
+            int xGap = info.ProjectionArea.Left + info.ProjectionArea.Width / 4;
+            TraceView.MouseInfo gap = view.Measure(new MouseEventArgs(MouseButtons.Left, 0, xGap, yMid, 0));
+            Assert.IsFalse(double.IsFinite(gap.SampleAtX));
+            Assert.AreEqual("", view.TraceHoverStatistics(gap), "no hover label over a gap");
+
+            int xValid = info.ProjectionArea.Left + info.ProjectionArea.Width * 3 / 4;
+            TraceView.MouseInfo valid = view.Measure(new MouseEventArgs(MouseButtons.Left, 0, xValid, yMid, 0));
+            Assert.AreNotEqual("", view.TraceHoverStatistics(valid), "real samples still hover");
         }
 
         [TestMethod]

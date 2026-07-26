@@ -256,8 +256,8 @@ namespace SehensWerte.Controls.Sehens
             [AutoEditor.DisplayName("Trace prefix")]
             public string TraceNamePrefix = "Csv.";
 
-            [AutoEditor.DisplayName("Remove invalid samples")]
-            public bool RemoveNAN = true;
+            [AutoEditor.DisplayName("Remove invalid samples (compacts columns, breaks row alignment)")]
+            public bool RemoveNAN = false;
         }
 
         private class ImportDataWavForm : ImportDataForm
@@ -324,8 +324,8 @@ namespace SehensWerte.Controls.Sehens
             [AutoEditor.DisplayName("Trace prefix")]
             public string TraceNamePrefix = "Parquet.";
 
-            [AutoEditor.DisplayName("Remove invalid samples")]
-            public bool RemoveNAN = true;
+            [AutoEditor.DisplayName("Remove invalid samples (compacts columns, breaks row alignment)")]
+            public bool RemoveNAN = false;
 
             [AutoEditor.DisplayName("Load mode")]
             public ParquetLoadMode LoadMode = ParquetLoadMode.YT;

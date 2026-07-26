@@ -110,7 +110,7 @@ namespace SehensWerte.Maths
         public void TestLinearOntoGridCrossing()
         {
             // Two curves resampled onto the same grid must cross at the grid index where their values
-            // meet (the MotorSim available-vs-required "operating point"). Rising: y=x; falling: y=10-x.
+            // meet (an available-vs-required "operating point"). Rising: y=x; falling: y=10-x.
             double[] xr = new double[] { 0, 10 };
             double[] rising = Interpolate.LinearOntoGrid(xr, new double[] { 0, 10 }, 11, 0, 1);
             double[] falling = Interpolate.LinearOntoGrid(xr, new double[] { 10, 0 }, 11, 0, 1);

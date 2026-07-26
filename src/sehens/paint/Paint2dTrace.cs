@@ -116,32 +116,30 @@ namespace SehensWerte.Controls.Sehens
 
         public int HoverLabelYFromOffsetX(TraceGroupDisplay info, int x)
         {
-            int y = 0;
+            float y = float.NaN;
             if (DrawnYT != null)
             {
-                int v = FindIndexOfX(DrawnYT, x);
-                if (v != -1)
+                if (FindIndexOfX(DrawnYT, x) is int v)
                 {
-                    y = (int)(DrawnYT[v].Y + 0.5f);
+                    y = DrawnYT[v].Y;
                 }
             }
-            else if (DrawnProjection1 != null && DrawnProjection1!.Length != 0)
+            else if (DrawnProjection1 != null && FindIndexOfX(DrawnProjection1, x) is int index)
             {
-                int index = FindIndexOfX(DrawnProjection1, x);
-                if (index != -1)
+                y = DrawnProjection1[index].Y;
+                if (DrawnProjection2 != null && DrawnProjection2!.Length != 0)
                 {
-                    y = (int)(DrawnProjection1[index].Y + 0.5f);
-                    if (DrawnProjection2 != null && DrawnProjection2!.Length != 0)
-                    {
-                        y = (int)((y + DrawnProjection2[index].Y) / 2);
-                    }
+                    y = (y + DrawnProjection2[index].Y) / 2f;
                 }
             }
-            return y;
+            return float.IsFinite(y)
+                ? (int)(y + 0.5f)
+                : info.ProjectionArea.Top - info.GroupArea.Top + info.ProjectionArea.Height / 2;
         }
 
-        private static int FindIndexOfX(PointF[] array, int x)
+        private static int? FindIndexOfX(PointF[] array, int x)
         {
+            if (array.Length == 0) return null;
             int index = Array.BinarySearch(array, new PointF(x, 0), new PointCompareX());
             if (index < 0)
             {
@@ -151,11 +149,7 @@ namespace SehensWerte.Controls.Sehens
             {
                 index--;
             }
-            if (index >= array.Length)
-            {
-                index = array.Length - 1;
-            }
-            return index;
+            return Math.Min(index, array.Length - 1);
         }
 
         private float Project(double y)
@@ -1372,6 +1366,43 @@ namespace SehensWerte.Controls.Sehens
             // and without the pad flag the other edge stays where the data ends (mid-pane)
             Assert.IsTrue(drawnA[0].X <= infoA.ProjectionArea.Left + 2, "A starts at the window left anyway");
             Assert.IsTrue(drawnB[drawnB.Length - 1].X >= infoB.ProjectionArea.Right - 2, "B ends at the window right anyway");
+        }
+
+        [TestMethod]
+        public void HoverLabelAnchorsMidPaneOnGapSamples()
+        {
+            // Hovering over a gap (NaN) sample used to fling the hover label to the top of the
+            // whole paint box: the NaN projection Y went through an (int) cast and the layout
+            // clamped the resulting huge negative to 0. It must anchor mid-pane instead.
+            var scope = new SehensControl();
+            const int count = 8000;
+            double[] samples = new double[count];
+            for (int loop = 0; loop < count; loop++)
+            {
+                samples[loop] = loop < count / 2 ? double.NaN : 1.0 + (loop - count / 2) * 0.001;
+            }
+            scope["gap"].Update(samples);
+            SehensTestHarness.Layout(scope);
+            TraceView view = SehensTestHarness.View(scope, "gap");
+            view.PaintMode = TraceView.PaintModes.PolygonDigital;
+            view.SetHighLow(10.0, 0.0);
+            SehensTestHarness.Layout(scope);
+
+            TraceGroupDisplay info = scope.PaintBox.TraceToGroupDisplayInfo(view);
+            using var bmp = new Bitmap(SehensTestHarness.Width, SehensTestHarness.Height);
+            using var graphics = Graphics.FromImage(bmp);
+            view.Painter.PaintProjection(graphics, info);
+            var painter = (Paint2dTrace)view.Painter;
+
+            int paneTop = info.ProjectionArea.Top - info.GroupArea.Top;
+            int gapX = info.ProjectionArea.Left + info.ProjectionArea.Width / 4; // inside the NaN half
+            int gapY = painter.HoverLabelYFromOffsetX(info, gapX);
+            Assert.AreEqual(paneTop + info.ProjectionArea.Height / 2, gapY, "gap hover anchors mid-pane");
+
+            int validX = info.ProjectionArea.Left + info.ProjectionArea.Width * 3 / 4;
+            int validY = painter.HoverLabelYFromOffsetX(info, validX);
+            Assert.IsTrue(validY >= paneTop && validY <= paneTop + info.ProjectionArea.Height,
+                $"valid hover anchor {validY} must sit inside the pane");
         }
 
         [TestMethod]

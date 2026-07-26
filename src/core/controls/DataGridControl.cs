@@ -91,7 +91,7 @@ namespace SehensWerte.Controls
         private ToolStripDropDownButton SaveCsvButton;
         private ToolStripDropDownButton LoadCsvButton;
         private System.Windows.Forms.ToolTip HoverTip;
-
+        private (long Rows, long Total, string Name)? m_LoadProgress;
 
         public BoundData? DataGridBind;
         private string RegexInput = ".*";
@@ -454,6 +454,7 @@ namespace SehensWerte.Controls
             };
             this.Grid.Paint += (s, e) =>
             {
+                PaintLoadProgress(e.Graphics);
                 if (m_DraggingDropX < 0) return;
                 using var pen = new Pen(Color.OrangeRed, 2);
                 e.Graphics.DrawLine(pen, m_DraggingDropX, 0, m_DraggingDropX, Grid.ClientSize.Height);
@@ -1580,6 +1581,39 @@ namespace SehensWerte.Controls
         public void SortByColumn(string heading, ListSortDirection direction = ListSortDirection.Ascending)
         {
             DataGridBind?.SortByColumn(heading, direction);
+        }
+
+        public void SetLoadProgress(long rows, long total, string? name = null)
+        {
+            m_LoadProgress = (rows, total, string.IsNullOrEmpty(name) ? "" : name + " ");
+            Grid.Invalidate();
+        }
+
+        public void ClearLoadProgress()
+        {
+            if (m_LoadProgress == null) return;
+            m_LoadProgress = null;
+            Grid.Invalidate();
+        }
+
+        private void PaintLoadProgress(Graphics graphics)
+        {
+            if (m_LoadProgress is not { } progress || progress.Total <= 0) return;
+            double fraction = Math.Max(0.0, Math.Min(1.0, (double)progress.Rows / progress.Total));
+            int width = Math.Min(Grid.ClientSize.Width - 20, Math.Max(240, Grid.ClientSize.Width / 2));
+            int height = 40;
+            if (width <= 0 || Grid.ClientSize.Height < height) return;
+            var bar = new Rectangle((Grid.ClientSize.Width - width) / 2, (Grid.ClientSize.Height - height) / 2, width, height);
+
+            using var back = new SolidBrush(Color.FromArgb(235, SystemColors.Window));
+            using var fill = new SolidBrush(Color.FromArgb(216, 208, 242));
+            using var border = new Pen(SystemColors.ControlDark);
+            graphics.FillRectangle(back, bar);
+            graphics.FillRectangle(fill, new Rectangle(bar.X, bar.Y, (int)(bar.Width * fraction), bar.Height));
+            graphics.DrawRectangle(border, bar);
+            string text = $"{progress.Rows:N0} out of ~{progress.Total:N0} {progress.Name}rows ({fraction * 100:F0}%)";
+            TextRenderer.DrawText(graphics, text, Grid.Font, bar, Grid.ForeColor,
+                TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter);
         }
 
         public void UpdateStatusStrip()

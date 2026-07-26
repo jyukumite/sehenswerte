@@ -534,6 +534,12 @@ namespace SehensWerte.Controls.Sehens
         }
 
 
+        private long m_SamplesGeneration;
+        public long SamplesGeneration
+        {
+            get { lock (DataLock) { return m_SamplesGeneration; } }
+        }
+
         public TraceData Update(IEnumerable<double> samples, IEnumerable<double> unixTime)
         {
             double[] data = samples.ToArray();
@@ -577,6 +583,7 @@ namespace SehensWerte.Controls.Sehens
 
                 m_InputData.UnixTime = unixTime != null && unixTime.Length == DataStore.Count(samples) ? unixTime : null;
                 m_InputData.InputSamples = samples;
+                m_SamplesGeneration++;
             }
             if (guiChange)
             {
@@ -607,6 +614,7 @@ namespace SehensWerte.Controls.Sehens
                     ring.Set(samples.Length == 0 ? 0 : samples[0]);
                 }
                 ring.Insert(samples);
+                m_SamplesGeneration++;
             }
             if (guiChange)
             {
@@ -636,6 +644,7 @@ namespace SehensWerte.Controls.Sehens
                     }
                 }
                 m_ViewedData.InputSamples = to;
+                m_SamplesGeneration++;
             }
             ForEachViewer(x => x.TraceDataSamplesChanged(this));
         }
@@ -924,18 +933,27 @@ namespace SehensWerte.Controls.Sehens
 
             public Statistics(double[] samples, double[]? unixTime = null)
             {
-                var temp = new SehensWerte.Maths.Statistics(samples);
-                Min = temp.Min;
-                Max = temp.Max;
-                Average = temp.Average;
-                StdDev = temp.StdDev;
-                Sum = temp.Sum;
-                Count = temp.Count;
-                LastInput = temp.LastInput;
+                bool allFinite = true;
+                foreach (double sample in samples)
+                {
+                    if (!double.IsFinite(sample)) { allFinite = false; break; }
+                }
+                double[] use = allFinite ? samples : samples.Where(double.IsFinite).ToArray();
+                Count = samples.Length;
+                if (use.Length != 0)
+                {
+                    var temp = new SehensWerte.Maths.Statistics(use);
+                    Min = temp.Min;
+                    Max = temp.Max;
+                    Average = temp.Average;
+                    StdDev = temp.StdDev;
+                    Sum = temp.Sum;
+                    LastInput = temp.LastInput;
+                }
                 if (unixTime != null)
                 {
-                    temp = new Maths.Statistics(unixTime);
-                    TimeStdDev = temp.StdDev;
+                    var timeTemp = new Maths.Statistics(unixTime);
+                    TimeStdDev = timeTemp.StdDev;
                 }
             }
 
@@ -1047,10 +1065,46 @@ namespace SehensWerte.Controls.Sehens
             Assert.IsFalse(td.HasExplicitHorizontalAxis);
             Assert.AreEqual(4.0, td.HorizontalValueAt(4), 1e-9);
 
-            td.SetHorizontalAffine(0.0, 1.0, "km/h"); // a bare unit labels the sample axis (RideTime)
+            td.SetHorizontalAffine(0.0, 1.0, "km/h"); // a bare unit alone still labels the sample axis
             Assert.IsTrue(td.HasExplicitHorizontalAxis);
             Assert.AreEqual(4.0, td.HorizontalValueAt(4), 1e-9);
             Assert.AreEqual("km/h", td.HorizontalUnitEffective);
+        }
+
+        [TestMethod]
+        public void StatisticsSkipGapSamples()
+        {
+            // gaps (NaN) must not poison the stats header to Min=NaN,Max=NaN,...
+            var stats = new TraceData.Statistics(new[] { double.NaN, 1.0, 3.0, double.NaN, 2.0 });
+            Assert.AreEqual(1.0, stats.Min, 1e-9);
+            Assert.AreEqual(3.0, stats.Max, 1e-9);
+            Assert.AreEqual(6.0, stats.Sum, 1e-9);
+            Assert.AreEqual(2.0, stats.Average, 1e-9);
+            Assert.AreEqual(5, stats.Count);              // gaps still count as drawn samples
+            Assert.AreEqual(2.0, stats.LastInput, 1e-9);  // last FINITE sample
+            Assert.IsFalse(stats.ToString().Contains("NaN"), stats.ToString());
+
+            var empty = new TraceData.Statistics(new[] { double.NaN, double.NaN });
+            Assert.AreEqual(2, empty.Count);
+            Assert.IsFalse(empty.ToString().Contains("NaN"), empty.ToString()); // just Count, no NaN figures
+        }
+
+        [TestMethod]
+        public void SamplesGenerationBumpsOnEveryMutation()
+        {
+            // TraceView.CalculateTrace pairs a snapshot with this generation and discards its
+            // projection if the samples changed mid-calculation (concurrent paint-box/input
+            // calculations must not clobber a fresher projection with an older one).
+            var td = new TraceData("t");
+            long g0 = td.SamplesGeneration;
+            td.Update(new double[] { 1, 2, 3 });
+            Assert.IsTrue(td.SamplesGeneration > g0);
+            long g1 = td.SamplesGeneration;
+            td.Update(new double[] { 4, 5 });
+            Assert.IsTrue(td.SamplesGeneration > g1);
+            long g2 = td.SamplesGeneration;
+            td.AppendRing(new double[] { 6 }, ringLength: 8);
+            Assert.IsTrue(td.SamplesGeneration > g2);
         }
 
         [TestMethod]

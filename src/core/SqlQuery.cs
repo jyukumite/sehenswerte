@@ -96,7 +96,8 @@ namespace SehensWerte.Utils
                     }
                 }
             }
-            return mainTable;
+
+            return mainTable != null && Regex.IsMatch(mainTable, @"^[A-Za-z_][A-Za-z0-9_.]*$") ? mainTable : null;
         }
 
         private static int? LastLimit(Queue<string> tokens)
@@ -683,6 +684,9 @@ newline and "" and ''.'", ",",
                 Assert.AreEqual("bob", SqlQuery.MainTable("WITH withtable AS (SELECT something FROM bob) SELECT foo FROM withtable WHERE foo='something';"));
                 Assert.AreEqual("bob", SqlQuery.MainTable("WITH withtable AS (SELECT (nested brackets not real sql) FROM bob) SELECT foo FROM withtable WHERE foo='something';"));
                 Assert.AreEqual("bob", SqlQuery.MainTable("UPDATE bob SET foo=42 WHERE something=true;"));
+                Assert.AreEqual("schema1.bob", SqlQuery.MainTable("SELECT foo FROM schema1.bob;"));
+                Assert.IsNull(SqlQuery.MainTable("SELECT foo FROM (SELECT foo FROM bob) sub;"));
+                Assert.IsNull(SqlQuery.MainTable("SELECT foo FROM \"quoted table\";"));
             }
         }
 
