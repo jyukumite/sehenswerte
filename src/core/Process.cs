@@ -298,7 +298,8 @@ namespace SehensWerte.Utils
 
         public struct TestRunResult { public int Passed; public int Failed; public int Matched; }
 
-        public static TestRunResult RunTests(string? classFilter = null, string? methodFilter = null,
+        // Headless, filterable test runner (works under Wine/CLI)
+		public static TestRunResult RunTests(string? classFilter = null, string? methodFilter = null,
             Action<string>? report = null, Action<string>? detail = null)
         {
             var result = new TestRunResult();
