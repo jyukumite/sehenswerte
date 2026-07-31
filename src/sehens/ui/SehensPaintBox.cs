@@ -313,17 +313,39 @@ namespace SehensWerte.Controls.Sehens
             {
                 OnLog?.Invoke(new CsvLog.Entry("CalculateBefore", CsvLog.Priority.Debug));
 
-                PaintedTraces.VisibleTraceList.ForEach(item =>
+                List<TraceView> visible = PaintedTraces.VisibleTraceList;
+
+                // A calculated view reads its sources' CalculatedBeforeZoom, so it must run in a
+                // later wave than every source
+                var depths = new Dictionary<TraceView, int>();
+                int ChainDepth(TraceView view, int guard)
+                {
+                    if (depths.TryGetValue(view, out int cached)) return cached;
+                    if (guard <= 0) return 0; // cycle guard: a source loop has no valid depth
+                    int depth = 0;
+                    foreach (TraceView source in view.CalculatedSourceViews)
+                    {
+                        if (source != null && source != view && source.CalculateType != TraceView.CalculatedTypes.None)
+                        {
+                            depth = Math.Max(depth, 1 + ChainDepth(source, guard - 1));
+                        }
+                    }
+                    depths[view] = depth;
+                    return depth;
+                }
+
+                visible.ForEach(item =>
                 {
                     item.CalculateOrder =
                         item.CalculateType == TraceView.CalculatedTypes.None
                             ? (item.TriggerView == null ? 0 : 1)
-                            : (item.Samples.InputSampleCount == 0 ? 3 : 2);
+                            : (2 + ChainDepth(item, visible.Count));
                 });
 
-                List<TraceView> list = PaintedTraces.VisibleTraceList.OrderBy(x => x.CalculateOrder).ToList();
+                List<TraceView> list = visible.OrderBy(x => x.CalculateOrder).ToList();
 
-                for (int order = 0; order < 4; order++)
+                int lastOrder = list.Count == 0 ? 0 : list[list.Count - 1].CalculateOrder;
+                for (int order = 0; order <= lastOrder; order++)
                 { // finish the parallel for each order
                     Parallel.ForEach<TraceView>(
                             list.Where(x => x.CalculateOrder == order && x != null && x.ProcessAtDisplay),

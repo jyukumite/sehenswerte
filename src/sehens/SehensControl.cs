@@ -9,6 +9,51 @@ using System.Text;
 
 namespace SehensWerte.Controls
 {
+    /*
+    Sehens operating model:
+
+      Dictionary<string, TraceData> m_Traces  SehensControl  owns        0..n  TraceData      (scope["name"] creates)
+      List<List<TraceView>> m_ViewGroups      SehensControl  owns        0..n  TraceView      (stored in display groups)
+      SehensPaintBox PaintBox                 SehensControl  owns        1     SehensPaintBox (plus trace list, scrollbars)
+      TraceData m_Samples                     TraceView      references  1     TraceData
+      List<ITraceView> m_ViewerList           TraceData      notifies    0..n  TraceView      (one trace, many views)
+      IPaintTrace Painter                     TraceView      owns        1     painter        (Paint2dTrace, Paint2dFFTTrace, PaintXYTrace, PaintXYZTrace, PaintPiPTrace)
+
+    Threading model:
+    - WinForms members (PaintBox, trace list, menus, editors) are UI-thread only. TraceData
+      updates may come from ANY thread (guarded by TraceData.DataLock); viewer callbacks fire
+      on the caller's thread and only arm flags + request repaints.
+    - Repaints are coalesced by a dedicated pacing thread (SehensPaintBox.PaintRun): every
+      Invalidate() increments a counter; the thread rate-limits (2x the rolling paint time,
+      capped at 1 s), then BeginInvoke's a WinForms Invalidate so OnPaint runs on the UI thread.
+    - OnPaint paints the group panes in pallel using a temporary bitmap per group with
+      group-relative coordinates via PaintFlags.Parallel, composited under a lock.
+      Trace state read during paint is guarded by TraceData.DataLock.
+    - m_ViewGroups is guarded by m_ViewGroupsLock; read group membership via GroupedTraces().
+
+    Repaint model (SehensPaintBox.PaintBoxPaint, on the UI thread, per paint):
+      RecalculateProjectionIfRequired -> GetPaintedTraces (rebuilds every view's Painted info:
+      group index/count, height factors, click zones) -> PaintGetRectangle -> CalculateBefore
+      (below) -> PaintTraces, per group in parallel:
+        PaintSelection -> Painter.PaintInitial -> gutters -> horizontal axis (+ the
+        "mixed horizontal axes" warning) -> axis titles -> vertical axis -> then per view:
+        highlight features, PaintTraceSamples ((Hold)/(Offset)/(Calc)/(bad horizontal axis)
+        warnings + Painter.PaintProjection, which projects into the view's ValueRect and draws
+        the PiP inset, then AutoRange), stats, label, remaining features, playback cursor,
+        embedded menu buttons
+      -> cursor -> hover stats -> hover -> stopped warning -> drag select -> if a projection
+      recalc was requested DURING paint, Invalidate once more. Paint exceptions are caught,
+      painted as text, and counted (PaintExceptionCount) so tests can assert on them.
+
+    Calculate model (SehensPaintBox.CalculateBefore, every paint, before painting): every
+    visible view gets CalculateTrace() via Parallel.ForEach in CalculateOrder waves:
+      0 = plain traces, 1 = triggered, 2 + depth = calculated (CalculateType != None), where
+      depth is the view's position in the CalculatedSourceViews chain
+    so calculated views always see their sources' fresh CalculatedBeforeZoom, and a whole chain
+    (Differentiate(Differentiate(x))) resolves in ONE paint - one shared wave for every
+    calculated view left the deeper view empty. CalculateTrace is a no-op unless armed (see the
+    TraceView header) - a settled scope paints without recomputing anything.
+    */
     public partial class SehensControl : UserControl
     {
         //fixme: review System.Windows.Forms.DataVisualization.Charting

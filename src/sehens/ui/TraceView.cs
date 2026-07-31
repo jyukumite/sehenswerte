@@ -9,6 +9,44 @@ using System.Xml.Serialization;
 
 namespace SehensWerte.Controls.Sehens
 {
+    /*
+    TraceView: one displayed trace - the view-side settings (colour, paint mode, zoom, math,
+    filters, triggers, axis display) over a TraceData (the samples). Many TraceViews can
+    reference one TraceData (the ctor calls samples.AddViewer): each view filters/zooms/paints
+    the same samples independently and hears about changes via the ITraceView callbacks, which
+    run synchronously on whatever thread mutated the TraceData.
+
+    Calculate model - CalculateTrace, called for every visible view on every paint
+    (SehensPaintBox.CalculateBefore), is a NO-OP unless one of three flags armed it:
+    - m_BeforeZoomCalculateRequired (input samples or settings changed): recompute the full
+      chain: ViewedSamplesInterpolatedAsDouble (or ExecuteCalculate() for CalculateType views)
+      -> ApplyOffsetAndLength (view length/offset window + pads) -> CalculateFilters
+      (TraceFilter, FFT bandpass, differentiate/integrate transform) -> optional before-zoom
+      FFT -> m_RawBeforeZoom / m_CalculatedBeforeZoom.
+    - m_AfterZoomCalculateRequired (zoom/pan/trigger changed): re-slice: FindTrigger ->
+      GetDrawnSamples (legacy count-fraction zoom, or the group's shared VALUE window for
+      value-aligned groups) -> optional after-zoom FFT -> dB -> m_DrawnSamples /
+      m_DrawnStartPosition. Publishing is guarded by a TraceData.SamplesGeneration check so a
+      concurrent Update cannot land a stale snapshot (the pass re-arms itself instead).
+    - m_RecalculateProjectionRequired (pixels changed: resize, range, log axes, ValueRect):
+      the painter re-projects m_DrawnSamples on the next paint (SnapshotProjection consumes
+      the flag; the projection cache also reprojects when the target rect changes).
+
+    Calculated views (CalculateType != None) read their sources' CalculatedBeforeZoom inside
+    ExecuteCalculate. NOTIFY RULE: after computing, a view must never notify itself (it is a
+    viewer of its own TraceData - a self-notify re-armed it every paint, a continuous paint
+    loop); instead, downstream calc views are armed explicitly by scanning every view's
+    CalculatedSourceViews, and the chain terminates at the leaves. That arming is what carries
+    an update INTO the chain; CalculateBefore's depth-ordered waves are what let the whole
+    chain resolve within one paint (see the SehensControl header).
+
+    Threading model: shared fields are guarded by m_Samples.DataLock; display-property setters
+    (UI thread) arm the flags above and call Scope.ViewNeedsRepaint rather than recomputing
+    inline (exception: PeakHold, ProcessAtInput, computes on the update thread). Group
+    membership (Group) is maintained by the scope under its group lock - read it via
+    Scope.GroupedTraces(this). Painted (group index/count, click zones, painted group list) is
+    rebuilt by GetPaintedTraces at the START of every paint and is only valid during that paint.
+    */
     public partial class TraceView : ITraceView, IDisposable
     {
         [AutoEditor.Hidden]
@@ -1490,11 +1528,24 @@ namespace SehensWerte.Controls.Sehens
 
                 if (before || after)
                 {
-                    //fixme: don't call if the samples didn't actually change (recursive invalidate)
+                    // Never notify self: a calculated view is a viewer of its own TraceData
+                    // Views calculated from this one are armed explicitly instead (sources have no
+                    // viewer wiring), so chained maths still propagate, one step per paint, and
+                    // the chain terminates at the leaves.
                     m_Samples.ForEachViewer(viewer =>
                     {
-                        viewer.TraceDataCalculatedSamplesChanged(m_Samples);
+                        if (!ReferenceEquals(viewer, this))
+                        {
+                            viewer.TraceDataCalculatedSamplesChanged(m_Samples);
+                        }
                     });
+                    foreach (TraceView dependent in Scope.AllViews)
+                    {
+                        if (dependent != this && dependent.CalculatedSourceViews.Contains(this))
+                        {
+                            dependent.TraceDataCalculatedSamplesChanged(dependent.Samples);
+                        }
+                    }
                 }
                 if (before)
                 {
@@ -2279,9 +2330,16 @@ value=" + string.Format(VerticalUnitFormat, Clicks[0].SampleAtX.ToStringRound(5,
         // its kind/unit/value-range, for group value-domain classification. b > 0 for Time/Affine.
         // Must agree with DrawnExtents / TraceData.HorizontalValueAt (same composition rules and the
         // same display/view offsets), or SubWindow places the ValueRect off-pane.
-        internal (HorizontalKind kind, string unit, double left, double right, double a, double b) FullHorizontalAffine()
+        // fullCountOverride: the length of the samples the caller is about to slice. CalculateTrace
+        // publishes m_CalculatedBeforeZoom at the END of the pass, so a calculated view asking
+        // mid-pass sees the PREVIOUS length - and 0 on the very first pass, because a calculated
+        // view's own TraceData holds no input samples. A zero-width domain collapses the
+        // value-aligned window to one sample: the maths computed correctly and the pane painted
+        // BLANK. Calculated views re-arming themselves every paint used to hide it by always
+        // granting a second pass.
+        internal (HorizontalKind kind, string unit, double left, double right, double a, double b) FullHorizontalAffine(int? fullCountOverride = null)
         {
-            int fullCount = m_CalculatedBeforeZoom?.Length ?? m_Samples.ViewedSampleCount;
+            int fullCount = fullCountOverride ?? m_CalculatedBeforeZoom?.Length ?? m_Samples.ViewedSampleCount;
             int num = m_Samples.InputSampleNumberDisplayOffset; // view offset moved the DATA, not the axis
             HorizontalKind kind = HorizontalKind;
             double a, b;
@@ -2323,13 +2381,15 @@ value=" + string.Format(VerticalUnitFormat, Clicks[0].SampleAtX.ToStringRound(5,
             foreach (TraceView v in group)
             {
                 if (!v.Visible) continue;
-                var f = v.FullHorizontalAffine();
+                // count is THIS pass's real length - see FullHorizontalAffine on why asking a
+                // calculated view for its own length mid-pass gives 0 and blanks the trace
+                var f = v.FullHorizontalAffine(ReferenceEquals(v, this) ? count : null);
                 members.Add(new GroupHorizontal.Member(f.kind, f.unit, f.left, f.right, v.IsLogX));
             }
             if (members.Count == 0) return false;
             GroupHorizontal.Domain window = GroupHorizontal.Window(members, m_ZoomValue, m_PanValue);
             if (window.Mode != HorizontalMode.ValueAlign) return false;
-            var self = FullHorizontalAffine();
+            var self = FullHorizontalAffine(count);
             if (self.b == 0.0) return false;
             int s = (int)Math.Round((window.Left - self.a) / self.b);
             int e = (int)Math.Round((window.Right - self.a) / self.b);
@@ -3019,6 +3079,120 @@ value=" + string.Format(VerticalUnitFormat, Clicks[0].SampleAtX.ToStringRound(5,
             view.CalculateType = TraceView.CalculatedTypes.Sum; // no CalculatedSourceViews yet
             SehensTestHarness.Layout(scope); // runs CalculateTrace -> ExecuteCalculate
             Assert.AreEqual(0, view.ExecuteCalculate().Length);
+        }
+
+        [TestMethod]
+        public void CalculatedViewSettlesAndStillFollowsItsSource()
+        {
+            var scope = new SehensControl();
+            scope["src"].Update(SehensTestHarness.Ramp(100));
+            var calcData = new TraceData("calc");
+            TraceView calc = new TraceView(scope, calcData, "calc");
+            calc.CalculateType = TraceView.CalculatedTypes.Abs;
+            calc.CalculatedSourceViews.Add(SehensTestHarness.View(scope, "src"));
+
+            for (int pass = 0; pass < 3; pass++) // simulate paint-driver passes: source, then calc
+            {
+                SehensTestHarness.View(scope, "src").CalculateTrace();
+                calc.CalculateTrace();
+            }
+            Assert.IsFalse(calc.m_BeforeZoomCalculateRequired, "calc view must settle, not re-arm itself");
+            Assert.AreEqual(99.0, calc.DrawnSamples![99], 1e-9); // abs(ramp)
+
+            scope["src"].Update(SehensTestHarness.Ramp(100).Select(x => -2.0 * x)); // source changed
+            for (int pass = 0; pass < 3; pass++)
+            {
+                SehensTestHarness.View(scope, "src").CalculateTrace();
+                calc.CalculateTrace();
+            }
+            Assert.AreEqual(198.0, calc.DrawnSamples![99], 1e-9, "calc must follow the source update");
+            Assert.IsFalse(calc.m_BeforeZoomCalculateRequired, "and settle again afterwards");
+        }
+
+        [TestMethod]
+        public void MathViewOnASecondsAxisDrawsOnTheFirstPaint()
+        {
+            // Field repro: Generate > Tone (defaults), then Math > Differentiate on it - BLANK, and
+            // it stayed blank because the view had settled. The maths was always right
+            // (CalculatedBeforeZoom held all 10000 samples); the value-aligned DRAWN window
+            // collapsed to one sample, because the menu copies the source's samples-per-second onto
+            // the calculated view (a seconds axis, so value-aligned) while that view's own TraceData
+            // holds no samples, and FullHorizontalAffine asked for its length mid-pass - before
+            // CalculateTrace publishes it. Calculated views re-arming themselves every paint used to
+            // grant a second pass that papered over it.
+            var scope = new SehensControl();
+            const double sps = 10000.0;
+            const int count = 10000;
+            double[] tone = new Generators.ToneGenerator
+            {
+                FrequencyStart = 1000.0,
+                FrequencyEnd = 1000.0,
+                WaveTable = Generators.WaveformGenerator.List[Generators.WaveformGenerator.Waveforms.Sine],
+                SamplesPerSecond = sps,
+                UseMathSin = true
+            }.Generate(count);
+            scope["Waveform"].UpdateByRef(tone, sps);
+
+            TraceView source = SehensTestHarness.View(scope, "Waveform");
+            TraceView view = scope.EnsureView("Differentiate(Waveform)"); // ContextMenus math Click
+            view.CalculatedParameter = new TraceView.CalculatedTraceData();
+            view.Samples.InputSamplesPerSecond = source.Samples.InputSamplesPerSecond;
+            view.CalculatedSourceViews = new List<TraceView> { source };
+            view.CalculateType = TraceView.CalculatedTypes.Differentiate;
+
+            scope.ActiveSkin.ExportTraces = Skin.TraceSelections.VisibleTraces;
+            scope.PaintBox.ScreenshotToBitmap(scope.ActiveSkin, null).Dispose(); // ONE paint
+
+            Assert.AreEqual(count, view.DrawnSamples?.Length ?? 0, "the whole seconds-axis domain must draw");
+            Assert.IsTrue(view.DrawnSamples!.Any(x => x != 0.0), "differentiated tone is not all zero");
+            Assert.IsFalse(view.m_BeforeZoomCalculateRequired, "and it settles, blank or not");
+            Assert.AreEqual(0, scope.PaintBox.PaintExceptionCount,
+                scope.PaintBox.LastPaintExceptionText ?? "paint exception recorded");
+        }
+
+        [TestMethod]
+        public void ChainedCalculatedViewsResolveInOnePaint()
+        {
+            // Field report: Differentiate(Differentiate(x)) drew nothing. Every calculated view
+            // used to share one CalculateOrder wave, so a chain filled in one level per paint (and
+            // only while a repaint kept arriving) - the deeper pane stayed empty. Built like the
+            // Math menu does (own TraceData + CalculatedSourceViews) and driven through the REAL
+            // paint driver (CalculateBefore waves), not the harness's flat dependency-ordered loop.
+            var scope = new SehensControl();
+            double[] Square(double scale) => Enumerable.Range(0, 200).Select(x => scale * x * x).ToArray();
+            scope["src"].Update(Square(1.0), 1.0);
+
+            TraceView Differentiate(string name, TraceView source)
+            {
+                TraceView view = scope.EnsureView(name);
+                view.CalculatedSourceViews = new List<TraceView> { source };
+                view.CalculateType = TraceView.CalculatedTypes.Differentiate; // last, like the menu
+                return view;
+            }
+            TraceView first = Differentiate("d1", SehensTestHarness.View(scope, "src"));
+            TraceView second = Differentiate("d2", first);
+            TraceView third = Differentiate("d3", second);
+
+            scope.ActiveSkin.ExportTraces = Skin.TraceSelections.VisibleTraces;
+            void Paint() => scope.PaintBox.ScreenshotToBitmap(scope.ActiveSkin, null).Dispose();
+
+            Paint(); // ONE paint has to resolve the whole chain, however deep
+            void AssertChain(double scale)
+            {
+                foreach (TraceView view in new[] { first, second, third })
+                {
+                    Assert.IsTrue((view.DrawnSamples?.Length ?? 0) > 0, $"{view.ViewName} drew nothing");
+                    Assert.IsFalse(view.m_BeforeZoomCalculateRequired, $"{view.ViewName} did not settle");
+                }
+                Assert.AreEqual(scale * 99.0, first.DrawnSamples![50], 1e-9); // d(kx^2) at 50, backward difference
+                Assert.AreEqual(scale * 2.0, second.DrawnSamples![50], 1e-9); // dd(kx^2) = 2k
+                Assert.AreEqual(0.0, third.DrawnSamples![50], 1e-9); // ddd(kx^2) = 0
+            }
+            AssertChain(1.0);
+
+            scope["src"].Update(Square(3.0), 1.0); // a later source update must also cross the chain
+            Paint();
+            AssertChain(3.0);
         }
 
         [TestMethod]

@@ -267,6 +267,39 @@ sorts DESCENDING to render ascending - mirror the existing `(b.Sort - a.Sort)` /
 generators (Tone/Sweep/Noise/Sinc/Window, Sort 1-5), reference sets (All windows/All filters/Filter
 Coefficients, 6-8), bulk test data (Axis test matrix/YT test traces/100 test traces, 10-12).
 
+### Calculated (math) views - notify and ordering rules
+
+A calculated view (`CalculateType != None`) recomputes in `CalculateTrace` and then notifies.
+RULE: it must never notify itself (it is a viewer of its own TraceData), which would cause a continuous
+recalculate/repaint loop for any math trace. Sources have no viewer wiring (`CalculatedSourceViews`
+is a plain list), so downstream propagation is EXPLICIT: after a recompute, views whose
+`CalculatedSourceViews` contain this view are armed directly, and the chain terminates at the leaves.
+
+That arming carries an update into a chain; ordering is what makes the chain resolve. `CalculateBefore`
+orders calculated views `2 + depth` by their depth in the `CalculatedSourceViews` chain and runs one
+wave per order, so `Differentiate(Differentiate(x))` computes in ONE paint. One shared wave for every
+calculated view (the original `InputSampleCount == 0 ? 3 : 2`) filled a chain in one level per paint
+and only while a repaint kept arriving - a calc-of-a-calc pane rendered EMPTY in the field. Keep the
+wave loop bounded by the highest assigned order, not a hardcoded count.
+
+A calculated view's own `TraceData` holds no input samples - its samples only ever exist as
+`m_CalculatedBeforeZoom`, and `CalculateTrace` publishes that at the end of the pass. So anything asking
+a calculated view for its own length mid-pass gets the PREVIOUS pass's length, or 0 on the first pass.
+That is what made `Math > Differentiate` on a generated tone paint BLANK: the Math menu copies the
+source's samples-per-second onto the new view, which puts it on a seconds axis and therefore into the
+value-aligned path, `FullHorizontalAffine` reported a zero-width domain, and `TryGroupValueWindow`
+clamped the drawn window to ONE sample - correct maths, blank pane, then settled. Pass the real length
+via `FullHorizontalAffine(fullCountOverride)` on any mid-pass call. This was latent for as long as calc
+views re-armed themselves every paint (the second pass saw a published length and drew correctly);
+removing the self-notify is what exposed it.
+
+`CalculatedViewSettlesAndStillFollowsItsSource` pins the notify halves,
+`MathViewOnASecondsAxisDrawsOnTheFirstPaint` pins the blank-trace case (the exact field repro:
+Generate > Tone, then Math > Differentiate, ONE paint),
+`ChainedCalculatedViewsResolveInOnePaint` pins the ordering (3-deep, driven through the real paint
+driver - note `SehensTestHarness.Layout`'s flat loop happens to be dependency-ordered, so it cannot
+catch either of these), and `MathTestTracesComputeAndSettle` covers every CalculatedTypes value.
+
 ### Axis test matrix (visual)
 
 Right-click > Generate > "Axis test matrix" (`ContextMenus.GenerateAxisTestMatrix`, internal for its

@@ -295,6 +295,86 @@ namespace SehensWerte.Controls.Sehens
             }
         }
 
+        internal static void GenerateMathTestTraces(SehensControl scope)
+        {
+            scope.BeginUpdate();
+            try
+            {
+                const double sps = 1000.0;
+                scope["math src A"].Update(TestSine(2000, 3), sps);
+                scope["math src B"].Update(TestSine(2000, 5, 0.5), sps);
+                scope["math src fir"].Update(Enumerable.Repeat(1.0 / 31, 31)); // boxcar coefficients
+
+                TraceView Math(TraceView.CalculatedTypes type, int sources,
+                    TraceView.CalculatedTraceData? parameter = null, bool firSource = false)
+                {
+                    string name = "math " + type;
+                    var view = new TraceView(scope, new TraceData(name), name);
+                    if (parameter != null)
+                    {
+                        view.CalculatedParameter = parameter;
+                    }
+                    view.CalculatedSourceViews.Add(scope["math src A"].FirstView ?? throw new InvalidOperationException(name));
+                    if (sources >= 2)
+                    {
+                        string second = firSource ? "math src fir" : "math src B";
+                        view.CalculatedSourceViews.Add(scope[second].FirstView ?? throw new InvalidOperationException(name));
+                    }
+                    view.CalculateType = type; // last, like the Math menu - the setter arms the calc
+                    return view;
+                }
+
+                Math(TraceView.CalculatedTypes.Abs, 1);
+                Math(TraceView.CalculatedTypes.Normalised, 1);
+                Math(TraceView.CalculatedTypes.Differentiate, 1);
+                Math(TraceView.CalculatedTypes.Integrate, 1);
+                Math(TraceView.CalculatedTypes.ProjectYTtoY, 1);
+                Math(TraceView.CalculatedTypes.SubtractOffset, 1, new TraceView.CalculatedTraceDataOneDouble { Param = 0.25 });
+                Math(TraceView.CalculatedTypes.ProductSimple, 1, new TraceView.CalculatedTraceDataOneDouble { Param = 2.0 });
+                Math(TraceView.CalculatedTypes.PolyFilter, 1, new TraceView.CalculatedTraceDataOrder { Order = 5 });
+                Math(TraceView.CalculatedTypes.Rescale, 1, new TraceView.CalculatedTraceDataMinMax { Min = 0, Max = 1 });
+                Math(TraceView.CalculatedTypes.Quantize, 1, new TraceView.CalculatedTraceDataQuantise { Offset = 0.0, Scale = 4.0 });
+                Math(TraceView.CalculatedTypes.RollingRMS, 1, new TraceView.CalculatedTraceDataWindow { Window = 50 });
+                Math(TraceView.CalculatedTypes.RollingMean, 1, new TraceView.CalculatedTraceDataWindow { Window = 50 });
+                Math(TraceView.CalculatedTypes.Resample, 1, new TraceView.CalculatedTraceDataCount { Count = 500 });
+                Math(TraceView.CalculatedTypes.Atan2, 2);
+                Math(TraceView.CalculatedTypes.Difference, 2);
+                Math(TraceView.CalculatedTypes.Subtract, 2);
+                Math(TraceView.CalculatedTypes.RescaledError, 2);
+                Math(TraceView.CalculatedTypes.NormalisedError, 2);
+                Math(TraceView.CalculatedTypes.FIR, 2, firSource: true);
+                Math(TraceView.CalculatedTypes.Magnitude, 2);
+                Math(TraceView.CalculatedTypes.Sum, 2);
+                Math(TraceView.CalculatedTypes.Mean, 2);
+                Math(TraceView.CalculatedTypes.Product, 2);
+                // skipped: None (not a calc), PythonScript (not implemented)
+            }
+            finally
+            {
+                scope.EndUpdate();
+            }
+        }
+
+        internal static void GenerateFilterTestTraces(SehensControl scope)
+        {
+            scope.BeginUpdate();
+            try
+            {
+                TraceData noise = scope["filter src"];
+                noise.Update(new NoiseGenerator().Generate(20000), 10000.0);
+                foreach (string filter in FilterChoice.FilterNames)
+                {
+                    if (filter == "None") continue;
+                    var view = new TraceView(scope, noise, "filter " + filter);
+                    view.TraceFilter = filter;
+                }
+            }
+            finally
+            {
+                scope.EndUpdate();
+            }
+        }
+
         private class NoiseTraceForm
         {
             [AutoEditor.DisplayName("Name")]
@@ -1478,6 +1558,30 @@ namespace SehensWerte.Controls.Sehens
 
             contextMenu.Add(new ScopeContextMenu.MenuItem
             {
+                SubMenuText = subMenuText,
+                Text = "Math test traces",
+                Sort = 13, // bulk test data last
+                ShownWhenTrace = ScopeContextMenu.MenuItem.ShowWhen.Always,
+                ShownWhenMouse = PaintBoxMouseInfo.GuiSection.Anywhere,
+                Call = ScopeContextMenu.MenuItem.CallWhen.Once,
+                ShownText = ScopeContextMenu.MenuItem.TextDisplay.NoChange,
+                Clicked = (a) => GenerateMathTestTraces(a.Scope),
+            });
+
+            contextMenu.Add(new ScopeContextMenu.MenuItem
+            {
+                SubMenuText = subMenuText,
+                Text = "Filter test traces",
+                Sort = 14, // bulk test data last
+                ShownWhenTrace = ScopeContextMenu.MenuItem.ShowWhen.Always,
+                ShownWhenMouse = PaintBoxMouseInfo.GuiSection.Anywhere,
+                Call = ScopeContextMenu.MenuItem.CallWhen.Once,
+                ShownText = ScopeContextMenu.MenuItem.TextDisplay.NoChange,
+                Clicked = (a) => GenerateFilterTestTraces(a.Scope),
+            });
+
+            contextMenu.Add(new ScopeContextMenu.MenuItem
+            {
                 SubMenuText = "Generate",
                 Text = "All filters",
                 Sort = 7,
@@ -2406,6 +2510,42 @@ namespace SehensWerte.Controls.Sehens
             // (this is how the fake-YT IndexOutOfRange would have been caught)
             Assert.AreEqual(0, scope.PaintBox.PaintExceptionCount,
                 scope.PaintBox.LastPaintExceptionText ?? "paint exception recorded");
+        }
+
+        [TestMethod]
+        public void MathTestTracesComputeAndSettle()
+        {
+            var scope = new SehensControl();
+            ContextMenus.GenerateMathTestTraces(scope);
+            for (int pass = 0; pass < 3; pass++)
+            {
+                SehensTestHarness.Layout(scope);
+            }
+
+            TraceView[] calcs = scope.AllViews.Where(x => x.CalculateType != TraceView.CalculatedTypes.None).ToArray();
+            Assert.AreEqual(23, calcs.Length, "one view per implemented CalculatedTypes value");
+            foreach (TraceView view in calcs)
+            {
+                Assert.IsTrue((view.DrawnSamples?.Length ?? 0) > 0, $"{view.ViewName} produced no samples");
+                Assert.IsFalse(view.m_BeforeZoomCalculateRequired, $"{view.ViewName} did not settle (paint loop)");
+            }
+        }
+
+        [TestMethod]
+        public void FilterTestTracesComputeForEveryFilter()
+        {
+            var scope = new SehensControl();
+            ContextMenus.GenerateFilterTestTraces(scope);
+            SehensTestHarness.Layout(scope);
+
+            int expected = FilterChoice.FilterNames.Count(x => x != "None");
+            TraceView[] filtered = scope.AllViews.Where(x => x.TraceFilter != "None").ToArray();
+            Assert.AreEqual(expected, filtered.Length, "one view per filter choice");
+            foreach (TraceView view in filtered)
+            {
+                Assert.IsTrue((view.DrawnSamples?.Length ?? 0) > 0, $"{view.ViewName} produced no samples");
+                Assert.IsTrue(view.DrawnSamples!.Any(v => v != 0.0), $"{view.ViewName} output is all zero");
+            }
         }
     }
 }

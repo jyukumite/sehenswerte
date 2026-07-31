@@ -5,6 +5,35 @@ using System.Collections;
 
 namespace SehensWerte.Controls.Sehens
 {
+    /*
+    TraceData: the samples and sample-side metadata for one named trace channel - input samples
+    (array or ring), optional per-sample unix times (real YT), sample rate, horizontal axis
+    terms, features, axis titles/units. It knows nothing about painting: display state lives in
+    TraceView, and many views may display one TraceData (m_ViewerList, AddViewer/RemoveViewer -
+    e.g. the "Filter test traces" generator points a view per filter at one shared noise trace).
+
+    Threading model:
+    - Every mutation and snapshot locks that ThreadData's DataLock (samples, features, axis
+      terms, stopped data); m_ViewerLock guards the viewer list. Update/UpdateByRef may be
+      called from ANY thread.
+    - Updates bump SamplesGeneration under DataLock so an in-flight CalculateTrace can detect
+      that the snapshot it computed from went stale and re-arm instead of publishing.
+    - Viewer callbacks (TraceDataSamplesChanged / SettingsChanged / CalculatedSamplesChanged /
+      Rename / Closed) fire synchronously on the CALLER's thread. Handlers only arm flags and
+      request a repaint - the paint pipeline does the actual work (see TraceView header).
+
+    Data sets:
+    - m_InputData: the live input (InputSamples + optional UnixTime + features).
+    - m_StoppedData: a deep clone taken when StopUpdates is set - the VIEWED data freezes while
+      input keeps arriving; the Viewed* accessors read the stopped clone when present.
+    - ViewedSamplesInterpolatedAsDouble: what calculations consume - a real-YT trace
+      (non-uniform unix times) is resampled onto a uniform grid at the smallest positive gap.
+
+    Horizontal axis: see the composition rules at the Horizontal* fields below (sps wins the
+    scale, the offset is always in samples, the identity map means plain sample numbers).
+    NaN samples are GAPS by contract: they paint as breaks in the trace, Statistics skips them,
+    and the hover label is suppressed over them.
+    */
     public class TraceData : IDisposable
     {
         public object? Tag;
