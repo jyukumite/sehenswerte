@@ -130,8 +130,9 @@ Each `TraceView` has a `Painter` (one of `Paint2dTrace`, `Paint2dFFTTrace`, `Pai
 mapping. It compresses `staves` decades (default 2); values below `maxInput / 10^staves` clamp to 0.
 The inverse is `input = maxInput * 10^(output - newMax)`.
 
-`TraceView.LogVertical` is a 4-state enum `LogVerticalMode { Off, Log, dB10, dB20 }`:
+`TraceView.LogVertical` is a 5-state enum `LogVerticalMode { Auto, Off, Log, dB10, dB20 }`:
 
+- `Auto` -- no explicit choice; resolves per display mode (see below). The default for new traces.
 - `Off` -- linear values, linear pixel mapping.
 - `Log` -- linear values, **pixel-log** Y mapping via `ProjectLog`. Use case: linear-magnitude FFT
   where peaks span many orders of magnitude. Painters check this via `view.IsLogY`.
@@ -148,9 +149,36 @@ gone; `SehensSave.View.TranslateLegacyTraceXml` rewrites old saved files into th
 (`FFTMagnitude` + `LogVertical=dB10/dB20`, and the old `True/False` bool serialisations of
 `LogVertical` / `LogHorizontal` into `Log`/`Off`).
 
-The inset "V" and "H" buttons next to "FFT" (in `ContextMenus.AddTraceEmbeddedMenu`) cycle these
-enums per trace. The "FFT" button auto-sets `LogVertical = dB10` when entering FFT only if the user
-has not already picked a non-`Off` vertical mode.
+`LogVertical` is the STORED choice; `TraceView.EffectiveLogVertical` is what gets applied, and is
+what `IsLogarithmicY` / `IsLogY` / `ApplyDbInPlace` must read. `Auto` resolves against the DISPLAY
+mode, not just `MathType`:
+
+- `PaintMode == FFT2D` -> `Log`. FFT2D paints frequency up the Y axis and leaves `MathType` at
+  `Normal`, so keying off `IsFftTrace` misses it.
+- `MathType == FFTMagnitude` -> `dB10`.
+- anything else, including `FFTPhase` -> `Off`. `ApplyDbInPlace` is not gated on math type, so a dB
+  mode here would log-scale phase values.
+
+`Off` is an explicit "linear" that must stick even on an FFT trace, which is why it cannot double as
+"unset". Do not reintroduce a getter that overrides the stored value -- that breaks `NextEnumValue`
+cycling (modes become unreachable) and `XmlSave` round-tripping.
+
+The inset buttons next to "FFT" (`ContextMenus.AddTraceEmbeddedMenu`) cycle these per trace:
+vertical steps `Auto` / `LinV` / `LogV` / `10Log10` / `20Log10`, horizontal `LinH` / `LogH`. The
+vertical button labels the EFFECTIVE mode, with a trailing `*` when stored is `Auto` -- without it,
+`Auto` and the same mode picked explicitly are adjacent steps that render identically.
+
+### Saved-state versioning
+
+`SehensSave.CurrentSaveVersion` is stamped into `Sehens.SaveVersion` by the live-object constructor
+and threaded into `View.SaveTo` AND `View.ApplyTo` -- miss either and that path skips migrations.
+`TranslateLegacyTraceXml` keys off it (v1 -> v2 rewrites `LogVertical=Off` to `Auto`).
+
+`SaveVersion` MUST stay initialised to `1`: pre-versioning files have no `<SaveVersion>` element, so
+deserialising leaves the field at its initialiser, and initialising it to the current version makes
+every legacy file skip its migration. The binary format (`.sehens`) inherits this free --
+`BinarySave.Xml` holds the same serialised root. Version the XML root, never `BinarySave`, whose own
+`Version` field nothing reads.
 
 ### Painter / mouse mapping invariant
 
@@ -565,6 +593,9 @@ enters the left/right edge zone, gated on `ColumnsOverflowViewport`.
 - Filters are stateful objects, one instance per channel/pipeline, not shared.
 - `CsvLog` paths use `/`-separated extension segments to tag log subsystems.
 - XML serialization uses `XmlSerialise` helpers, not `JsonSerializer`.
+- `XmlSaveAttribute.Extract` and `Inject` both key on `attribute.Name ?? member.Name`. Keep them
+  symmetric -- if `Inject` ever matches on the member name alone, every renamed member saves fine and
+  silently never loads back, with no exception (`Inject` swallows errors).
 - The example app (`example/`) is the canonical integration test, keep it compiling.
 - ASCII only in source and docs. No em-dashes, en-dashes, curly quotes, arrows, checkmarks, or other
   non-ASCII punctuation. Use `-`, `--`, `->`, straight quotes, plain words.

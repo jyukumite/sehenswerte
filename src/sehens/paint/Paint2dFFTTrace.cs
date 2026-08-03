@@ -1,3 +1,4 @@
+using Microsoft.VisualStudio.TestTools.UnitTesting;
 using SehensWerte.Maths;
 using System.Drawing.Drawing2D;
 using System.Drawing.Imaging;
@@ -65,9 +66,13 @@ namespace SehensWerte.Controls.Sehens
                     {
                         startIndex += remainder;
                     }
+                    // all-zero bands are excluded from the histogram
+                    bool bandIsZero = true;
                     for (int loop = 0; loop < samplesPerFft; loop++)
                     {
-                        fftSamples[loop] = array[startIndex + loop] * window[loop];
+                        double sample = array[startIndex + loop];
+                        bandIsZero &= sample == 0.0;
+                        fftSamples[loop] = sample * window[loop];
                     }
 
                     m_Fft.ExecuteForward(fftSamples);
@@ -80,7 +85,10 @@ namespace SehensWerte.Controls.Sehens
                         int bin = bins - y - 1;
                         double db = 10.0 * Math.Log10(spectralMagnitude[bin]);
                         db = (double.IsNegativeInfinity(db) || db < MINMAG) ? MINMAG : (db > MAXMAG) ? MAXMAG : db;
-                        histogram[(int)db - MINMAG]++;
+                        if (!bandIsZero)
+                        {
+                            histogram[(int)db - MINMAG]++;
+                        }
                         db = (db - lowestValue) / (highestValue - lowestValue);
                         int index = x * 3 + y * stride * bitmapPixelsPerBucket;
                         pixels[index] = (byte)Math.Round(Interpolate.Linear(xv, blue, db));
@@ -100,9 +108,17 @@ namespace SehensWerte.Controls.Sehens
 
                 m_CachedBitmap = BytesToBitmap(fftsWide, bins * bitmapPixelsPerBucket, stride, pixels);
 
-                (var mean, var stddev) = HistogramToStddev(fftsWide, bins, histogram);
-                info.View0.DrawnValueLowest = MINMAG + mean - 2.0 * stddev;
-                info.View0.DrawnValueHighest = MINMAG + mean + 2.0 * stddev;
+                (var mean, var stddev) = HistogramToStddev(histogram);
+                if (double.IsNaN(mean))
+                {
+                    info.View0.DrawnValueLowest = MINMAG;
+                    info.View0.DrawnValueHighest = MAXMAG;
+                }
+                else
+                {
+                    info.View0.DrawnValueLowest = MINMAG + mean - 2.0 * stddev;
+                    info.View0.DrawnValueHighest = MINMAG + mean + 2.0 * stddev;
+                }
             }
 
             if (m_CachedBitmap != null)
@@ -156,15 +172,20 @@ namespace SehensWerte.Controls.Sehens
             return result;
         }
 
-        private static (double mean, double stddev) HistogramToStddev(int fftsWide, int bins, int[] stats)
+        private static (double mean, double stddev) HistogramToStddev(int[] stats)
         {
-            int count = bins * fftsWide;
+            long count = 0L;
             long sum = 0L;
             long sumSquare = 0L;
             for (long loop = 0L; loop < stats.Length; loop++)
             {
+                count += stats[loop];
                 sum += loop * stats[loop];
                 sumSquare += loop * loop * stats[loop];
+            }
+            if (count == 0L)
+            {
+                return (double.NaN, double.NaN);
             }
             double mean = sum / (double)count;
             return (mean, Math.Sqrt(Math.Abs(sumSquare / (double)count - (mean * mean))));
@@ -233,6 +254,43 @@ namespace SehensWerte.Controls.Sehens
             {
                 Marshal.FreeHGlobal(m_BitmapHGlobal);
             }
+        }
+    }
+
+    [TestClass]
+    public class Paint2dFFTTraceTests
+    {
+        // The all-zero-band gate feeds the auto-ranged colour scale. If the gate is inverted the
+        // histogram stays empty, HistogramToStddev divides by a zero count, and the range silently
+        // falls back to the MINMAG..MAXMAG clamp for every FFT2D trace - no exception, just a flat
+        // spectrogram. Nothing else in the suite paints FFT2D.
+        [TestMethod]
+        public void Fft2dAutoRangesFromNonZeroBands()
+        {
+            const double MinMag = -200.0;
+            const double MaxMag = 100.0;
+
+            var scope = new SehensControl();
+            double[] samples = new double[8192];
+            for (int loop = 0; loop < samples.Length / 2; loop++)
+            { // tone in the first half, silence in the second - some FFT bands are entirely zero
+                samples[loop] = Math.Sin(loop * 0.1);
+            }
+            scope["fft2d"].Update(samples);
+            scope["fft2d"].InputSamplesPerSecond = 1000.0;
+            TraceView view = SehensTestHarness.View(scope, "fft2d");
+            view.PaintMode = TraceView.PaintModes.FFT2D;
+            SehensTestHarness.Layout(scope);
+
+            using Bitmap bitmap = new Bitmap(SehensTestHarness.Width, SehensTestHarness.Height);
+            using Graphics graphics = Graphics.FromImage(bitmap);
+            view.Painter.PaintProjection(graphics, scope.PaintBox.TraceToGroupDisplayInfo(view));
+
+            Assert.IsFalse(double.IsNaN(view.DrawnValueLowest));
+            Assert.IsFalse(double.IsNaN(view.DrawnValueHighest));
+            Assert.IsTrue(view.DrawnValueLowest < view.DrawnValueHighest);
+            Assert.AreNotEqual(MinMag, view.DrawnValueLowest, 1e-9, "range fell back to the clamp");
+            Assert.AreNotEqual(MaxMag, view.DrawnValueHighest, 1e-9, "range fell back to the clamp");
         }
     }
 }

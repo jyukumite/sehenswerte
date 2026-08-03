@@ -509,7 +509,7 @@ namespace SehensWerte.Controls.Sehens
             }
         }
 
-        public enum LogVerticalMode { Off, Log, dB10, dB20 }
+        public enum LogVerticalMode { Auto, Off, Log, dB10, dB20 }
         public enum LogHorizontalMode { Off, Log }
 
         private LogVerticalMode m_LogVertical;
@@ -522,22 +522,34 @@ namespace SehensWerte.Controls.Sehens
             set
             {
                 if (m_LogVertical == value) return;
-                bool oldWasDb = m_LogVertical == LogVerticalMode.dB10 || m_LogVertical == LogVerticalMode.dB20;
-                bool newIsDb = value == LogVerticalMode.dB10 || value == LogVerticalMode.dB20;
+                LogVerticalMode wasEffective = EffectiveLogVertical;
                 m_LogVertical = value;
-                if (oldWasDb || newIsDb)
+                LogVerticalMode nowEffective = EffectiveLogVertical;
+                if (wasEffective != nowEffective)
                 {
-                    ClearPeakHold();
-                    BeforeZoomCalculateRequired();
-                }
-                else
-                {
-                    RecalculateProjectionRequired();
+                    if (IsDbMode(wasEffective) || IsDbMode(nowEffective))
+                    {
+                        ClearPeakHold();
+                        BeforeZoomCalculateRequired();
+                    }
+                    else
+                    {
+                        RecalculateProjectionRequired();
+                    }
                 }
                 Scope.ViewNeedsRepaint(this);
                 GuiUpdateControls?.Invoke(this);
             }
         }
+
+        private static bool IsDbMode(LogVerticalMode mode)
+            => mode == LogVerticalMode.dB10 || mode == LogVerticalMode.dB20;
+
+        internal LogVerticalMode EffectiveLogVertical =>
+            m_LogVertical != LogVerticalMode.Auto ? m_LogVertical
+            : m_PaintMode == PaintModes.FFT2D ? LogVerticalMode.Log
+            : m_MathType == MathTypes.FFTMagnitude ? LogVerticalMode.dB10
+            : LogVerticalMode.Off;
 
         private LogHorizontalMode m_LogHorizontal;
         [XmlSave]
@@ -1255,8 +1267,8 @@ namespace SehensWerte.Controls.Sehens
         }
 
         internal bool UseFftFilter => m_Samples.InputSamplesPerSecond != 0.0 && m_FftFilterType != FftFilterTypes.None;
-        internal bool IsLogarithmicY => m_LogVertical == LogVerticalMode.dB10 || m_LogVertical == LogVerticalMode.dB20;
-        internal bool IsLogY => m_LogVertical == LogVerticalMode.Log;
+        internal bool IsLogarithmicY => IsDbMode(EffectiveLogVertical);
+        internal bool IsLogY => EffectiveLogVertical == LogVerticalMode.Log;
         internal bool IsLogX => m_LogHorizontal == LogHorizontalMode.Log;
         internal bool IsRebasedResult => IsFftTrace && CalculateAfterZoom;
         internal bool IsRecalculateProjectionRequired => m_RecalculateProjectionRequired != 0 || m_AfterZoomCalculateRequired;
@@ -1900,13 +1912,14 @@ namespace SehensWerte.Controls.Sehens
         }
 
         // 10*log10(|v|) or 20*log10(|v|) in place. Negative-infinity bins are clamped to the
-        // minimum finite dB seen so axes don't blow up. Caller must check LogVertical is a dB mode.
+        // minimum finite dB seen so axes don't blow up.
         private void ApplyDbInPlace(double[] data)
         {
-            if (m_LogVertical != LogVerticalMode.dB10 && m_LogVertical != LogVerticalMode.dB20) return;
+            LogVerticalMode mode = EffectiveLogVertical;
+            if (!IsDbMode(mode)) return;
             int length = data.Length;
             double min = 0.0;
-            double ratio = m_LogVertical == LogVerticalMode.dB20 ? 20.0 : 10.0;
+            double ratio = mode == LogVerticalMode.dB20 ? 20.0 : 10.0;
             for (int loop = 0; loop < length; loop++)
             {
                 double dB = ratio * Math.Log10(Math.Abs(data[loop]));
@@ -2648,6 +2661,122 @@ value=" + string.Format(VerticalUnitFormat, Clicks[0].SampleAtX.ToStringRound(5,
                 m_Fft = null;
 
             });
+        }
+    }
+
+    [TestClass]
+    public class TraceViewLogVerticalTests
+    {
+        // Auto follows the display mode; an explicit choice pins and survives a mode change.
+        [TestMethod]
+        public void AutoResolvesPerDisplayModeAndExplicitChoicesPin()
+        {
+            var scope = new SehensControl();
+            scope["v"].Update(SehensTestHarness.Ramp(64));
+            TraceView view = SehensTestHarness.View(scope, "v");
+
+            Assert.AreEqual(TraceView.LogVerticalMode.Auto, view.LogVertical); // fresh traces are unset
+            Assert.AreEqual(TraceView.LogVerticalMode.Off, view.EffectiveLogVertical);
+
+            view.MathType = TraceView.MathTypes.FFTMagnitude;
+            Assert.AreEqual(TraceView.LogVerticalMode.dB10, view.EffectiveLogVertical);
+            Assert.IsTrue(view.IsLogarithmicY);
+
+            // phase must never be dB scaled - ApplyDbInPlace is not gated on the math type
+            view.MathType = TraceView.MathTypes.FFTPhase;
+            Assert.AreEqual(TraceView.LogVerticalMode.Off, view.EffectiveLogVertical);
+            Assert.IsFalse(view.IsLogarithmicY);
+
+            // FFT2D leaves MathType at Normal and paints frequency up the Y axis, so it resolves to
+            // pixel-log - keying Auto off IsFftTrace alone would miss this
+            view.MathType = TraceView.MathTypes.Normal;
+            view.PaintMode = TraceView.PaintModes.FFT2D;
+            Assert.AreEqual(TraceView.LogVerticalMode.Log, view.EffectiveLogVertical);
+            Assert.IsTrue(view.IsLogY);
+
+            // explicit linear is distinct from unset, and sticks across a mode change
+            view.LogVertical = TraceView.LogVerticalMode.Off;
+            Assert.AreEqual(TraceView.LogVerticalMode.Off, view.EffectiveLogVertical);
+            view.PaintMode = TraceView.PaintModes.PolygonDigital;
+            view.MathType = TraceView.MathTypes.FFTMagnitude;
+            Assert.AreEqual(TraceView.LogVerticalMode.Off, view.EffectiveLogVertical);
+            Assert.IsFalse(view.IsLogarithmicY);
+        }
+
+        // The V button cycles the stored value, so every mode must be reachable in order and Auto
+        // must come back around - it is the only way back to following the display mode.
+        [TestMethod]
+        public void EveryVerticalModeIsReachableByCycling()
+        {
+            var scope = new SehensControl();
+            scope["v"].Update(SehensTestHarness.Ramp(64));
+            TraceView view = SehensTestHarness.View(scope, "v");
+            view.MathType = TraceView.MathTypes.FFTMagnitude;
+
+            var seen = new List<TraceView.LogVerticalMode>();
+            for (int loop = 0; loop < 5; loop++)
+            {
+                view.LogVertical = (TraceView.LogVerticalMode)view.LogVertical.NextEnumValue();
+                seen.Add(view.LogVertical);
+            }
+            CollectionAssert.AreEqual(
+                new[]
+                {
+                    TraceView.LogVerticalMode.Off,
+                    TraceView.LogVerticalMode.Log,
+                    TraceView.LogVerticalMode.dB10,
+                    TraceView.LogVerticalMode.dB20,
+                    TraceView.LogVerticalMode.Auto,
+                },
+                seen);
+        }
+
+        // A v1 file's Off carried no user intent (Off doubled as "unset"), so it must land on Auto.
+        // A v2 file's Off is a real choice and must survive.
+        [TestMethod]
+        public void LegacyOffMigratesToAutoButCurrentOffSurvives()
+        {
+            TraceView Target()
+            {
+                var target = new SehensControl();
+                target["v"].Update(SehensTestHarness.Ramp(64));
+                return SehensTestHarness.View(target, "v");
+            }
+
+            var scope = new SehensControl();
+            scope["v"].Update(SehensTestHarness.Ramp(64));
+            TraceView source = SehensTestHarness.View(scope, "v");
+            source.LogVertical = TraceView.LogVerticalMode.Off;
+            source.MathType = TraceView.MathTypes.FFTMagnitude;
+
+            // a fresh View each time - TranslateLegacyTraceXml rewrites OtherElements in place
+            TraceView legacyTarget = Target();
+            new SehensSave.View(source).SaveTo(legacyTarget, 1);
+            Assert.AreEqual(TraceView.LogVerticalMode.Auto, legacyTarget.LogVertical);
+
+            TraceView currentTarget = Target();
+            new SehensSave.View(source).SaveTo(currentTarget, SehensSave.CurrentSaveVersion);
+            Assert.AreEqual(TraceView.LogVerticalMode.Off, currentTarget.LogVertical);
+        }
+
+        // A full save/load round trip through the real save root must preserve the stored mode -
+        // the version stamped by the live-object constructor keeps the migration from firing.
+        [TestMethod]
+        public void SavedStateRoundTripsEveryVerticalMode()
+        {
+            foreach (TraceView.LogVerticalMode mode in Enum.GetValues(typeof(TraceView.LogVerticalMode)))
+            {
+                var scope = new SehensControl();
+                scope["v"].Update(SehensTestHarness.Ramp(64));
+                SehensTestHarness.View(scope, "v").LogVertical = mode;
+
+                var saved = new SehensSave.Sehens(scope);
+                Assert.AreEqual(SehensSave.CurrentSaveVersion, saved.SaveVersion);
+
+                var reloaded = new SehensControl();
+                saved.SaveTo(reloaded);
+                Assert.AreEqual(mode, SehensTestHarness.View(reloaded, "v").LogVertical, $"mode {mode}");
+            }
         }
     }
 

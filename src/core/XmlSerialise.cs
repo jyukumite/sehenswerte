@@ -118,28 +118,33 @@ namespace SehensWerte
             var fields = objectType.GetFields(BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public);
             var properties = objectType.GetProperties(BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public);
 
+            // Match the name Extract wrote: the attribute's Name when it sets one, else the member
+            // name. Matching on the member name alone silently drops every renamed member - it saves
+            // and never loads back.
+            var savedFields = fields
+                .Select(x => (Member: x, Attribute: x.GetCustomAttribute<XmlSaveAttribute>()))
+                .Where(x => x.Attribute != null)
+                .ToArray();
+            var savedProperties = properties
+                .Select(x => (Member: x, Attribute: x.GetCustomAttribute<XmlSaveAttribute>()))
+                .Where(x => x.Attribute != null)
+                .ToArray();
+
             foreach (var element in otherElements)
             {
                 try
                 {
                     var elementName = element.Name;
-                    var field = fields.FirstOrDefault(f => f.Name == elementName);
-                    var property = properties.FirstOrDefault(p => p.Name == elementName);
-                    if (field != null)
+                    var field = savedFields.FirstOrDefault(x => (x.Attribute!.Name ?? x.Member.Name) == elementName);
+                    if (field.Member != null)
                     {
-                        var attribute = field.GetCustomAttribute<XmlSaveAttribute>();
-                        if (attribute != null)
-                        {
-                            field.SetValue(obj, DecodeXmlElement(element, field.FieldType, attribute, field.FieldType));
-                        }
+                        field.Member.SetValue(obj, DecodeXmlElement(element, field.Member.FieldType, field.Attribute!, field.Member.FieldType));
+                        continue;
                     }
-                    else if (property != null)
+                    var property = savedProperties.FirstOrDefault(x => (x.Attribute!.Name ?? x.Member.Name) == elementName);
+                    if (property.Member != null)
                     {
-                        var attribute = property.GetCustomAttribute<XmlSaveAttribute>();
-                        if (attribute != null)
-                        {
-                            property.SetValue(obj, DecodeXmlElement(element, property.PropertyType, attribute, property.PropertyType));
-                        }
+                        property.Member.SetValue(obj, DecodeXmlElement(element, property.Member.PropertyType, property.Attribute!, property.Member.PropertyType));
                     }
                 }
                 catch { } //quietly drop errors
@@ -296,6 +301,41 @@ namespace SehensWerte
     public class XmlSaveAttributeTest
     {
         //fixme: unit test XmlSaveAttribute
+
+        private enum RoundTripMode { Auto, Off, Log }
+
+        private class RenamedFieldTest
+        {
+            [XmlSave(Name = "Elsewhere")]
+            private RoundTripMode m_Stored;
+            public RoundTripMode Stored { get => m_Stored; set => m_Stored = value; }
+        }
+
+        private class RenamedPropertyTest
+        {
+            [XmlSave(Name = "Elsewhere")]
+            public RoundTripMode Stored { get; set; }
+        }
+
+        // Extract honours XmlSaveAttribute.Name, so Inject must match on it too. Matching on the
+        // member name alone saves the element and silently never loads it back.
+        [TestMethod]
+        public void TestRenamedMemberRoundTrips()
+        {
+            var savedField = new RenamedFieldTest { Stored = RoundTripMode.Log };
+            var elements = XmlSaveAttribute.Extract(savedField);
+            Assert.AreEqual(1, elements.Count);
+            Assert.AreEqual("Elsewhere", elements[0].Name);
+
+            var loadedField = new RenamedFieldTest();
+            XmlSaveAttribute.Inject(loadedField, elements);
+            Assert.AreEqual(RoundTripMode.Log, loadedField.Stored);
+
+            var savedProperty = new RenamedPropertyTest { Stored = RoundTripMode.Off };
+            var loadedProperty = new RenamedPropertyTest();
+            XmlSaveAttribute.Inject(loadedProperty, XmlSaveAttribute.Extract(savedProperty));
+            Assert.AreEqual(RoundTripMode.Off, loadedProperty.Stored);
+        }
 
         public class XmlNestTest
         {

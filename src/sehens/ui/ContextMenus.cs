@@ -1663,10 +1663,6 @@ namespace SehensWerte.Controls.Sehens
                         EmbedFftLabel.Spectral => TraceView.PaintModes.Spectral,
                         _ => TraceView.PaintModes.PolygonDigital,
                     };
-                    if (isFft && a.View.LogVertical == TraceView.LogVerticalMode.Off)
-                    {
-                        a.View.LogVertical = TraceView.LogVerticalMode.dB10;
-                    }
                     a.View.AutoRange();
                 },
                 GetStyle = (a) =>
@@ -1689,16 +1685,20 @@ namespace SehensWerte.Controls.Sehens
                 },
                 GetStyle = (a) =>
                 {
-                    a.Menu.Style = a.View.LogVertical == TraceView.LogVerticalMode.Off
+                    // Label the mode that is actually applied, so cycling the FFT button shows the
+                    // vertical mode following it. Auto gets a trailing "*" - without it Auto and the
+                    // same mode chosen explicitly are adjacent cycle steps that look identical.
+                    TraceView.LogVerticalMode effective = a.View.EffectiveLogVertical;
+                    a.Menu.Style = effective == TraceView.LogVerticalMode.Off
                         ? TraceViewEmbedText.Style.Normal
                         : TraceViewEmbedText.Style.Selected;
-                    a.Menu.Text = a.View.LogVertical switch
+                    a.Menu.Text = effective switch
                     {
                         TraceView.LogVerticalMode.Off => "LinV",
                         TraceView.LogVerticalMode.Log => "LogV",
                         TraceView.LogVerticalMode.dB10 => "10Log10",
                         TraceView.LogVerticalMode.dB20 => "20Log10",
-                        _ => a.View.LogVertical.ToString(),
+                        _ => effective.ToString(),
                     };
                 }
             });
@@ -2119,10 +2119,6 @@ namespace SehensWerte.Controls.Sehens
                         a.Views[0].MathType = TraceView.MathTypes.FFTMagnitude;
                         a.Views[0].MathPhase = TraceView.CalculatePhases.BeforeZoom;
                         a.Views[0].PaintMode = TraceView.PaintModes.Spectral;
-                        if (a.Views[0].LogVertical == TraceView.LogVerticalMode.Off)
-                        {
-                            a.Views[0].LogVertical = TraceView.LogVerticalMode.dB10;
-                        }
                     }
                     a.Views[0].AutoRange();
                 },

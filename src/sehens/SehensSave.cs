@@ -21,10 +21,20 @@ namespace SehensWerte
 {
     public class SehensSave
     {
+        // Bump when a saved-state shape change needs migrating in TranslateLegacyTraceXml.
+        // 2: LogVerticalMode gained Auto, so a stored Off means "explicitly linear" rather than
+        //    "unset" - v1 files have their Off rewritten to Auto on load.
+        public const int CurrentSaveVersion = 2;
+
         public class Sehens
         {
             [XmlAnyElement]
             public List<XmlElement> OtherElements = new List<XmlElement>();
+
+            // MUST initialise to the oldest version: files written before versioning have no
+            // <SaveVersion> element, so deserialising leaves this at its initialiser. The current
+            // version is stamped explicitly when saving, below.
+            public int SaveVersion = 1;
 
             public TraceNameHints Hints = new TraceNameHints();
             public Skin ViewSkin = new Skin();
@@ -38,6 +48,7 @@ namespace SehensWerte
 
             public Sehens(SehensControl obj, bool copySamples = true)
             {
+                SaveVersion = CurrentSaveVersion;
                 OtherElements = XmlSaveAttribute.Extract(obj);
                 Hints = new TraceNameHints().MergedWith(obj.TraceNameHints);
                 ViewSkin = new Skin(obj.ActiveSkin);
@@ -66,7 +77,7 @@ namespace SehensWerte
                     obj.ViewByName(view.ViewName)?.Close();
                     obj.TraceByName(view.TraceName)?.Close();
                     TraceView tv = new TraceView(obj, td, view.ViewName);
-                    view.SaveTo(tv);
+                    view.SaveTo(tv, SaveVersion);
                     obj.AddView(tv);
                 }
 
@@ -135,7 +146,7 @@ namespace SehensWerte
                     {
                         foreach (var match in Resolve(entry.ViewName))
                         {
-                            entry.ApplyTo(match.View);
+                            entry.ApplyTo(match.View, SaveVersion);
                             matched.Add(match.View);
                         }
                     }
@@ -224,9 +235,9 @@ namespace SehensWerte
                 TriggerView = obj.TriggerView?.ViewName ?? "";
             }
 
-            public void SaveTo(TraceView obj)
+            public void SaveTo(TraceView obj, int saveVersion = 1)
             {
-                TranslateLegacyTraceXml(OtherElements);
+                TranslateLegacyTraceXml(OtherElements, saveVersion);
                 XmlSaveAttribute.Inject(obj, OtherElements);
                 //CalculatedSourceViews fixup after loading all views
                 //TriggerView fixup after loading all views
@@ -238,15 +249,15 @@ namespace SehensWerte
 
             // non-destructive variant of SaveTo, used by Sehens.ApplyTo:
             // injects view state into an existing live view, excluding grouping/selection which the caller rebuilds
-            public void ApplyTo(TraceView obj)
+            public void ApplyTo(TraceView obj, int saveVersion = 1)
             {
-                TranslateLegacyTraceXml(OtherElements);
+                TranslateLegacyTraceXml(OtherElements, saveVersion);
                 XmlSaveAttribute.Inject(obj,
                     OtherElements.Where(x => !ApplyExcludedElements.Contains(x.Name)).ToList());
             }
 
             // Rewrites legacy <MathType>/<LogVertical>/<LogHorizontal>
-            private static void TranslateLegacyTraceXml(List<XmlElement> elements)
+            private static void TranslateLegacyTraceXml(List<XmlElement> elements, int saveVersion)
             {
                 if (elements == null) return;
                 foreach (var el in elements)
@@ -277,6 +288,15 @@ namespace SehensWerte
                         XmlElement created = math.OwnerDocument.CreateElement("LogVertical");
                         created.InnerText = dbValue;
                         elements.Add(created);
+                    }
+                }
+
+                if (saveVersion < 2)
+                {
+                    XmlElement? logVertical = elements.FirstOrDefault(e => e.Name == "LogVertical");
+                    if (logVertical != null && logVertical.InnerText == "Off")
+                    {
+                        logVertical.InnerText = "Auto";
                     }
                 }
             }
@@ -637,6 +657,96 @@ namespace SehensWerte
             Assert.AreEqual("rpm", trace.HorizontalAxisUnit);
             Assert.AreEqual(14.0, trace.HorizontalValueAt(2), 1e-9); // 2 * (2 + 5), offset in samples
             Assert.AreEqual(3, trace.InputSampleCount);
+        }
+
+        // SaveVersion rides the XmlSerializer path, not XmlSaveAttribute - if it fails to serialise,
+        // every load looks like v1, the v1 migration fires on current files, and an explicit Off
+        // silently becomes Auto on every save/load cycle.
+        [TestMethod]
+        public void TestSaveVersionSurvivesXml()
+        {
+            var scope = new SehensControl();
+            scope["A"].Update(new double[] { 1, 2, 3 });
+            RequireView(scope, "A").LogVertical = TraceView.LogVerticalMode.Off;
+
+            string xml = new SehensSave.Sehens(scope, copySamples: false).ToXml(compact: true);
+            StringAssert.Contains(xml, $"<SaveVersion>{SehensSave.CurrentSaveVersion}</SaveVersion>");
+
+            SehensSave.Sehens layout = xml.FromXml<SehensSave.Sehens>()
+                ?? throw new AssertFailedException("state xml failed to parse");
+            Assert.AreEqual(SehensSave.CurrentSaveVersion, layout.SaveVersion);
+
+            // an explicit Off written by the current version must not be migrated back to Auto
+            RequireView(scope, "A").LogVertical = TraceView.LogVerticalMode.dB20;
+            layout.ApplyTo(scope);
+            Assert.AreEqual(TraceView.LogVerticalMode.Off, RequireView(scope, "A").LogVertical);
+        }
+
+        // A file with no <SaveVersion> is pre-versioning, so SaveVersion must deserialise to 1 and
+        // the migration must fire. This is what breaks if anyone "tidies" the field initialiser to
+        // CurrentSaveVersion - XmlSerializer leaves an absent element at its initialiser.
+        [TestMethod]
+        public void TestUnversionedXmlMigratesLogVertical()
+        {
+            var scope = new SehensControl();
+            scope["A"].Update(new double[] { 1, 2, 3 });
+            RequireView(scope, "A").LogVertical = TraceView.LogVerticalMode.dB20;
+
+            string xml = new SehensSave.Sehens(scope, copySamples: false).ToXml(compact: true);
+            string legacy = xml
+                .Replace($"<SaveVersion>{SehensSave.CurrentSaveVersion}</SaveVersion>", "")
+                .Replace("<LogVertical>dB20</LogVertical>", "<LogVertical>Off</LogVertical>");
+            StringAssert.Contains(legacy, "<LogVertical>Off</LogVertical>");
+
+            SehensSave.Sehens layout = legacy.FromXml<SehensSave.Sehens>()
+                ?? throw new AssertFailedException("legacy xml failed to parse");
+            Assert.AreEqual(1, layout.SaveVersion);
+
+            layout.ApplyTo(scope);
+            Assert.AreEqual(TraceView.LogVerticalMode.Auto, RequireView(scope, "A").LogVertical);
+        }
+
+        // The binary format wraps the same root XML in BinarySave.Xml, so SaveVersion rides along
+        // inside it. This drives the real SaveStateBinary and repeats LoadStateBinary's steps
+        // inline - LoadStateBinary itself swallows failures into a MessageBox, which would hang a
+        // headless run rather than fail it.
+        [TestMethod]
+        public void TestBinaryStateCarriesSaveVersion()
+        {
+            string filename = Path.GetTempFileName();
+            try
+            {
+                var scope = new SehensControl();
+                scope["A"].Update(new double[] { 1, 2, 3 });
+                RequireView(scope, "A").LogVertical = TraceView.LogVerticalMode.Off;
+                SehensSave.SaveStateBinary(filename, scope);
+
+                var serializer = new Serializer(new FieldsExtractor(), options: GroBufOptions.WriteEmptyObjects);
+                SehensSave.BinarySave binary = serializer.Deserialize<SehensSave.BinarySave>(
+                    Compression.GZipDecompress(File.ReadAllBytes(filename)));
+                StringAssert.Contains(binary.Xml, $"<SaveVersion>{SehensSave.CurrentSaveVersion}</SaveVersion>");
+
+                SehensSave.Sehens current = binary.Xml.FromXml<SehensSave.Sehens>()
+                    ?? throw new AssertFailedException("binary xml failed to parse");
+                Assert.AreEqual(SehensSave.CurrentSaveVersion, current.SaveVersion);
+                var currentScope = new SehensControl();
+                current.SaveTo(currentScope);
+                Assert.AreEqual(TraceView.LogVerticalMode.Off, RequireView(currentScope, "A").LogVertical);
+
+                // an old .sehens file: its embedded xml predates versioning, so the migration fires
+                SehensSave.Sehens legacy = binary.Xml
+                    .Replace($"<SaveVersion>{SehensSave.CurrentSaveVersion}</SaveVersion>", "")
+                    .FromXml<SehensSave.Sehens>()
+                    ?? throw new AssertFailedException("legacy binary xml failed to parse");
+                Assert.AreEqual(1, legacy.SaveVersion);
+                var legacyScope = new SehensControl();
+                legacy.SaveTo(legacyScope);
+                Assert.AreEqual(TraceView.LogVerticalMode.Auto, RequireView(legacyScope, "A").LogVertical);
+            }
+            finally
+            {
+                try { File.Delete(filename); } catch { }
+            }
         }
 
         private static TraceView RequireView(SehensControl scope, string name)
