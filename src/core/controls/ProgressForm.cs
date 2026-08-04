@@ -56,7 +56,14 @@ namespace SehensWerte.Controls
             m_Bar.Height = line;
             Padding = new Padding(line / 2);
             ClientSize = new Size(line * 22, Padding.Vertical + m_Label.Height + m_Bar.Height);
-            if (m_Over != null)
+        }
+
+        protected override void OnVisibleChanged(EventArgs e)
+        {
+            base.OnVisibleChanged(e);
+            // OnLoad only fires on the first show; the form is reused across shows and the
+            // owner may have moved to another monitor since, so reposition on every show
+            if (Visible && m_Over != null)
             {
                 PositionOver(m_Over);
             }
