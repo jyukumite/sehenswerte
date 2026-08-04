@@ -95,6 +95,7 @@ src/
 | `DataGridControl` | `src/core/controls/DataGridControl.cs` | Filterable, sortable data grid with undo/replay stack and save/restore view state |
 | `BoundData` | `src/core/controls/DataGridBoundData.cs` | `IBindingList` backing store for `DataGridControl`; owns `UnfilteredData`, `FilteredData`, `SortKeys`, `UndoList` |
 | `DataGridControlHistory` | `src/core/controls/DataGridControlHistory.cs` | Snapshot history for `DataGridControl.SaveView` / `RestoreView` |
+| `ProgressForm` | `src/core/controls/ProgressForm.cs` | Small modeless floating progress window that floats above its owner form. Construct on the UI thread (ctor creates the handle); SetProgress/ShowOver/HideProgress are thread-safe (self-marshal via BeginInvoke). |
 | `PaintTraceBase` | `src/sehens/paint/PaintTraceBase.cs` | Base painter -- horizontal/vertical axis rendering, `ProjectLog`, partition helpers |
 | `Paint2dTrace` | `src/sehens/paint/Paint2dTrace.cs` | 2D line/polygon painter; owns the `Project2dCurves` resample/decimate pipeline |
 
@@ -543,13 +544,6 @@ stayed intact. Root cause was not fully pinned - suspected a stale `CurrentSortP
 surviving the `DataSource` cycle, or `::` in the column `Name` confusing WinForms cell rendering.
 The static reflection binding sorts correctly across `AddColumns`; the dynamic approach did not. If
 you must revisit it, first reproduce and pin that sort-blank bug in a focused test.
-
-### Load progress overlay
-
-`SetLoadProgress(rows, total, name?)` / `ClearLoadProgress()` draw a centred progress bar ("N out of
-~M name rows (P%)") over the grid while rows stream in, painted in the `Grid.Paint` hook alongside
-the column-drag indicator. UI thread only; `total` is a caller-supplied estimate and the fill clamps
-to 100%; negative/zero total hides the bar; `name` optionally labels the rows (e.g. the table name).
 
 ### SaveView / RestoreView
 

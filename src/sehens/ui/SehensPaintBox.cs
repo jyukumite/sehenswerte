@@ -26,6 +26,7 @@ namespace SehensWerte.Controls.Sehens
         private float StatsPaintWidth = 350f;
 
         private Thread m_PaintThread;
+        private bool m_PaintThreadStarted; // ThreadState tests are flag-unsafe; track start explicitly
         private EventWaitHandle m_PaintThreadSemaphore;
 
         private double m_LastPaintFinishSeconds;
@@ -88,7 +89,9 @@ namespace SehensWerte.Controls.Sehens
             AllowDrop = false;
             BackColor = SystemColors.Window;
             m_PaintThreadSemaphore = new EventWaitHandle(initialState: false, EventResetMode.AutoReset);
-            m_PaintThread = new Thread(new ThreadStart(PaintRun));
+            // background so the thread cannot keep the process alive if the control
+            // is never disposed (.NET 6 no longer aborts threads at shutdown)
+            m_PaintThread = new Thread(new ThreadStart(PaintRun)) { IsBackground = true };
             Paint += PaintBoxPaint;
 
             AllowDrop = true;
@@ -169,8 +172,9 @@ namespace SehensWerte.Controls.Sehens
         //paint
         protected override void OnPaint(PaintEventArgs pe)
         {
-            if (m_PaintThread.ThreadState == System.Threading.ThreadState.Unstarted)
+            if (!m_PaintThreadStarted)
             {
+                m_PaintThreadStarted = true;
                 m_PaintThread.Start();
             }
 
@@ -1063,7 +1067,7 @@ namespace SehensWerte.Controls.Sehens
 
         protected override void Dispose(bool disposing)
         {
-            if (m_PaintThread.ThreadState != System.Threading.ThreadState.Unstarted)
+            if (m_PaintThreadStarted)
             {
                 m_PaintThreadStop = true;
                 m_PaintThreadSemaphore.Set();
