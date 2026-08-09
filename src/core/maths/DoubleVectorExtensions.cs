@@ -609,6 +609,90 @@ namespace SehensWerte.Maths
             return result;
         }
 
+        // One dimensional Kalman smoother. It blends each noisy
+        // sample with a running estimate. The estimate's uncertainty grows by processNoise
+        // each step, then is corrected toward the measurement by a gain that weighs the two
+        // uncertainties. A smaller processNoise or a larger measurementNoise gives a smoother and
+        // slower result. The reverse follows the signal more closely. It is not robust to outliers, so a spike
+        // still pulls the estimate. Run Hampel first if the trace has glitches. NaN samples pass
+        // through as NaN (a gap) while the filter state carries across them.
+        public static double[] KalmanSmooth(this double[] lhs, double processNoise, double measurementNoise)
+        {
+            int length = lhs.Length;
+            double[] result = new double[length];
+            double q = Math.Max(0.0, processNoise);
+            double r = Math.Max(1e-12, measurementNoise);
+            bool started = false;
+            double x = 0.0, p = r;
+            for (int loop = 0; loop < length; loop++)
+            {
+                double z = lhs[loop];
+                if (double.IsNaN(z))
+                {
+                    p += q; // predict only, uncertainty grows across the gap
+                    result[loop] = double.NaN;
+                    continue;
+                }
+                if (!started)
+                {
+                    x = z; p = r; started = true; // seed on the first real sample
+                }
+                else
+                {
+                    p += q; // predict
+                    double k = p / (p + r); // Kalman gain
+                    x += k * (z - x); // correct toward the measurement
+                    p = (1.0 - k) * p;
+                }
+                result[loop] = x;
+            }
+            return result;
+        }
+
+        // Rolling median absolute deviation. At each sample it takes the MAD of the values in a
+        // window centred on that sample, a robust measure of how much the signal wobbles locally. It is the
+        // median based version of RollingRms, and it is not thrown off by the odd spike the way an RMS is.
+        public static double[] RollingMad(this double[] lhs, int count)
+        {
+            int length = lhs.Length;
+            double[] result = new double[length];
+            for (int loop = 0; loop < length; loop++)
+            {
+                int left = Math.Max(0, loop - count / 2);
+                int right = Math.Min(length - 1, loop + count / 2);
+                result[loop] = lhs.Copy(left, right - left + 1).MedianAbsoluteDeviation();
+            }
+            return result;
+        }
+
+        // Hampel despike. Replaces each sample that lies more than k robust sigmas
+        // (k * 1.4826 * MAD) from the median of its centred window with that median.
+        // Good samples pass through unchanged, so genuine sustained features survive and
+        // only isolated spikes such as sensor static or glitches are removed. The median and MAD
+        // are not fooled by the outlier the way a mean and stddev would be. count is the
+        // window width in samples, k the threshold in robust sigmas (3 is standard). NaNs
+        // are ignored in the window and left in place.
+        public static double[] HampelDespike(this double[] lhs, int count, double k = 3.0)
+        {
+            int length = lhs.Length;
+            double[] result = (double[])lhs.Clone();
+            if (count < 3) return result;
+            for (int loop = 0; loop < length; loop++)
+            {
+                double sample = lhs[loop];
+                if (double.IsNaN(sample)) continue;
+                int left = Math.Max(0, loop - count / 2);
+                int right = Math.Min(length - 1, loop + count / 2);
+                double[] window = lhs.Copy(left, right - left + 1).Where(x => !double.IsNaN(x)).ToArray();
+                if (window.Length < 3) continue;
+                double median = window.Median();
+                double mad = window.MedianAbsoluteDeviation();
+                if (mad == 0.0) continue; // flat neighbourhood, cannot judge, keep the sample
+                if (Math.Abs(sample - median) > k * 1.4826 * mad) result[loop] = median;
+            }
+            return result;
+        }
+
         public static double[] RotateRight(this double[] lhs, int count)
         {
             int length = lhs.Length;
