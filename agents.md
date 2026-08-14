@@ -372,9 +372,7 @@ reshape: trim left/right/both, slide, pad left/right/both), view length/offset w
   singleGroup, parallel: true)` routes a screenshot through the parallel path;
   `ParallelPaintMatchesSequential` pixel-compares it against the sequential path over the axis test
   matrix (prime one paint first - AutoRange during paint shifts ranges between the first and second
-  frames, which is not a parallel bug). `PaintBenchmarkFromLocalSehensFile` times both HQ modes when
-  c:\temp\sehens.sehens exists. Shared generator helpers: `TestSine`, `RandomWalkTimes`,
-  `RandomTestTraceSampleCount` (also used by the "100 test traces" and "YT test traces" items).
+  frames, which is not a parallel bug). 
 
 ### Trace-view test harness
 

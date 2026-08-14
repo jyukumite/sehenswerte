@@ -296,13 +296,14 @@ namespace SehensWerte.Utils
             }
         }
 
-        public struct TestRunResult { public int Passed; public int Failed; public int Matched; }
+        public struct TestRunResult { public int Passed; public int Failed; public int Matched; public bool Cancelled; }
 
         // Headless, filterable test runner (works under Wine/CLI)
 		public static TestRunResult RunTests(string? classFilter = null, string? methodFilter = null,
-            Action<string>? report = null, Action<string>? detail = null)
+            Action<string>? report = null, Action<string>? detail = null,
+            Action<int, int, string>? progress = null, Func<bool>? cancelRequested = null)
         {
-            var result = new TestRunResult();
+            var tests = new List<(Type Type, MethodInfo Method, object[]? Args, string Label)>();
             foreach (var asm in AppDomain.CurrentDomain.GetAssemblies())
             {
                 string name = asm.GetName().Name ?? "";
@@ -317,7 +318,6 @@ namespace SehensWerte.Utils
                 foreach (var t in types.Where(t => t.CustomAttributes.Any(a => a.AttributeType.Name == "TestClassAttribute")))
                 {
                     if (classFilter != null && !t.Name.Contains(classFilter, StringComparison.OrdinalIgnoreCase)) continue;
-                    object? instance = null;
                     foreach (var method in t.GetMethods().Where(m => m.GetCustomAttributes().Any(a => a.GetType().Name == "TestMethodAttribute")))
                     {
                         if (methodFilter != null && !method.Name.Contains(methodFilter, StringComparison.OrdinalIgnoreCase)) continue;
@@ -327,24 +327,46 @@ namespace SehensWerte.Utils
                             : new object[]?[] { null };
                         foreach (var args in argSets)
                         {
-                            result.Matched++;
                             string label = $"{t.Name}.{method.Name}" + (args != null ? $"({string.Join(", ", args)})" : "");
-                            try
-                            {
-                                instance ??= Activator.CreateInstance(t);
-                                method.Invoke(instance, args);
-                                report?.Invoke($"PASS {label}");
-                                result.Passed++;
-                            }
-                            catch (Exception ex)
-                            {
-                                Exception inner = (ex as TargetInvocationException)?.InnerException ?? ex;
-                                report?.Invoke($"FAIL {label}: {inner.Message}");
-                                detail?.Invoke(inner.ToString());
-                                result.Failed++;
-                            }
+                            tests.Add((t, method, args, label));
                         }
                     }
+                }
+            }
+
+            var result = new TestRunResult();
+            var instances = new Dictionary<Type, object>();
+            for (int index = 0; index < tests.Count; index++)
+            {
+                if (cancelRequested?.Invoke() == true)
+                {
+                    result.Cancelled = true;
+                    report?.Invoke($"CANCELLED after {index} of {tests.Count} tests");
+                    break;
+                }
+                var (t, method, args, label) = tests[index];
+                progress?.Invoke(index, tests.Count, label);
+                result.Matched++;
+                // reported per test - a test that is fast headless can be far slower under a debugger
+                var elapsed = System.Diagnostics.Stopwatch.StartNew();
+                try
+                {
+                    if (!instances.TryGetValue(t, out object? instance))
+                    {
+                        instance = Activator.CreateInstance(t)
+                            ?? throw new InvalidOperationException($"Cannot construct {t.Name}");
+                        instances[t] = instance;
+                    }
+                    method.Invoke(instance, args);
+                    report?.Invoke($"PASS {label} ({elapsed.ElapsedMilliseconds}ms)");
+                    result.Passed++;
+                }
+                catch (Exception ex)
+                {
+                    Exception inner = (ex as TargetInvocationException)?.InnerException ?? ex;
+                    report?.Invoke($"FAIL {label} ({elapsed.ElapsedMilliseconds}ms): {inner.Message}");
+                    detail?.Invoke(inner.ToString());
+                    result.Failed++;
                 }
             }
             return result;

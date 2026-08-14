@@ -11,7 +11,11 @@ namespace SehensWerte.Controls
 
         private readonly ProgressBar m_Bar;
         private readonly Label m_Label;
+        private readonly Panel m_CancelPanel;
+        private readonly Button m_CancelButton;
         private Control? m_Owner;
+
+        public Action? OnCancel { get; set; }
 
         // Bumped by every HideProgress before it marshals. A ShowOver captures the epoch at call
         // time; if a hide was requested after that (queued shows can arrive arbitrarily late), the
@@ -36,6 +40,7 @@ namespace SehensWerte.Controls
                 AutoSize = false,
                 TextAlign = ContentAlignment.MiddleLeft,
                 UseMnemonic = false,
+                AutoEllipsis = true, // a long label is clipped with "..." rather than mid-glyph
             };
             m_Bar = new ProgressBar
             {
@@ -43,6 +48,20 @@ namespace SehensWerte.Controls
                 Minimum = 0,
                 Maximum = BarSteps,
             };
+            m_CancelButton = new Button
+            {
+                Dock = DockStyle.Fill,
+                Text = "Cancel",
+                UseMnemonic = false,
+            };
+            m_CancelButton.Click += (s, e) =>
+            {
+                m_CancelButton.Enabled = false;
+                m_CancelButton.Text = "Cancelling...";
+                OnCancel?.Invoke();
+            };
+            m_CancelPanel = new Panel { Dock = DockStyle.Bottom, Visible = false };
+            m_CancelPanel.Controls.Add(m_CancelButton);
 
             SuspendLayout();
             AutoScaleMode = AutoScaleMode.Font;
@@ -56,6 +75,7 @@ namespace SehensWerte.Controls
             Text = "Progress";
             Controls.Add(m_Label);
             Controls.Add(m_Bar);
+            Controls.Add(m_CancelPanel);
             ResumeLayout(false);
 
             m_ShowTimer = new System.Windows.Forms.Timer();
@@ -117,6 +137,8 @@ namespace SehensWerte.Controls
         private void ShowNow()
         {
             if (m_Owner == null) return;
+            m_CancelButton.Enabled = true;
+            m_CancelButton.Text = "Cancel";
             // Size and position while still hidden, on EVERY show: the form is reused, so the
             // owner may be on a different monitor than last time, and mapping the window at a
             // stale location then moving it across a DPI boundary can strand it off-screen
@@ -149,6 +171,11 @@ namespace SehensWerte.Controls
             }
             m_Label.Text = text;
             m_Bar.Value = (int)(Math.Max(0.0, Math.Min(1.0, fraction)) * BarSteps);
+            // The bar is a native control and repaints itself on the value change, but the label only
+            // repaints when the message loop delivers WM_PAINT. A caller driving this from a loop that
+            // blocks the UI thread leaves the label showing the previous text - or blank, if something
+            // invalidated it since - so paint it now rather than waiting for the pump
+            m_Label.Update();
         }
 
         public void HideProgress()
@@ -179,8 +206,12 @@ namespace SehensWerte.Controls
             int line = Font.Height;
             m_Label.Height = line + line / 2;
             m_Bar.Height = line;
+            m_CancelPanel.Visible = OnCancel != null;
+            m_CancelPanel.Padding = new Padding(0, line / 2, 0, 0);
+            m_CancelPanel.Height = line * 2 + m_CancelPanel.Padding.Top;
             Padding = new Padding(line / 2);
-            ClientSize = new Size(line * 22, Padding.Vertical + m_Label.Height + m_Bar.Height);
+            ClientSize = new Size(line * 22, Padding.Vertical + m_Label.Height + m_Bar.Height
+                + (m_CancelPanel.Visible ? m_CancelPanel.Height : 0));
 
             Rectangle over = m_Owner.RectangleToScreen(m_Owner.ClientRectangle);
             Rectangle work = Screen.FromControl(m_Owner).WorkingArea;

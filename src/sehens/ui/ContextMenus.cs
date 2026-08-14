@@ -698,6 +698,7 @@ namespace SehensWerte.Controls.Sehens
             AddTraceEmbeddedMenu(embeddedContextMenu);
             AddDisplaySubMenu(contextMenu);
             AddGenerateSubMenu(contextMenu);
+            AddDiagnosticSubMenu(contextMenu);
             AddFeaturesSubMenu(contextMenu);
             AddSortTracesSubMenu(contextMenu);
             AddTraceSubMenu(contextMenu);
@@ -1196,38 +1197,6 @@ namespace SehensWerte.Controls.Sehens
             contextMenu.Add(new ScopeContextMenu.MenuItem
             {
                 SubMenuText = subMenuText,
-                Text = "Paint Statistics",
-                ShownWhenTrace = ScopeContextMenu.MenuItem.ShowWhen.Always,
-                ShownWhenMouse = PaintBoxMouseInfo.GuiSection.Anywhere,
-                Call = ScopeContextMenu.MenuItem.CallWhen.Once,
-                Clicked = (a) => a.Scope.PaintBoxShowStats = !a.Scope.PaintBoxShowStats,
-                GetStyle = (a) => a.Checked = a.Scope.PaintBoxShowStats,
-            });
-
-            contextMenu.Add(new ScopeContextMenu.MenuItem
-            {
-                SubMenuText = subMenuText,
-                Text = "Log",
-                ShownWhenTrace = ScopeContextMenu.MenuItem.ShowWhen.Always,
-                ShownWhenMouse = PaintBoxMouseInfo.GuiSection.Anywhere,
-                Call = ScopeContextMenu.MenuItem.CallWhen.Once,
-                ShownText = ScopeContextMenu.MenuItem.TextDisplay.NoChange,
-                Clicked = (a) =>
-                {
-                    Form form = new Form { Text = "Sehens log" };
-                    LogControl control = new LogControl();
-                    control.Parent = form;
-                    control.Dock = DockStyle.Fill;
-                    SehensControl scope = a.Scope;
-                    scope.OnLog += control.Add;
-                    form.FormClosing += (s, o) => { SehensControl scope = a.Scope; scope.OnLog -= control.Add; };
-                    form.Show();
-                },
-            });
-
-            contextMenu.Add(new ScopeContextMenu.MenuItem
-            {
-                SubMenuText = subMenuText,
                 Text = "Crosshair cursor",
                 ShownWhenTrace = ScopeContextMenu.MenuItem.ShowWhen.Always,
                 ShownWhenMouse = PaintBoxMouseInfo.GuiSection.Anywhere,
@@ -1296,6 +1265,95 @@ namespace SehensWerte.Controls.Sehens
                 Clicked = (a) => a.Scope.ShowHoverValue = !a.Scope.ShowHoverValue,
                 GetStyle = (a) => a.Checked = a.Scope.ShowHoverValue,
             });
+        }
+
+        private static void AddDiagnosticSubMenu(List<ScopeContextMenu.MenuItem> contextMenu)
+        {
+            const string subMenuText = "Diagnostic";
+
+            contextMenu.Add(new ScopeContextMenu.MenuItem
+            {
+                SubMenuText = subMenuText,
+                Text = "Log",
+                ShownWhenTrace = ScopeContextMenu.MenuItem.ShowWhen.Always,
+                ShownWhenMouse = PaintBoxMouseInfo.GuiSection.Anywhere,
+                Call = ScopeContextMenu.MenuItem.CallWhen.Once,
+                ShownText = ScopeContextMenu.MenuItem.TextDisplay.NoChange,
+                Clicked = (a) =>
+                {
+                    Form form = new Form { Text = "Sehens log" };
+                    LogControl control = new LogControl();
+                    control.Parent = form;
+                    control.Dock = DockStyle.Fill;
+                    SehensControl scope = a.Scope;
+                    scope.OnLog += control.Add;
+                    form.FormClosing += (s, o) => { SehensControl scope = a.Scope; scope.OnLog -= control.Add; };
+                    form.Show();
+                },
+            });
+
+            contextMenu.Add(new ScopeContextMenu.MenuItem
+            {
+                SubMenuText = subMenuText,
+                Text = "Paint Statistics",
+                ShownWhenTrace = ScopeContextMenu.MenuItem.ShowWhen.Always,
+                ShownWhenMouse = PaintBoxMouseInfo.GuiSection.Anywhere,
+                Call = ScopeContextMenu.MenuItem.CallWhen.Once,
+                Clicked = (a) => a.Scope.PaintBoxShowStats = !a.Scope.PaintBoxShowStats,
+                GetStyle = (a) => a.Checked = a.Scope.PaintBoxShowStats,
+            });
+
+            contextMenu.Add(new ScopeContextMenu.MenuItem
+            {
+                SubMenuText = subMenuText,
+                Text = "Paint benchmark",
+                Sort = 1,
+                ShownWhenTrace = ScopeContextMenu.MenuItem.ShowWhen.Always,
+                ShownWhenMouse = PaintBoxMouseInfo.GuiSection.Anywhere,
+                Call = ScopeContextMenu.MenuItem.CallWhen.Once,
+                ShownText = ScopeContextMenu.MenuItem.TextDisplay.NoChange,
+                Clicked = (a) => PaintBenchmark(a.Scope),
+            });
+        }
+
+        internal static void PaintBenchmark(SehensControl scope, int passes = 10)
+        {
+            Skin.TraceSelections exportTraces = scope.ActiveSkin.ExportTraces;
+            bool highQualityRender = scope.HighQualityRender;
+            Cursor previousCursor = Cursor.Current;
+            try
+            {
+                Cursor.Current = Cursors.WaitCursor;
+                scope.ActiveSkin.ExportTraces = Skin.TraceSelections.VisibleTraces;
+                scope.PaintBox.ScreenshotToBitmap(scope.ActiveSkin, null, parallel: true).Dispose(); // prime
+
+                double Time(bool highQuality)
+                {
+                    scope.HighQualityRender = highQuality;
+                    var timer = System.Diagnostics.Stopwatch.StartNew();
+                    for (int loop = 0; loop < passes; loop++)
+                    {
+                        scope.PaintBox.ScreenshotToBitmap(scope.ActiveSkin, null, parallel: true).Dispose();
+                    }
+                    return timer.Elapsed.TotalMilliseconds / passes;
+                }
+
+                double highMs = Time(true);
+                double lowMs = Time(false);
+                string text = $"Parallel paint of {scope.VisibleViews.Length} visible traces, mean of {passes} passes:"
+                    + $"\n\nHighQualityRender on: {highMs:0.0} ms\nHighQualityRender off: {lowMs:0.0} ms"
+                    + (scope.PaintBox.PaintExceptionCount == 0
+                        ? ""
+                        : $"\n\n{scope.PaintBox.PaintExceptionCount} paint exceptions: {scope.PaintBox.LastPaintExceptionText}");
+                scope.OnLog?.Invoke(new CsvLog.Entry(text.Replace("\n\n", " - ").Replace("\n", ", "), CsvLog.Priority.Info));
+                MessageBox.Show(text, "Paint benchmark");
+            }
+            finally
+            {
+                Cursor.Current = previousCursor;
+                scope.HighQualityRender = highQualityRender;
+                scope.ActiveSkin.ExportTraces = exportTraces;
+            }
         }
 
         private static void AddGenerateSubMenu(List<ScopeContextMenu.MenuItem> contextMenu)

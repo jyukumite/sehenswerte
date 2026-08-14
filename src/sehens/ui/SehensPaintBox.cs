@@ -1114,40 +1114,6 @@ namespace SehensWerte.Controls.Sehens
         }
 
         [TestMethod]
-        public void PaintBenchmarkFromLocalSehensFile()
-        {
-            // Diagnostic, machine-specific: times parallel painting of c:\temp\sehens.sehens with
-            // HighQualityRender on and off (prints to the test log; skips if the file is absent).
-            const string path = @"c:\temp\sehens.sehens";
-            if (!System.IO.File.Exists(path))
-            {
-                Assert.Inconclusive($"{path} not present");
-            }
-            var scope = new SehensControl();
-            SehensSave.LoadStateBinary(path, scope);
-            scope.ActiveSkin.ExportTraces = Skin.TraceSelections.VisibleTraces;
-            scope.PaintBox.ScreenshotToBitmap(scope.ActiveSkin, null, parallel: true).Dispose(); // prime
-
-            double Time(bool highQuality)
-            {
-                scope.HighQualityRender = highQuality;
-                var timer = System.Diagnostics.Stopwatch.StartNew();
-                const int passes = 10;
-                for (int loop = 0; loop < passes; loop++)
-                {
-                    scope.PaintBox.ScreenshotToBitmap(scope.ActiveSkin, null, parallel: true).Dispose();
-                }
-                return timer.Elapsed.TotalMilliseconds / passes;
-            }
-
-            double highMs = Time(true);
-            double lowMs = Time(false);
-            Console.WriteLine($"parallel paint avg: HighQualityRender=true {highMs:0.0} ms, false {lowMs:0.0} ms");
-            Assert.AreEqual(0, scope.PaintBox.PaintExceptionCount,
-                scope.PaintBox.LastPaintExceptionText ?? "paint exception recorded");
-        }
-
-        [TestMethod]
         public void ParallelPaintMatchesSequential()
         {
             // The live OnPaint always paints with PaintFlags.Parallel (per-group bitmaps composited
