@@ -9,6 +9,10 @@ namespace SehensWerte.Controls
         private DialogResult ResultButton;
         private Dictionary<string, string> Unfiltered = new Dictionary<string, string>();
         private string FilterText = "";
+        private TableLayoutPanel m_ButtonLayout;
+        private string? m_ExtraButtonClicked;
+        private Action? m_ExtraButtonAction;
+        public string? ExtraButtonClicked => m_ExtraButtonClicked;
 
         public string Title { set { Text = value; } }
         public string Prompt { set { LabelPrompt.Text = value; } }
@@ -90,7 +94,7 @@ namespace SehensWerte.Controls
 
             base.CancelButton = ButtonCancel;
 
-            var buttonLayout = new TableLayoutPanel
+            m_ButtonLayout = new TableLayoutPanel
             {
                 Dock = DockStyle.Fill,
                 CellBorderStyle = TableLayoutPanelCellBorderStyle.None,
@@ -98,11 +102,11 @@ namespace SehensWerte.Controls
                 RowCount = 1,
                 Padding = Padding.Empty,
             };
-            buttonLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50f));
-            buttonLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50f));
-            buttonLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 100f));
-            buttonLayout.Controls.Add(ButtonOK, 0, 0);
-            buttonLayout.Controls.Add(ButtonCancel, 1, 0);
+            m_ButtonLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50f));
+            m_ButtonLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50f));
+            m_ButtonLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 100f));
+            m_ButtonLayout.Controls.Add(ButtonOK, 0, 0);
+            m_ButtonLayout.Controls.Add(ButtonCancel, 1, 0);
 
             var layout = new TableLayoutPanel
             {
@@ -118,7 +122,7 @@ namespace SehensWerte.Controls
             layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 40f));
             layout.Controls.Add(LabelPrompt, 0, 0);
             layout.Controls.Add(ListBox, 0, 1);
-            layout.Controls.Add(buttonLayout, 0, 2);
+            layout.Controls.Add(m_ButtonLayout, 0, 2);
             base.Controls.Add(layout);
 
             base.ClientSize = new Size(400, 370);
@@ -135,6 +139,41 @@ namespace SehensWerte.Controls
             ResumeLayout(performLayout: false);
         }
 
+
+        public void AddExtraButton(string text, Action? onClick = null)
+        {
+            int count = m_ButtonLayout.ColumnCount + 1;
+            m_ButtonLayout.ColumnCount = count;
+            m_ButtonLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100f));
+            foreach (ColumnStyle style in m_ButtonLayout.ColumnStyles)
+            {
+                style.SizeType = SizeType.Percent;
+                style.Width = 100f / count;
+            }
+            m_ButtonLayout.SetColumn(ButtonCancel, count - 1);
+            Button button = new Button
+            {
+                Dock = DockStyle.Fill,
+                TabIndex = 2,
+                Text = text,
+            };
+            button.Click += (sender, e) =>
+            {
+                if (m_ExtraButtonClicked != null) return; // already closing
+                m_ExtraButtonClicked = text;
+                m_ExtraButtonAction = onClick;
+                ResultButton = DialogResult.OK;
+                Close();
+            };
+            m_ButtonLayout.Controls.Add(button, count - 2, 0);
+        }
+
+        public void InvokeExtraButtonAction()
+        {
+            var action = m_ExtraButtonAction;
+            m_ExtraButtonAction = null;
+            action?.Invoke();
+        }
 
         private void ListBox_DrawItem(object? sender, DrawItemEventArgs e)
         {
@@ -264,11 +303,12 @@ namespace SehensWerte.Controls
             return Show(prompt, title, selection, "");
         }
 
-        public static object? Show(string prompt, string title, Dictionary<string, object> selection)
+        public static object? Show(string prompt, string title, Dictionary<string, object> selection,
+                                   Dictionary<string, Action>? extraButtons = null)
         {
             // key is shown, value is returned
             var displayMap = selection.ToDictionary(kv => kv.Key, kv => kv.Key);
-            var picked = Show(prompt, title, displayMap);
+            var picked = Show(prompt, title, displayMap, "", extraButtons);
             return (picked != null && selection.TryGetValue(picked, out var value)) ? value : null;
         }
 
@@ -282,20 +322,31 @@ namespace SehensWerte.Controls
             return Show(prompt, title, Enum.GetNames(list), defaultResponse?.ToString() ?? "");
         }
 
-        public static string? Show(string prompt, string title, IEnumerable<string> selection, string defaultResponse)
+        public static string? Show(string prompt, string title, IEnumerable<string> selection, string defaultResponse,
+                                   Dictionary<string, Action>? extraButtons = null)
         {
-            return Show(prompt, title, selection.ToDictionary((x) => x, (x) => x), defaultResponse);
+            return Show(prompt, title, selection.ToDictionary((x) => x, (x) => x), defaultResponse, extraButtons);
         }
 
-        public static string? Show(string prompt, string title, IEnumerable<KeyValuePair<string, string>> selection, string defaultResponse)
+        public static string? Show(string prompt, string title, IEnumerable<KeyValuePair<string, string>> selection, string defaultResponse,
+                                   Dictionary<string, Action>? extraButtons = null)
         {
             ListSelectForm listSelectForm = new ListSelectForm();
             listSelectForm.Title = title;
             listSelectForm.Prompt = prompt;
             listSelectForm.SetSelection(selection);
             listSelectForm.DefaultResponse = defaultResponse;
+            if (extraButtons != null)
+            {
+                foreach (var button in extraButtons)
+                {
+                    listSelectForm.AddExtraButton(button.Key, button.Value);
+                }
+            }
             listSelectForm.ShowDialog();
-            return listSelectForm.ResultButton == DialogResult.OK ? listSelectForm.ResultString : null;
+            if (listSelectForm.ResultButton != DialogResult.OK) return null;
+            listSelectForm.InvokeExtraButtonAction();
+            return listSelectForm.ResultString;
         }
 
         public static IEnumerable<string>? ShowMultiselect(string prompt, string title, IEnumerable<KeyValuePair<string, string>> selection, string defaultResponse)

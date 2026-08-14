@@ -98,6 +98,17 @@ namespace SehensWerte.Controls
 
         private Func<string, string>? PasteHook;
         private TableLayoutPanel m_Layout;
+        private TableLayoutPanel m_ButtonLayout;
+        private string? m_ExtraButtonClicked;
+        private Action? m_ExtraButtonAction;
+        public string? ExtraButtonClicked => m_ExtraButtonClicked;
+
+        public void InvokeExtraButtonAction()
+        {
+            var action = m_ExtraButtonAction;
+            m_ExtraButtonAction = null;
+            action?.Invoke();
+        }
 
         private static ConcurrentDictionary<string, string> Cache = new();
 
@@ -163,7 +174,7 @@ namespace SehensWerte.Controls
             AcceptButton = this.ButtonOK;
             CancelButton = this.ButtonCancel;
 
-            var buttonLayout = new TableLayoutPanel
+            m_ButtonLayout = new TableLayoutPanel
             {
                 Dock = DockStyle.Fill,
                 CellBorderStyle = TableLayoutPanelCellBorderStyle.None,
@@ -171,11 +182,11 @@ namespace SehensWerte.Controls
                 RowCount = 1,
                 Padding = Padding.Empty,
             };
-            buttonLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50f));
-            buttonLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50f));
-            buttonLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 100f));
-            buttonLayout.Controls.Add(ButtonOK, 0, 0);
-            buttonLayout.Controls.Add(ButtonCancel, 1, 0);
+            m_ButtonLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50f));
+            m_ButtonLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50f));
+            m_ButtonLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 100f));
+            m_ButtonLayout.Controls.Add(ButtonOK, 0, 0);
+            m_ButtonLayout.Controls.Add(ButtonCancel, 1, 0);
 
             m_Layout = new TableLayoutPanel
             {
@@ -191,7 +202,7 @@ namespace SehensWerte.Controls
             m_Layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 40f));
             m_Layout.Controls.Add(LabelText, 0, 0);
             m_Layout.Controls.Add(EditResult, 0, 1);
-            m_Layout.Controls.Add(buttonLayout, 0, 2);
+            m_Layout.Controls.Add(m_ButtonLayout, 0, 2);
             Controls.Add(m_Layout);
 
             FormBorderStyle = FormBorderStyle.Sizable;
@@ -215,11 +226,40 @@ namespace SehensWerte.Controls
 
         private Size GetMinimumSize() => new System.Drawing.Size(400, 8 + 24 + 8 + (MultiLine ? 200 : EditResult.PreferredHeight) + 8 + 32 + 8) + Size - ClientSize;
 
+        public void AddExtraButton(string text, Action? onClick = null)
+        {
+            int count = m_ButtonLayout.ColumnCount + 1;
+            m_ButtonLayout.ColumnCount = count;
+            m_ButtonLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100f));
+            foreach (ColumnStyle style in m_ButtonLayout.ColumnStyles)
+            {
+                style.SizeType = SizeType.Percent;
+                style.Width = 100f / count;
+            }
+            m_ButtonLayout.SetColumn(ButtonCancel, count - 1);
+            Button button = new Button
+            {
+                Dock = DockStyle.Fill,
+                TabIndex = 2,
+                Text = text,
+            };
+            button.Click += (sender, e) =>
+            {
+                if (m_ExtraButtonClicked != null) return; // already closing
+                m_ExtraButtonClicked = text;
+                m_ExtraButtonAction = onClick;
+                ResultButton = DialogResult.OK;
+                Close();
+            };
+            m_ButtonLayout.Controls.Add(button, count - 2, 0);
+        }
+
 
         public static string? Show(string prompt, string title,
                                    object? defaultResponse = null, bool password = false,
                                    bool multiLine = false, bool cache = false, bool save = false,
                                    string? saveKey = null, bool regex = false, bool saveMRU = false,
+                                   Dictionary<string, Action>? extraButtons = null,
                          [System.Runtime.CompilerServices.CallerFilePath] string cacheFilePath = "",
                          [System.Runtime.CompilerServices.CallerLineNumber] int cacheLineNumber = 0)
         {
@@ -253,6 +293,13 @@ namespace SehensWerte.Controls
             {
                 form.MruRegistryKey = key + ".mru";
             }
+            if (extraButtons != null)
+            {
+                foreach (var button in extraButtons)
+                {
+                    form.AddExtraButton(button.Key, button.Value);
+                }
+            }
             if (regex)
             {
                 form.PasteHook = (s) =>
@@ -281,6 +328,7 @@ namespace SehensWerte.Controls
                 {
                     form.CommitMru();
                 }
+                form.InvokeExtraButtonAction();
                 return form.ResultString;
             }
             else

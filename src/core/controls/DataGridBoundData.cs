@@ -578,23 +578,26 @@ namespace SehensWerte.Controls
             {
                 DataGrid = dataGrid;
                 m_History = new DataGridControlHistory();
-                RebuildGridColumns();
+                RebuildGridColumns(preserveColumnState: false);
             }
 
-            internal void RebuildGridColumns()
+            internal void RebuildGridColumns(bool preserveColumnState = true)
             {
                 if (DataGrid == null) return;
                 DataGridView grid = DataGrid.Grid;
 
                 var savedBackColor = new Dictionary<string, Color>();
                 var savedWidth = new Dictionary<string, int>();
-                foreach (DataGridViewColumn c in grid.Columns)
+                if (preserveColumnState)
                 {
-                    if (!c.DefaultCellStyle.BackColor.IsEmpty)
+                    foreach (DataGridViewColumn c in grid.Columns)
                     {
-                        savedBackColor[c.Name] = c.DefaultCellStyle.BackColor;
+                        if (!c.DefaultCellStyle.BackColor.IsEmpty)
+                        {
+                            savedBackColor[c.Name] = c.DefaultCellStyle.BackColor;
+                        }
+                        savedWidth[c.Name] = c.Width;
                     }
-                    savedWidth[c.Name] = c.Width;
                 }
 
                 grid.DataSource = null;
