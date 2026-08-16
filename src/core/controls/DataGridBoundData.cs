@@ -13,6 +13,10 @@ namespace SehensWerte.Controls
 {
     public partial class DataGridControl
     {
+        // matches the col0..colN properties on BoundDataRow.
+        // Additional columns are still held/saved/copied, but not shown on screen
+        public const int MaxBoundColumns = 200;
+
         public abstract class BoundDataRow
         {
             internal bool Visible = true;
@@ -43,6 +47,7 @@ namespace SehensWerte.Controls
 
             public abstract IComparer<BoundDataRow> GetSortComparer(int colIndex, ListSortDirection sortDirection);
 
+            // WinForms binds a grid column to a named property (see MaxBoundColumns)
             //DataPropertyName = $"col{loop}",
             public String? col0 => Column(0); public String? col1 => Column(1); public String? col2 => Column(2); public String? col3 => Column(3);
             public String? col4 => Column(4); public String? col5 => Column(5); public String? col6 => Column(6); public String? col7 => Column(7);
@@ -69,6 +74,31 @@ namespace SehensWerte.Controls
             public String? col88 => Column(88); public String? col89 => Column(89); public String? col90 => Column(90); public String? col91 => Column(91);
             public String? col92 => Column(92); public String? col93 => Column(93); public String? col94 => Column(94); public String? col95 => Column(95);
             public String? col96 => Column(96); public String? col97 => Column(97); public String? col98 => Column(98); public String? col99 => Column(99);
+            public String? col100 => Column(100); public String? col101 => Column(101); public String? col102 => Column(102); public String? col103 => Column(103);
+            public String? col104 => Column(104); public String? col105 => Column(105); public String? col106 => Column(106); public String? col107 => Column(107);
+            public String? col108 => Column(108); public String? col109 => Column(109); public String? col110 => Column(110); public String? col111 => Column(111);
+            public String? col112 => Column(112); public String? col113 => Column(113); public String? col114 => Column(114); public String? col115 => Column(115);
+            public String? col116 => Column(116); public String? col117 => Column(117); public String? col118 => Column(118); public String? col119 => Column(119);
+            public String? col120 => Column(120); public String? col121 => Column(121); public String? col122 => Column(122); public String? col123 => Column(123);
+            public String? col124 => Column(124); public String? col125 => Column(125); public String? col126 => Column(126); public String? col127 => Column(127);
+            public String? col128 => Column(128); public String? col129 => Column(129); public String? col130 => Column(130); public String? col131 => Column(131);
+            public String? col132 => Column(132); public String? col133 => Column(133); public String? col134 => Column(134); public String? col135 => Column(135);
+            public String? col136 => Column(136); public String? col137 => Column(137); public String? col138 => Column(138); public String? col139 => Column(139);
+            public String? col140 => Column(140); public String? col141 => Column(141); public String? col142 => Column(142); public String? col143 => Column(143);
+            public String? col144 => Column(144); public String? col145 => Column(145); public String? col146 => Column(146); public String? col147 => Column(147);
+            public String? col148 => Column(148); public String? col149 => Column(149); public String? col150 => Column(150); public String? col151 => Column(151);
+            public String? col152 => Column(152); public String? col153 => Column(153); public String? col154 => Column(154); public String? col155 => Column(155);
+            public String? col156 => Column(156); public String? col157 => Column(157); public String? col158 => Column(158); public String? col159 => Column(159);
+            public String? col160 => Column(160); public String? col161 => Column(161); public String? col162 => Column(162); public String? col163 => Column(163);
+            public String? col164 => Column(164); public String? col165 => Column(165); public String? col166 => Column(166); public String? col167 => Column(167);
+            public String? col168 => Column(168); public String? col169 => Column(169); public String? col170 => Column(170); public String? col171 => Column(171);
+            public String? col172 => Column(172); public String? col173 => Column(173); public String? col174 => Column(174); public String? col175 => Column(175);
+            public String? col176 => Column(176); public String? col177 => Column(177); public String? col178 => Column(178); public String? col179 => Column(179);
+            public String? col180 => Column(180); public String? col181 => Column(181); public String? col182 => Column(182); public String? col183 => Column(183);
+            public String? col184 => Column(184); public String? col185 => Column(185); public String? col186 => Column(186); public String? col187 => Column(187);
+            public String? col188 => Column(188); public String? col189 => Column(189); public String? col190 => Column(190); public String? col191 => Column(191);
+            public String? col192 => Column(192); public String? col193 => Column(193); public String? col194 => Column(194); public String? col195 => Column(195);
+            public String? col196 => Column(196); public String? col197 => Column(197); public String? col198 => Column(198); public String? col199 => Column(199);
 
             public void CellColour(int col, Color colour)
             {
@@ -603,7 +633,16 @@ namespace SehensWerte.Controls
                 grid.DataSource = null;
                 grid.AutoGenerateColumns = false;
                 grid.Columns.Clear();
-                for (int loop = 0; loop < ColumnNames.Count; loop++)
+                int shown = Math.Min(ColumnNames.Count, MaxBoundColumns);
+                if (ColumnNames.Count > MaxBoundColumns)
+                {
+                    OnLog?.Invoke(new CsvLog.Entry(
+                        $"Grid shows the first {MaxBoundColumns} of {ColumnNames.Count} columns; "
+                        + $"{ColumnNames.Count - MaxBoundColumns} are loaded but not displayed "
+                        + "(Save writes all of them)",
+                        CsvLog.Priority.Warn));
+                }
+                for (int loop = 0; loop < shown; loop++)
                 {
                     var col = new DataGridViewTextBoxColumn
                     {

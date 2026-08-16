@@ -1586,13 +1586,19 @@ namespace SehensWerte.Controls
             int total = DataGridBind?.UnfilteredData.Count ?? 0;
             int showing = DataGridBind?.FilteredData.Count ?? 0;
             StatusFilterText.Text = (showing == total) ? $"{total}rows" : $"{showing}/{total}";
+            int columns = DataGridBind?.ColumnNames.Count ?? 0;
+            if (columns > MaxBoundColumns)
+            {
+                StatusFilterText.Text += $" {MaxBoundColumns}/{columns}cols";
+            }
             StatusFilterText.Visible = true;
 
-            // Transpose turns rows into columns; the col0..col99 binding caps display at 100.
-            TransposeGrid.Enabled = showing <= 100;
+            // Transpose turns rows into columns, so the row count becomes the column count and
+            // the same binding limit applies.
+            TransposeGrid.Enabled = showing <= MaxBoundColumns;
             TransposeGrid.ToolTipText = TransposeGrid.Enabled
                 ? "Swap rows and columns; click again to switch back (Alt+T)"
-                : "Disabled: transpose would create more than 100 columns";
+                : $"Disabled: transpose would create more than {MaxBoundColumns} columns";
         }
 
 
