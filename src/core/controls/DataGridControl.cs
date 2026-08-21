@@ -637,7 +637,7 @@ namespace SehensWerte.Controls
             this.SaveCsvButton.ShowDropDownArrow = false;
             this.SaveCsvButton.Size = new System.Drawing.Size(171, 38);
             this.SaveCsvButton.Text = "Save";
-            this.SaveCsvButton.ToolTipText = "Save the currently visible rows and columns to a CSV file (Ctrl+S)";
+            this.SaveCsvButton.ToolTipText = "Save the currently visible rows and columns to a CSV or JSON file (Ctrl+S)";
             this.SaveCsvButton.Click += new System.EventHandler(this.SaveCsv_Click);
             this.SaveCsvButton.BackColor = prettyColours ? Color.FromArgb(218, 216, 232) : SystemColors.Control;
 
@@ -645,7 +645,7 @@ namespace SehensWerte.Controls
             this.LoadCsvButton.ShowDropDownArrow = false;
             this.LoadCsvButton.Size = new System.Drawing.Size(171, 38);
             this.LoadCsvButton.Text = "Load";
-            this.LoadCsvButton.ToolTipText = "Load a CSV file into the grid (Ctrl+O)";
+            this.LoadCsvButton.ToolTipText = "Load a CSV or JSON file into the grid (Ctrl+O)";
             this.LoadCsvButton.Click += new System.EventHandler(this.LoadCsv_Click);
             this.LoadCsvButton.BackColor = prettyColours ? Color.FromArgb(218, 216, 232) : SystemColors.Control;
 
@@ -1331,6 +1331,10 @@ namespace SehensWerte.Controls
             Grid.Invalidate(); // the picker is modal; force the owner's header row to repaint
         }
 
+        private const string CsvJsonFilter = "CSV files (*.csv)|*.csv|JSON files (*.json)|*.json";
+        private static bool IsJsonFile(string fileName) =>
+            System.IO.Path.GetExtension(fileName).Equals(".json", StringComparison.OrdinalIgnoreCase);
+
         private SaveFileDialog m_SaveFileDialog = new SaveFileDialog();
         private void SaveCsv_Click(object? sender, EventArgs e)
         {
@@ -1338,15 +1342,22 @@ namespace SehensWerte.Controls
             {
                 if (Grid.SelectedCells.Count != 0)
                 {
-                    m_SaveFileDialog.Title = "Save as CSV";
-                    m_SaveFileDialog.Filter = "CSV files (*.csv)|*.csv";
+                    m_SaveFileDialog.Title = "Save as CSV or JSON";
+                    m_SaveFileDialog.Filter = CsvJsonFilter;
                     m_SaveFileDialog.RestoreDirectory = true;
                     if (m_SaveFileDialog.ShowDialog() == DialogResult.OK)
                     {
-                        DataGridBind?.SaveToCsv(m_SaveFileDialog.FileName);
+                        if (IsJsonFile(m_SaveFileDialog.FileName))
+                        {
+                            DataGridBind?.SaveToJson(m_SaveFileDialog.FileName);
+                        }
+                        else
+                        {
+                            DataGridBind?.SaveToCsv(m_SaveFileDialog.FileName);
+                        }
                     }
                 }
-            }, "Save CSV");
+            }, "Save CSV/JSON");
         }
 
         private OpenFileDialog m_LoadFileDialog = new OpenFileDialog();
@@ -1354,15 +1365,25 @@ namespace SehensWerte.Controls
         {
             this.ExceptionToMessagebox(() =>
             {
-                m_LoadFileDialog.Title = "Load CSV";
-                m_LoadFileDialog.Filter = "CSV files (*.csv)|*.csv";
+                m_LoadFileDialog.Title = "Load CSV or JSON";
+                m_LoadFileDialog.Filter = CsvJsonFilter;
                 m_LoadFileDialog.RestoreDirectory = true;
                 if (m_LoadFileDialog.ShowDialog() == DialogResult.OK)
                 {
-                    LoadCsv(m_LoadFileDialog.FileName,
-                        MessageBox.Show("Load as strings?", "Load as strings?", MessageBoxButtons.YesNo) == DialogResult.No);
+                    if (IsJsonFile(m_LoadFileDialog.FileName))
+                    {
+                        // LoadJson takes the json TEXT, not a path. No "load as strings?"
+                        // prompt either - the numeric grid is for an all-numbers CSV, and
+                        // LoadJson already types each cell via JsonElementToString.
+                        LoadJson(System.IO.File.ReadAllText(m_LoadFileDialog.FileName));
+                    }
+                    else
+                    {
+                        LoadCsv(m_LoadFileDialog.FileName,
+                            MessageBox.Show("Load as strings?", "Load as strings?", MessageBoxButtons.YesNo) == DialogResult.No);
+                    }
                 }
-            }, "Load CSV");
+            }, "Load CSV/JSON");
         }
 
         private void Grid_CellPainting(object? sender, DataGridViewCellPaintingEventArgs e)
