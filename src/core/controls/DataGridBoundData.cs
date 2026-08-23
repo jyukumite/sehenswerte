@@ -1609,6 +1609,26 @@ namespace SehensWerte.Controls
                 CSVSave.SaveRows(fileName, ColumnNames, FilteredData.Select(x => x.Strings), ",");
             }
 
+            internal void SaveToJson(string fileName)
+            {
+                var rows = FilteredData.Select(row =>
+                {
+                    string?[] strings = row.Strings;
+                    var cells = new Dictionary<string, string?>();
+                    for (int col = 0; col < ColumnNames.Count; col++)
+                    {
+                        string key = ColumnNames[col];
+                        for (int n = 2; cells.ContainsKey(key); n++)
+                        {
+                            key = $"{ColumnNames[col]}_{n}";
+                        }
+                        cells[key] = col < strings.Length ? strings[col] : null;
+                    }
+                    return cells;
+                }).ToList();
+                System.IO.File.WriteAllText(fileName, rows.ToJson());
+            }
+
             internal SelectedCellsData SelectedCellsToClipboardFormats(bool numericGrid)
             {
                 if (DataGrid == null) return default;
