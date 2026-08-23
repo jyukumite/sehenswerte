@@ -755,8 +755,8 @@ namespace SehensWerte.Controls
             lock (m_TraceDataLock)
             {
                 m_Traces.Remove(name);
-                ViewListChanged();
             }
+            ViewListChanged();
         }
 
         private void ProxyRenameTrace(string oldName, string newName, TraceData trace)

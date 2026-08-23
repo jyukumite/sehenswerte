@@ -157,8 +157,11 @@ namespace SehensWerte.Comms
             lock (m_SendingLock)
             {
                 m_Sending = null;
-                var all = m_Queue.ToList();
-                m_Queue.Clear();
+                var all = new List<QueueEntry>();
+                while (m_Queue.TryDequeue(out QueueEntry? dequeued))
+                {
+                    all.Add(dequeued);
+                }
                 foreach (var v in all)
                 {
                     OnSendFail?.Invoke(v.Sent);

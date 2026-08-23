@@ -34,7 +34,7 @@ namespace SehensWerte.Controls.Sehens
         private bool m_RateLimitedPaint = true;
         private bool m_Painting;
         private int m_PaintRequired;
-        private bool m_PaintThreadStop;
+        private volatile bool m_PaintThreadStop;
         internal PaintedTraceList PaintedTraces = new PaintedTraceList();
 
         private class Stats

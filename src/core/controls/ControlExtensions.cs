@@ -43,13 +43,20 @@
                     exception?.Invoke(e);
                 }
             };
-            if (!control.Disposing && !control.IsDisposed && control.IsHandleCreated && control.InvokeRequired)
+            try
             {
-                control.BeginInvoke(invoke);
+                if (!control.Disposing && !control.IsDisposed && control.IsHandleCreated && control.InvokeRequired)
+                {
+                    control.BeginInvoke(invoke);
+                }
+                else
+                {
+                    invoke();
+                }
             }
-            else
+            catch (Exception e)
             {
-                invoke();
+                exception?.Invoke(e);
             }
         }
 

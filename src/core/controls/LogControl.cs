@@ -53,7 +53,7 @@ namespace SehensWerte.Controls
         public bool CompressLogFile
         {
             get => m_CompressLogFile;
-            set { m_LogFile?.Close(); m_CompressLogFile = value; }
+            set { m_LogFile?.Close(); m_LogFile = null; m_CompressLogFile = value; }
         }
 
         public string FilterString
@@ -102,6 +102,7 @@ namespace SehensWerte.Controls
                 if (!DesignMode && !designMode && value != "")
                 {
                     m_LogFile?.Close();
+                    m_LogFile = null;
                     m_LogFolderFullPath = System.IO.Path.GetFullPath(value);
                     Directory.CreateDirectory(m_LogFolderFullPath);
                 }
