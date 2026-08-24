@@ -43,7 +43,7 @@ namespace SehensWerte.Controls
         public event DataGridViewCellEventHandler CellClick = (s, e) => { };
         public event DataGridControlCellKeyDownEventHandler CellKeyDown = (s, e) => { };
         public event EventHandler SelectionChanged = (s, e) => { };
-
+        public event EventHandler VerticalScroll = (s, e) => { };
         public event EventHandler<DataGridControlToolTipArgs> ShowTooltipWindow = (s, e) => { };
         public event EventHandler<DataGridControlToolTipArgs> HideTooltipWindow = (s, e) => { };
 
@@ -301,6 +301,10 @@ namespace SehensWerte.Controls
             this.Grid.KeyDown += Grid_KeyDown;
             this.Grid.MouseWheel += Grid_MouseWheel;
             this.Grid.CellClick += (s, e) => CellClick.Invoke(s, e);
+            this.Grid.Scroll += (s, e) =>
+            {
+                if (e.ScrollOrientation == ScrollOrientation.VerticalScroll) { VerticalScroll.Invoke(this, EventArgs.Empty); }
+            };
             this.Grid.CellContextMenuStripNeeded += (s, e) => CellContextMenuStripNeeded.Invoke(s, e);
             this.Grid.CellMouseEnter += Grid_CellMouseEnter;
             this.Grid.CellMouseLeave += (s, e) => { HoverHide(); };
@@ -1835,6 +1839,11 @@ namespace SehensWerte.Controls
         public int FirstVisibleRow
         {
             get { try { return Grid.FirstDisplayedScrollingRowIndex; } catch { return -1; } }
+        }
+
+        public int VisibleRowCount
+        {
+            get { try { return Grid.DisplayedRowCount(includePartialRow: true); } catch { return 0; } }
         }
 
         public IEnumerable<string> ColumnNames => DataGridBind?.ColumnNames ?? new List<string>();
