@@ -1,0 +1,20 @@
+{
+  // Scoped to this folder only. The library above is deliberately without a tsconfig
+  // of its own - it is typechecked by whichever app embeds it (see ../run-tests.ps1
+  // -Types). This file exists so editors resolve vite's ambient types (CSS imports,
+  // import.meta) while working on the harness.
+  "compilerOptions": {
+    "target": "es2020",
+    "lib": ["dom", "dom.iterable", "esnext"],
+    "module": "esnext",
+    "moduleResolution": "node",
+    "jsx": "react-jsx",
+    "strict": true,
+    "noEmit": true,
+    "skipLibCheck": true,
+    "esModuleInterop": true,
+    "isolatedModules": true,
+    "types": ["vite/client"]
+  },
+  "include": ["."]
+}

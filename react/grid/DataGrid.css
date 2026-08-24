@@ -1,0 +1,355 @@
+/* sehenswerte-react DataGrid. All colours are CSS variables so a host can
+   re-theme; defaults are a dark palette. */
+
+.sw-datagrid {
+  --sw-bg: #0e1116;
+  --sw-panel: #151a21;
+  --sw-border: #2a3038;
+  --sw-text: #d7dde5;
+  --sw-text-dim: #7a828c;
+  --sw-accent: #1f6feb;
+  --sw-header-bg: #1a212b;
+  --sw-header-text: #aeb6c2;
+  --sw-header-match: #8a6d00; /* gold tint for column-filter matches */
+  --sw-row-alt: #11151c;
+  --sw-selection: rgba(31, 111, 235, 0.32);
+  --sw-current-cell: #1f6feb;
+  --sw-null: #7a828c;
+  --sw-diff: #ff6b6b;
+  --sw-drop-indicator: #ff4500; /* OrangeRed, as the WinForms drag indicator */
+  --sw-strip-bg: #151a21;
+
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  background: var(--sw-bg);
+  color: var(--sw-text);
+  font-family: "Segoe UI", system-ui, sans-serif;
+  border: 1px solid var(--sw-border);
+  outline: none;
+  position: relative;
+}
+
+.sw-grid-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  position: relative;
+}
+
+.sw-grid-canvas {
+  position: relative; /* sized to total virtual height + header */
+}
+
+.sw-grid-header {
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  display: flex;
+  background: var(--sw-header-bg);
+  user-select: none;
+  width: max-content;
+  min-width: 100%;
+}
+
+.sw-header-cell {
+  flex: none;
+  box-sizing: border-box;
+  padding: 3px 6px;
+  border-right: 1px solid var(--sw-border);
+  border-bottom: 1px solid var(--sw-border);
+  color: var(--sw-header-text);
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  cursor: pointer;
+  position: relative;
+}
+
+.sw-header-cell.sw-filter-match {
+  background: var(--sw-header-match);
+  color: #fff;
+}
+
+.sw-header-cell .sw-sort-glyph {
+  margin-left: 4px;
+  font-size: 0.8em;
+}
+
+.sw-row-header {
+  flex: none;
+  box-sizing: border-box;
+  position: sticky;
+  left: 0;
+  z-index: 2;
+  background: var(--sw-header-bg);
+  color: var(--sw-text-dim);
+  border-right: 1px solid var(--sw-border);
+  border-bottom: 1px solid var(--sw-border);
+  padding: 3px 6px;
+  text-align: right;
+  user-select: none;
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+.sw-grid-header .sw-row-header {
+  z-index: 4;
+}
+
+.sw-grid-row {
+  position: absolute;
+  display: flex;
+  width: max-content;
+  min-width: 100%;
+}
+
+.sw-grid-row.sw-row-alt .sw-cell {
+  background: var(--sw-row-alt);
+}
+
+.sw-cell {
+  flex: none;
+  box-sizing: border-box;
+  padding: 2px 6px;
+  border-right: 1px solid var(--sw-border);
+  border-bottom: 1px solid var(--sw-border);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  background: var(--sw-bg);
+  cursor: default;
+}
+
+.sw-cell.sw-selected {
+  background: var(--sw-selection) !important;
+}
+
+.sw-cell.sw-current {
+  outline: 1px solid var(--sw-current-cell);
+  outline-offset: -1px;
+}
+
+.sw-null {
+  font-style: italic;
+  color: var(--sw-null);
+}
+
+.sw-diff {
+  color: var(--sw-diff);
+}
+
+.sw-drop-indicator {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: var(--sw-drop-indicator);
+  z-index: 5;
+  pointer-events: none;
+}
+
+.sw-resize-grip {
+  position: absolute;
+  top: 0;
+  right: -3px;
+  width: 6px;
+  height: 100%;
+  cursor: col-resize;
+  z-index: 1;
+}
+
+/* ---- status strip ---- */
+
+.sw-status-strip {
+  flex: none;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 3px;
+  padding: 3px 6px;
+  background: var(--sw-strip-bg);
+  border-top: 1px solid var(--sw-border);
+  font-size: 12px;
+}
+
+.sw-strip-label {
+  color: var(--sw-text-dim);
+  margin-right: 6px;
+  white-space: nowrap;
+}
+
+.sw-strip-button {
+  background: #222a35;
+  color: var(--sw-text);
+  border: 1px solid var(--sw-border);
+  border-radius: 3px;
+  padding: 2px 8px;
+  font-size: 12px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.sw-strip-button:hover:not(:disabled) {
+  border-color: var(--sw-accent);
+}
+
+.sw-strip-button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+/* pastel group tints, echoing the WinForms prettyColours strip */
+.sw-strip-button.sw-group-hide {
+  background: #2a2332;
+}
+.sw-strip-button.sw-group-regex {
+  background: #1f2a38;
+}
+.sw-strip-button.sw-group-shape {
+  background: #22301f;
+}
+.sw-strip-button.sw-group-view {
+  background: #33291d;
+}
+.sw-strip-button.sw-group-file {
+  background: #1d2e2e;
+}
+
+/* ---- dialogs ---- */
+
+.sw-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  z-index: 100;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding-top: 12vh;
+}
+
+.sw-modal {
+  background: var(--sw-panel, #151a21);
+  color: var(--sw-text, #d7dde5);
+  border: 1px solid var(--sw-border, #2a3038);
+  border-radius: 6px;
+  min-width: 340px;
+  max-width: 560px;
+  max-height: 70vh;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.6);
+  font-family: "Segoe UI", system-ui, sans-serif;
+}
+
+.sw-modal-title {
+  padding: 8px 12px;
+  font-weight: 600;
+  border-bottom: 1px solid var(--sw-border, #2a3038);
+}
+
+.sw-modal-body {
+  padding: 12px;
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.sw-modal-buttons {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 8px 12px;
+  border-top: 1px solid var(--sw-border, #2a3038);
+}
+
+.sw-modal input[type="text"] {
+  background: #0e1116;
+  color: inherit;
+  border: 1px solid var(--sw-border, #2a3038);
+  border-radius: 3px;
+  padding: 4px 8px;
+  font-size: 13px;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.sw-modal-button {
+  background: #222a35;
+  color: inherit;
+  border: 1px solid var(--sw-border, #2a3038);
+  border-radius: 3px;
+  padding: 4px 14px;
+  cursor: pointer;
+}
+
+.sw-modal-button.sw-primary {
+  background: var(--sw-accent, #1f6feb);
+  border-color: var(--sw-accent, #1f6feb);
+  color: #fff;
+}
+
+.sw-modal-hint {
+  color: var(--sw-text-dim, #7a828c);
+  font-size: 12px;
+}
+
+.sw-mru-item {
+  padding: 2px 6px;
+  cursor: pointer;
+  border-radius: 3px;
+  font-size: 12px;
+  color: var(--sw-text-dim, #7a828c);
+}
+
+.sw-mru-item:hover {
+  background: #222a35;
+  color: inherit;
+}
+
+.sw-column-list {
+  overflow: auto;
+  max-height: 40vh;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.sw-column-list label {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  padding: 1px 4px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.sw-column-list label.sw-filter-match {
+  background: var(--sw-header-match, #8a6d00);
+  border-radius: 3px;
+}
+
+/* ---- tooltip ---- */
+
+.sw-tooltip {
+  position: fixed;
+  z-index: 200;
+  background: var(--sw-panel, #151a21);
+  color: var(--sw-text, #d7dde5);
+  border: 1px solid var(--sw-border, #2a3038);
+  border-radius: 4px;
+  padding: 6px 8px;
+  max-width: 480px;
+  max-height: 320px;
+  overflow: hidden;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-size: 12px;
+  pointer-events: none;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5);
+}

@@ -1,0 +1,145 @@
+/* sehenswerte react Scope. The canvas paints from the ScopeSkin; this CSS
+   covers the DOM chrome around it (trace list, labels, hover readouts). */
+
+.sw-scope {
+  display: flex;
+  height: 100%;
+  min-height: 0;
+  background: var(--sw-bg, #0e1116);
+  color: var(--sw-text, #d7dde5);
+  font-family: "Segoe UI", system-ui, sans-serif;
+  border: 1px solid var(--sw-border, #2a3038);
+  outline: none;
+  position: relative;
+}
+
+/* ---- trace list panel (left) ---- */
+
+.sw-scope-list {
+  flex: none;
+  width: 180px;
+  min-width: 120px;
+  display: flex;
+  flex-direction: column;
+  border-right: 1px solid var(--sw-border, #2a3038);
+  background: var(--sw-panel, #151a21);
+  font-size: 12px;
+}
+
+.sw-scope-list input[type="text"] {
+  margin: 4px;
+  background: var(--sw-bg, #0e1116);
+  color: inherit;
+  border: 1px solid var(--sw-border, #2a3038);
+  border-radius: 3px;
+  padding: 3px 6px;
+  font-size: 12px;
+}
+
+.sw-scope-list-rows {
+  flex: 1;
+  overflow: auto;
+}
+
+.sw-scope-list-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 6px;
+  cursor: pointer;
+  white-space: nowrap;
+  user-select: none;
+}
+
+.sw-scope-list-row:hover {
+  background: #222a35;
+}
+
+.sw-scope-list-row.sw-hidden-trace {
+  opacity: 0.45;
+}
+
+.sw-scope-list-row.sw-selected-trace {
+  background: rgba(31, 111, 235, 0.25);
+}
+
+.sw-scope-swatch {
+  flex: none;
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+}
+
+.sw-scope-list-buttons {
+  flex: none;
+  display: flex;
+  gap: 4px;
+  padding: 4px;
+  border-top: 1px solid var(--sw-border, #2a3038);
+}
+
+.sw-scope-list-buttons button {
+  flex: 1;
+  background: #222a35;
+  color: inherit;
+  border: 1px solid var(--sw-border, #2a3038);
+  border-radius: 3px;
+  padding: 2px 4px;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+/* ---- paint surface ---- */
+
+.sw-scope-paint {
+  flex: 1;
+  min-width: 0;
+  position: relative;
+}
+
+.sw-scope-paint canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+/* ---- DOM overlays over the canvas ---- */
+
+.sw-scope-overlay {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+.sw-hover-label {
+  position: absolute;
+  background: var(--sw-panel, #151a21);
+  border: 1px solid var(--sw-border, #2a3038);
+  border-radius: 3px;
+  padding: 1px 6px;
+  font-size: 11px;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+.sw-trace-label {
+  position: absolute;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 0 4px;
+  pointer-events: auto;
+  cursor: pointer;
+  user-select: none;
+  white-space: nowrap;
+}
+
+.sw-scope-warning {
+  position: absolute;
+  font-size: 11px;
+  color: var(--sw-warn, #ff6b6b);
+  pointer-events: none;
+  white-space: nowrap;
+}

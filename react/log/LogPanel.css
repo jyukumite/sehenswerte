@@ -1,0 +1,159 @@
+/* sehenswerte react LogPanel. Dense monospace rows, colour is the priority
+   channel (Warn is deliberately green, matching the WinForms control). */
+
+.sw-log {
+  --sw-log-bg: var(--sw-bg, #0e1116);
+  --sw-log-text: var(--sw-text, #d7dde5);
+  --sw-log-border: var(--sw-border, #2a3038);
+  --sw-log-debug: #6ea8ff;
+  --sw-log-info: var(--sw-text, #d7dde5);
+  --sw-log-warn: #3fbf3f;
+  --sw-log-error: #e8953c;
+  --sw-log-exception: #ff5252;
+
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  background: var(--sw-log-bg);
+  color: var(--sw-log-text);
+  border: 1px solid var(--sw-log-border);
+  font-family: Consolas, "Courier New", monospace;
+  font-size: 12px;
+  position: relative;
+  outline: none;
+}
+
+.sw-log-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  position: relative;
+}
+
+.sw-log-row {
+  position: absolute;
+  left: 0;
+  right: 0;
+  padding: 0 6px;
+  white-space: pre;
+  overflow: hidden;
+  line-height: 1.35;
+}
+
+.sw-log-debug {
+  color: var(--sw-log-debug);
+}
+.sw-log-info {
+  color: var(--sw-log-info);
+}
+.sw-log-warn {
+  color: var(--sw-log-warn);
+}
+.sw-log-error {
+  color: var(--sw-log-error);
+}
+.sw-log-exception {
+  color: var(--sw-log-exception);
+}
+
+.sw-log-timestamp {
+  opacity: 0.55;
+}
+
+/* translucent red corner status overlay: "..." + " filter" + " Paused" */
+.sw-log-status {
+  position: absolute;
+  top: 2px;
+  right: 16px;
+  color: rgba(255, 80, 80, 0.75);
+  font-weight: 600;
+  pointer-events: none;
+  z-index: 2;
+}
+
+.sw-log-strip {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 3px 6px;
+  border-top: 1px solid var(--sw-log-border);
+  background: var(--sw-panel, #151a21);
+  font-family: "Segoe UI", system-ui, sans-serif;
+  font-size: 12px;
+}
+
+.sw-log-strip label {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  white-space: nowrap;
+  user-select: none;
+}
+
+.sw-log-strip select {
+  background: var(--sw-log-bg);
+  color: inherit;
+  border: 1px solid var(--sw-log-border);
+  border-radius: 3px;
+  padding: 1px 4px;
+}
+
+.sw-log-strip input[type="text"] {
+  flex: 1;
+  min-width: 60px;
+  background: var(--sw-log-bg);
+  color: inherit;
+  border: 1px solid var(--sw-log-border);
+  border-radius: 3px;
+  padding: 2px 6px;
+  font-size: 12px;
+}
+
+.sw-log-strip input[type="text"].sw-invalid {
+  border-color: #ff5252;
+  background: rgba(255, 82, 82, 0.12);
+}
+
+.sw-log-menu {
+  position: fixed;
+  z-index: 300;
+  background: var(--sw-panel, #151a21);
+  border: 1px solid var(--sw-log-border);
+  border-radius: 4px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5);
+  font-family: "Segoe UI", system-ui, sans-serif;
+  padding: 2px;
+}
+
+.sw-log-menu button {
+  display: block;
+  width: 100%;
+  text-align: left;
+  background: none;
+  color: inherit;
+  border: none;
+  padding: 4px 14px;
+  cursor: pointer;
+  font-size: 12px;
+  border-radius: 3px;
+}
+
+.sw-log-menu button:hover {
+  background: #222a35;
+}
+
+.sw-log-hover {
+  position: fixed;
+  z-index: 300;
+  background: var(--sw-panel, #151a21);
+  border: 1px solid var(--sw-log-border);
+  border-radius: 4px;
+  padding: 6px 8px;
+  max-width: 560px;
+  white-space: pre-wrap;
+  word-break: break-word;
+  pointer-events: none;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5);
+}
