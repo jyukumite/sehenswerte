@@ -686,6 +686,19 @@ namespace SehensWerte.Controls.Sehens
                 PaintAxesTitles(graphics, viewInfo);
                 PaintVerticalAxis(graphics, viewInfo);
                 bool xyGroup = views[0].IsXYMode;
+
+                // Highlight bands are group-level background
+                if (Scope.ShowTraceFeatures)
+                {
+                    foreach (TraceView item in views)
+                    {
+                        if (xyGroup && item != views[0]) continue;
+                        TraceGroupDisplay bandInfo = TraceToGroupDisplayInfo(item, flags);
+                        item.Painter.PaintFeatures(graphics, bandInfo,
+                            bandInfo.View0.Samples.ViewedFeatures.Where(x => x.Type == TraceFeature.Feature.Highlight));
+                    }
+                }
+
                 foreach (TraceView item in views)
                 {
                     // In XY mode the XY painter on View0 renders both members of the pair.
@@ -693,11 +706,6 @@ namespace SehensWerte.Controls.Sehens
                     if (xyGroup && item != views[0]) continue;
 
                     TraceGroupDisplay itemInfo = TraceToGroupDisplayInfo(item, flags);
-                    if (Scope.ShowTraceFeatures)
-                    {
-                        item.Painter.PaintFeatures(graphics, itemInfo,
-                            itemInfo.View0.Samples.ViewedFeatures.Where(x => x.Type == TraceFeature.Feature.Highlight));
-                    }
                     PaintTraceSamples(graphics, itemInfo);
                     item.Painter.PaintStats(graphics, itemInfo);
                     item.Painter.PaintLabel(graphics, itemInfo);

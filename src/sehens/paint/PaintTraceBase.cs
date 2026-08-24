@@ -479,8 +479,10 @@ namespace SehensWerte.Controls.Sehens
                         }
 
                     case TraceFeature.Feature.Line:
+                        graphics.SetClip(info.GroupArea);
                         pen.Color = feature.Colour ?? info.Skin.FeatureTextFont.Color;
-                        graphics.DrawLine(pen, xLeft, info.ProjectionArea.Top, xLeft, info.ProjectionArea.Bottom);
+                        graphics.DrawLine(pen, xLeft, info.GroupArea.Top, xLeft, info.GroupArea.Bottom);
+                        graphics.SetClip(info.ProjectionArea);
                         break;
 
                     case TraceFeature.Feature.Highlight:

@@ -339,7 +339,7 @@ namespace SehensWerte.Controls
                 m_VerticalScrollbarChanged = 1;
             }
             VerticalScrollBar.Maximum = count * PaintBox.DefaultGroupHeight;
-            VerticalScrollBar.LargeChange = PaintBox.Height * 9 / 10;
+            VerticalScrollBar.LargeChange = Math.Max(0, PaintBox.Height * 9 / 10);
         }
 
         public SehensControl()

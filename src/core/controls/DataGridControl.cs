@@ -1825,6 +1825,18 @@ namespace SehensWerte.Controls
 
         public int RowCount => DataGridBind?.FilteredData.Count ?? 0;
 
+        public void ScrollRowToTop(int filteredRowIndex)
+        {
+            if (DataGridBind == null || filteredRowIndex < 0 || filteredRowIndex >= DataGridBind.FilteredData.Count) return;
+            try { Grid.FirstDisplayedScrollingRowIndex = filteredRowIndex; } catch { }
+        }
+
+        // -1 when nothing is displayed.
+        public int FirstVisibleRow
+        {
+            get { try { return Grid.FirstDisplayedScrollingRowIndex; } catch { return -1; } }
+        }
+
         public IEnumerable<string> ColumnNames => DataGridBind?.ColumnNames ?? new List<string>();
 
         public string[] GetSelectedColumnNames()
