@@ -38,6 +38,26 @@ scope zoom/pan/hover, log scrolling - which the jest suites cannot cover.
 `npm run build` there is also the quickest proof the whole import graph (CSS included)
 resolves outside the host's toolchain.
 
+## Theming
+
+Every colour is a CSS variable, declared on `.sw-datagrid` / `.sw-log` / the scope skin,
+so a host re-themes by overriding them rather than editing this tree. Defaults are a dark
+palette. A host override needs to outrank the library's own single-class declaration -
+wrapping in a theme class (`.my-theme .sw-datagrid { --sw-bg: ... }`) does that, and does
+not depend on which stylesheet the bundler emits first.
+
+Grid: `--sw-bg`, `--sw-panel`, `--sw-border`, `--sw-text`, `--sw-text-dim`, `--sw-accent`,
+`--sw-header-bg`, `--sw-header-text`, `--sw-header-match`, `--sw-row-alt`, `--sw-selection`,
+`--sw-current-cell`, `--sw-null`, `--sw-diff`, `--sw-drop-indicator`, `--sw-strip-bg`, and
+the status-strip families `--sw-strip-button`, `--sw-strip-hide`, `--sw-strip-regex`,
+`--sw-strip-shape`, `--sw-strip-view`, `--sw-strip-file`.
+
+Log: `--sw-log-bg`, `--sw-log-text`, `--sw-log-border`, and one per priority
+(`--sw-log-debug|info|warn|error|exception`). Warn is green in the original; a host that
+"corrects" it changes what operators read by colour.
+
+Scope: pass a `ScopeSkin` (`lightSkin` / `darkSkin` are exported) rather than CSS.
+
 # Port status
 
 Early development. DataGrid and Log are done in core; Scope has its core done with interactions

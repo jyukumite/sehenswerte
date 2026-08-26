@@ -18,9 +18,16 @@ import "./Scope.css";
 export interface ScopeProps {
   model: ScopeModel;
   showTraceList?: boolean; // default true
+  // Floor for a stacked group's height. Groups share the viewport equally until that
+  // would squeeze them below this, at which point the paint area grows taller than
+  // its container and scrolls - otherwise a session's 30-odd traces get ~40px each,
+  // most of which the axis gutter eats. The C# scrolls for the same reason.
+  minGroupHeight?: number; // default 80
   className?: string;
   style?: React.CSSProperties;
 }
+
+const DEFAULT_MIN_GROUP_HEIGHT = 80;
 
 interface HoverInfo {
   x: number;
@@ -44,6 +51,7 @@ export function Scope(props: ScopeProps): JSX.Element {
 
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const paintRef = useRef<HTMLDivElement>(null);
+  const wrapRef = useRef<HTMLDivElement>(null);
   const layoutRef = useRef<PaintedLayout | null>(null);
   const rafRef = useRef<number | null>(null);
   const [hover, setHover] = useState<HoverInfo | null>(null);
@@ -55,10 +63,27 @@ export function Scope(props: ScopeProps): JSX.Element {
       rafRef.current = null;
       const canvas = canvasRef.current;
       const host = paintRef.current;
-      if (!canvas || !host) return;
+      const wrap = wrapRef.current;
+      if (!canvas || !host || !wrap) return;
       const dpr = window.devicePixelRatio || 1;
+
+      // Grow the painted content past the viewport rather than squeezing groups. The
+      // height is written to the DOM directly, not held in state: repaint runs inside
+      // a rAF, and setState there would schedule the render that schedules the next
+      // repaint.
+      const groupCount = Math.max(1, model.visibleViewGroups().length);
+      const minHeight = props.minGroupHeight ?? DEFAULT_MIN_GROUP_HEIGHT;
+      const desired = Math.max(host.clientHeight, groupCount * minHeight);
+      if (wrap.style.height !== `${desired}px`) {
+        wrap.style.height = `${desired}px`;
+      }
+
+      // Width from the viewport (unchanged by scrolling, and already excludes the
+      // scrollbar); height is the content height computed above rather than measured,
+      // because the style assignment has not been laid out yet - and jsdom never
+      // lays out at all.
       const w = host.clientWidth;
-      const h = host.clientHeight;
+      const h = desired;
       if (w === 0 || h === 0) return;
       if (canvas.width !== Math.round(w * dpr) || canvas.height !== Math.round(h * dpr)) {
         canvas.width = Math.round(w * dpr);
@@ -69,7 +94,7 @@ export function Scope(props: ScopeProps): JSX.Element {
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       layoutRef.current = paintScope(ctx, w, h, model);
     });
-  }, [model]);
+  }, [model, props.minGroupHeight]);
 
   // repaint on model changes and container resizes
   useEffect(() => {
@@ -101,7 +126,8 @@ export function Scope(props: ScopeProps): JSX.Element {
     const onWheel = (e: WheelEvent): void => {
       if (e.ctrlKey) {
         e.preventDefault();
-        const rect = host.getBoundingClientRect();
+        // the wrap, not the host: it moves with the scroll offset
+        const rect = (wrapRef.current ?? host).getBoundingClientRect();
         const frac = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
         const oldZoom = model.zoomValue;
         const factor = e.deltaY < 0 ? 0.8 : 1.25;
@@ -120,9 +146,10 @@ export function Scope(props: ScopeProps): JSX.Element {
   }, [model]);
 
   function onMouseMove(e: React.MouseEvent): void {
-    const host = paintRef.current;
-    if (!host) return;
-    const rect = host.getBoundingClientRect();
+    const wrap = wrapRef.current;
+    if (!wrap) return;
+    // relative to the painted content, so a scrolled view still hits the right group
+    const rect = wrap.getBoundingClientRect();
     const x = e.clientX - rect.left;
     const y = e.clientY - rect.top;
     const group = groupAtY(layoutRef.current, y);
@@ -251,8 +278,9 @@ export function Scope(props: ScopeProps): JSX.Element {
           }
         }}
       >
-        <canvas ref={canvasRef} />
-        <div className="sw-scope-overlay">
+        <div className="sw-scope-canvas-wrap" ref={wrapRef}>
+          <canvas ref={canvasRef} />
+          <div className="sw-scope-overlay">
           {hover !== null && (
             <>
               <div
@@ -268,7 +296,7 @@ export function Scope(props: ScopeProps): JSX.Element {
               <div
                 className="sw-hover-label"
                 style={{
-                  left: Math.min(hover.x + 10, (paintRef.current?.clientWidth ?? 300) - 220),
+                  left: Math.min(hover.x + 10, (wrapRef.current?.clientWidth ?? 300) - 220),
                   top: Math.max(2, hover.y - 10),
                 }}
               >
@@ -278,6 +306,7 @@ export function Scope(props: ScopeProps): JSX.Element {
               </div>
             </>
           )}
+          </div>
         </div>
       </div>
     </div>

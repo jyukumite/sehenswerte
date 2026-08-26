@@ -18,6 +18,15 @@
   --sw-diff: #ff6b6b;
   --sw-drop-indicator: #ff4500; /* OrangeRed, as the WinForms drag indicator */
   --sw-strip-bg: #151a21;
+  /* status-strip buttons: a base plus one tint per operation family, echoing the
+     WinForms prettyColours strip. Variables like everything else here, so a light
+     host can re-theme them instead of being stuck with a dark palette. */
+  --sw-strip-button: #222a35;
+  --sw-strip-hide: #2a2332;
+  --sw-strip-regex: #1f2a38;
+  --sw-strip-shape: #22301f;
+  --sw-strip-view: #33291d;
+  --sw-strip-file: #1d2e2e;
 
   display: flex;
   flex-direction: column;
@@ -183,7 +192,7 @@
 }
 
 .sw-strip-button {
-  background: #222a35;
+  background: var(--sw-strip-button);
   color: var(--sw-text);
   border: 1px solid var(--sw-border);
   border-radius: 3px;
@@ -204,19 +213,19 @@
 
 /* pastel group tints, echoing the WinForms prettyColours strip */
 .sw-strip-button.sw-group-hide {
-  background: #2a2332;
+  background: var(--sw-strip-hide);
 }
 .sw-strip-button.sw-group-regex {
-  background: #1f2a38;
+  background: var(--sw-strip-regex);
 }
 .sw-strip-button.sw-group-shape {
-  background: #22301f;
+  background: var(--sw-strip-shape);
 }
 .sw-strip-button.sw-group-view {
-  background: #33291d;
+  background: var(--sw-strip-view);
 }
 .sw-strip-button.sw-group-file {
-  background: #1d2e2e;
+  background: var(--sw-strip-file);
 }
 
 /* ---- dialogs ---- */

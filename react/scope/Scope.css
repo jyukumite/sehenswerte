@@ -91,10 +91,24 @@
 
 /* ---- paint surface ---- */
 
+/* Scroll viewport. The content inside grows past it once the stacked groups need
+   more than minGroupHeight each, so a plain wheel scrolls the stack - Ctrl and Alt
+   are intercepted for zoom/pan and never reach it. */
 .sw-scope-paint {
   flex: 1;
   min-width: 0;
   position: relative;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+/* The painted content. Its height is set from JS; everything positioned over the
+   canvas is a child of this, so overlay coordinates are content coordinates and
+   survive scrolling. */
+.sw-scope-canvas-wrap {
+  position: relative;
+  width: 100%;
+  min-height: 100%;
 }
 
 .sw-scope-paint canvas {
