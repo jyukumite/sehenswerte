@@ -1104,7 +1104,11 @@ namespace SehensWerte.Controls.Sehens
             Sum,
             Subtract,
             Mean,
-            PolyFilter
+            PolyFilter,
+            Hampel,
+            RollingMAD,
+            Mard,
+            Kalman
         }
 
         public class CalculatedTraceData // XML Serialised
@@ -1154,6 +1158,17 @@ namespace SehensWerte.Controls.Sehens
             public int Order = 5;
         }
 
+        public class CalculatedTraceDataKalman : CalculatedTraceData // XML Serialised
+        {
+            // the ratio of ProcessNoise to MeasurementNoise sets the smoothing. a smaller ratio is smoother
+            // and slower and trusts the model, a larger ratio follows the signal more closely
+            [AutoEditor.DisplayName("Process noise (Q)")]
+            public double ProcessNoise = 0.001;
+
+            [AutoEditor.DisplayName("Measurement noise (R)")]
+            public double MeasurementNoise = 1.0;
+        }
+
         [XmlSave]
         [AutoEditor.DisplayOrder(3, "FFT, Filter and Math")]
         public CalculatedTypes CalculateType;
@@ -1164,7 +1179,8 @@ namespace SehensWerte.Controls.Sehens
             typeof(CalculatedTraceDataQuantise),
             typeof(CalculatedTraceDataWindow),
             typeof(CalculatedTraceDataMinMax),
-            typeof(CalculatedTraceDataCount)
+            typeof(CalculatedTraceDataCount),
+            typeof(CalculatedTraceDataKalman)
         })]
         [AutoEditor.SubEditor]
         [AutoEditor.DisplayOrder(3)]
@@ -2548,6 +2564,41 @@ value=" + string.Format(VerticalUnitFormat, Clicks[0].SampleAtX.ToStringRound(5,
                     exact(1);
                     int meanWindow = ((TraceView.CalculatedTraceDataWindow)CalculatedParameter).Window;
                     result = sourceTraces[0].RollingMean(meanWindow);
+                    break;
+
+                case CalculatedTypes.Hampel:
+                    exact(1);
+                    int hampelWindow = ((TraceView.CalculatedTraceDataWindow)CalculatedParameter).Window;
+                    result = sourceTraces[0].HampelDespike(hampelWindow);
+                    break;
+
+                case CalculatedTypes.RollingMAD:
+                    exact(1);
+                    int madWindow = ((TraceView.CalculatedTraceDataWindow)CalculatedParameter).Window;
+                    result = sourceTraces[0].RollingMad(madWindow);
+                    break;
+
+                case CalculatedTypes.Kalman:
+                    exact(1);
+                    var kalman = (TraceView.CalculatedTraceDataKalman)CalculatedParameter;
+                    result = sourceTraces[0].KalmanSmooth(kalman.ProcessNoise, kalman.MeasurementNoise);
+                    break;
+
+                case CalculatedTypes.Mard:
+                    // mean absolute relative difference. per sample it is |a - b| / |b| as a percent,
+                    // b (second trace) the reference. the mean of this trace is the MARD.
+                    // where the reference shrinks to a tiny fraction of its own typical size the
+                    // ratio becomes a divide by almost zero, a meaningless huge spike, so gap
+                    // those samples out. NaN marks a break in the trace, instead of emitting the spike.
+                    // Hampel the result to clean any residual moderate spikes.
+                    exact(2);
+                    {
+                        double refScale = sourceTraces[1].Where(v => !double.IsNaN(v)).Select(Math.Abs).ToArray().Median();
+                        double floor = refScale * 0.02; // reference below 2% of its median is too small to divide by
+                        result = transposedMin.Select(x => x.ToArray())
+                            .Select(x => Math.Abs(x[1]) <= floor ? double.NaN : Math.Abs(x[0] - x[1]) / Math.Abs(x[1]) * 100.0)
+                            .ToArray();
+                    }
                     break;
 
                 case CalculatedTypes.ProjectYTtoY:

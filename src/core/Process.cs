@@ -30,6 +30,9 @@ namespace SehensWerte.Utils
 
         private static string[] CommandLineArgs => Environment.GetCommandLineArgs()[1..];
 
+        // read once and cache it. checking the registry is a bit slow and callers hit this in tight loops
+        private static readonly Lazy<bool> s_RunningOnWine = new(RunningOnWine);
+
         public static bool RunningOnWine()
         {
             // Uses the wine registry entry. This may be unreliable?
@@ -103,17 +106,20 @@ namespace SehensWerte.Utils
             return Run(exeName, parameters, workingFolder, stdin, out stdout, out stderr);
         }
 
-        public static int Run(string exeName, string parameters, string workingFolder, string stdin, out string stdout, out string stderr, Dictionary<string, string>? environment = null, bool utf8 = false)
+        public static int Run(string exeName, string parameters, string workingFolder, string stdin, out string stdout, out string stderr, Dictionary<string, string>? environment = null, bool utf8 = false, int timeoutMs = 0)
         {
             MemoryStream memoryStream = new MemoryStream();
             MemoryStream memoryStream2 = new MemoryStream();
-            int result = Run(exeName, parameters, workingFolder, utf8 ? Encoding.UTF8.GetBytes(stdin) : Encoding.Default.GetBytes(stdin), memoryStream, memoryStream2, environment);
+            int result = Run(exeName, parameters, workingFolder, utf8 ? Encoding.UTF8.GetBytes(stdin) : Encoding.Default.GetBytes(stdin), memoryStream, memoryStream2, environment, timeoutMs);
             stdout = utf8 ? Encoding.UTF8.GetString(memoryStream.ToArray()) : Encoding.ASCII.GetString(memoryStream.ToArray());
             stderr = utf8 ? Encoding.UTF8.GetString(memoryStream2.ToArray()) : Encoding.ASCII.GetString(memoryStream2.ToArray());
             return result;
         }
 
-        public static int Run(string executableName, string parameters, string workingfolder, byte[] stdin, MemoryStream stdout, MemoryStream stderr, Dictionary<string, string>? environment = null)
+        // if timeoutMs is above 0 it limits the whole call. a child that has not exited by then is
+        // killed and the call returns -1, so one stuck process cannot block the batch. 0 means
+        // wait forever, the old behaviour
+        public static int Run(string executableName, string parameters, string workingfolder, byte[] stdin, MemoryStream stdout, MemoryStream stderr, Dictionary<string, string>? environment = null, int timeoutMs = 0)
         {
             if (!File.Exists(executableName))
             {
@@ -155,7 +161,21 @@ namespace SehensWerte.Utils
                             diag ??= DiagText("stdin write", ex);
                         }
                     }
-                    process.WaitForExit();
+                    // a stuck child must not block the batch. with a timeout set, kill it when it
+                    // overruns so the call returns instead of blocking forever
+                    if (timeoutMs > 0)
+                    {
+                        if (!process.WaitForExit(timeoutMs))
+                        {
+                            diag ??= DiagText("timeout", new TimeoutException($"child did not exit within {timeoutMs}ms, killed"));
+                            try { process.Kill(); } catch { }
+                            try { process.WaitForExit(2000); } catch { }
+                        }
+                    }
+                    else
+                    {
+                        process.WaitForExit();
+                    }
                 }
             }
             catch (InvalidOperationException ex)
@@ -167,7 +187,12 @@ namespace SehensWerte.Utils
                 diag ??= DiagText("WaitForExit", ex);
             }
 
-            thread.Join();
+            // the capture thread reads the child's pipes. once the child is gone it ends.
+            // limit the wait so a stuck pipe reader cannot block the batch either
+            if (!thread.Join(timeoutMs > 0 ? timeoutMs + 5000 : System.Threading.Timeout.Infinite))
+            {
+                diag ??= DiagText("capture join", new TimeoutException("output capture did not finish, abandoned"));
+            }
 
             int exitCode = -1;
             try
@@ -183,7 +208,10 @@ namespace SehensWerte.Utils
                 diag ??= DiagText("ExitCode", ex);
             }
 
-            if (diag != null)
+            // under wine the child handle dying mid-call is normal. it happens on every
+            // unix child, so this warning is just noise there and would land in every
+            // captured error output. on real windows it is rare and worth reporting
+            if (diag != null && !s_RunningOnWine.Value)
             {
                 WriteDiag(stderr, diag);
             }
@@ -455,11 +483,11 @@ namespace SehensWerte.Utils
                 }
                 catch (InvalidOperationException ex)
                 {
-                    WriteDiag(m_StdErr, DiagText("capture loop", ex));
+                    if (!s_RunningOnWine.Value) WriteDiag(m_StdErr, DiagText("capture loop", ex));
                 }
                 catch (System.ComponentModel.Win32Exception ex)
                 {
-                    WriteDiag(m_StdErr, DiagText("capture loop", ex));
+                    if (!s_RunningOnWine.Value) WriteDiag(m_StdErr, DiagText("capture loop", ex));
                 }
                 try
                 {
@@ -467,11 +495,11 @@ namespace SehensWerte.Utils
                 }
                 catch (InvalidOperationException ex)
                 {
-                    WriteDiag(m_StdErr, DiagText("final fetch", ex));
+                    if (!s_RunningOnWine.Value) WriteDiag(m_StdErr, DiagText("final fetch", ex));
                 }
                 catch (System.ComponentModel.Win32Exception ex)
                 {
-                    WriteDiag(m_StdErr, DiagText("final fetch", ex));
+                    if (!s_RunningOnWine.Value) WriteDiag(m_StdErr, DiagText("final fetch", ex));
                 }
             }
 
