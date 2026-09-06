@@ -45,6 +45,7 @@ src/
     AES.cs                — AES encryption helper
     CodeProfile.cs        — lightweight performance profiler
     Compression.cs        — data compression utilities
+    DialogExtensions.cs   - file/folder dialogs that remember the last-used path per key
     EnumExtension.cs      — enum helpers
     HighResTimer.cs       — high-resolution timer
     ListExtensions.cs     — IList/IEnumerable extensions
