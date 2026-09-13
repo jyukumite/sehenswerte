@@ -202,6 +202,16 @@ namespace SehensWerte.Controls.Sehens
             return result.ToArray();
         }
 
+        private static bool CanFillPolygon(TraceGroupDisplay info, PointF[]? polygon)
+        {
+            if (polygon == null || polygon.Length == 0) return false;
+            if (polygon.Length >= 3) return true;
+            info.View0.Scope.OnLog?.Invoke(new Files.CsvLog.Entry(
+                $"Skip fill {info.View0.DecoratedName} points={polygon.Length} valueRect={info.ValueRect} mode={info.HMode}",
+                Files.CsvLog.Priority.Debug));
+            return false;
+        }
+
         private static (PointF[], PointF[]) WidenEnvelope(PointF[] projection1, PointF[] projection2, float lineWidth)
         {
             PointF[] widened1 = (PointF[])projection1.Clone();
@@ -403,10 +413,10 @@ namespace SehensWerte.Controls.Sehens
                         polygon = ProjectPolygon(projection1, projection2);
                     }
                 }
-                if (polygon != null && !dots && polygon.Length > 0)
+                if (!dots && CanFillPolygon(info, polygon))
                 {
                     using Brush brush = new SolidBrush(InterpolateColour(info.Skin.BackgroundColour, info.View0.Colour, 0, 1));
-                    graphics.FillPolygon(brush, polygon);
+                    graphics.FillPolygon(brush, polygon!);
                 }
 
                 Color color = dots ? InterpolateColour(info.View0.Colour, info.Skin.BackgroundColour, 0, 1) : info.View0.Colour;
@@ -647,10 +657,10 @@ namespace SehensWerte.Controls.Sehens
                 }
             }
 
-            if (polygon != null)
+            if (CanFillPolygon(info, polygon))
             {
                 using Brush brush = new SolidBrush(InterpolateColour(info.Skin.BackgroundColour, info.View0.Colour, 0, 1));
-                graphics.FillPolygon(brush, polygon);
+                graphics.FillPolygon(brush, polygon!);
             }
 
             if (projection1 != null && projection2 != null)
@@ -1298,6 +1308,45 @@ namespace SehensWerte.Controls.Sehens
             PointF[] full = painter.DrawnProjection1 ?? throw new AssertFailedException("no projection");
             Assert.AreEqual(infoFull.ProjectionArea.Width, full.Length, "projection must re-span the new rect");
             Assert.AreEqual(infoFull.ProjectionArea.Left, full[0].X, 0.01);
+        }
+
+        [TestMethod]
+        public void GdiPlusRejectsPolygonsUnderThreePoints()
+        {
+            // Documents why CanFillPolygon exists: FillPolygon with 1 or 2 points is an
+            // InvalidParameter status ("Parameter is not valid"), not a no-op.
+            using var bmp = new Bitmap(16, 16);
+            using var graphics = Graphics.FromImage(bmp);
+            using var brush = new SolidBrush(Color.Red);
+            Assert.ThrowsException<ArgumentException>(() => graphics.FillPolygon(brush, new[] { new PointF(1, 1), new PointF(5, 5) }));
+            graphics.FillPolygon(brush, new[] { new PointF(1, 1), new PointF(5, 5), new PointF(1, 5) }); // 3 points paint
+        }
+
+        [TestMethod]
+        public void SubPixelValueAlignedTracePaintsWithoutThrowing()
+        {
+            // A grouped trace whose horizontal span is far under one pixel of the shared domain gets a
+            // 1-wide ValueRect; the min/max envelope is then one column each, a 2-point polygon.
+            var scope = new SehensControl();
+            SehensTestHarness.AffineTrace(scope, "A", count: 8000, offset: 0, multiplier: 1, unit: "u");  // 0..8000
+            TraceView b = SehensTestHarness.AffineTrace(scope, "B", count: 2, offset: 4000, multiplier: 1, unit: "u"); // 4000..4002
+            scope.GroupViews(new[] { "A", "B" });
+            SehensTestHarness.Layout(scope);
+            b.PaintMode = TraceView.PaintModes.PolygonDigital;
+            b.SetHighLow(2, 0);
+            SehensTestHarness.Layout(scope);
+
+            TraceGroupDisplay info = scope.PaintBox.TraceToGroupDisplayInfo(b);
+            Assert.AreEqual(HorizontalMode.ValueAlign, info.HMode);
+            Assert.AreEqual(1, info.ValueRect.Width, "sub-pixel span clamps to a 1-wide rect");
+
+            using var bmp = new Bitmap(SehensTestHarness.Width, SehensTestHarness.Height);
+            using var graphics = Graphics.FromImage(bmp);
+            b.Painter.PaintProjection(graphics, info); // threw ArgumentException from FillPolygon before the guard
+
+            var painter = (Paint2dTrace)b.Painter;
+            Assert.IsNotNull(painter.DrawnPolygon);
+            Assert.AreEqual(2, painter.DrawnPolygon!.Length, "one min + one max column");
         }
 
         [TestMethod]
