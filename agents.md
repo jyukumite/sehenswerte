@@ -272,10 +272,12 @@ Editing and invariants:
   (`TraceView.TryGroupValueWindow` inside `GetDrawnSamples`) so members stay aligned;
   Stretch/Incompatible keep the legacy per-trace count-fraction zoom.
 - `ValueRect.Width` clamps to 1, so a member spanning under a pixel of the shared domain projects a
-  one-column min/max envelope: a 2-point polygon. GDI+ `FillPolygon` throws `ArgumentException`
-  ("Parameter is not valid") for fewer than 3 points, so every fill goes through
-  `Paint2dTrace.CanFillPolygon` (Debug-logs `Skip fill <trace>`). ProjectPolygon dropping NaN
-  columns can produce the same degenerate polygon.
+  one-column min/max envelope: a 2-point polygon. `ProjectPolygon` dropping NaN columns can empty it
+  outright. GDI+ `FillPolygon` throws `ArgumentException` ("Parameter is not valid") only for an
+  EMPTY point array - 1 and 2 points are tolerated and paint nothing (`GraphicsPath.AddPolygon` is
+  the API that rejects under 3). So every fill goes through `Paint2dTrace.CanFillPolygon`
+  (Debug-logs `Skip fill <trace>`), which rejects empty to avoid the throw and under-3 because there
+  is nothing to fill. Do not assert the under-3 throw in a test; it does not happen.
 
 Remaining work: dual-axis for incompatible groups, unit-agnostic YT.
 

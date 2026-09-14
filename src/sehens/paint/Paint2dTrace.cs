@@ -202,6 +202,7 @@ namespace SehensWerte.Controls.Sehens
             return result.ToArray();
         }
 
+        // An empty polygon is what actually throws (InvalidParameter); 1-2 points paint nothing.
         private static bool CanFillPolygon(TraceGroupDisplay info, PointF[]? polygon)
         {
             if (polygon == null || polygon.Length == 0) return false;
@@ -1311,15 +1312,57 @@ namespace SehensWerte.Controls.Sehens
         }
 
         [TestMethod]
-        public void GdiPlusRejectsPolygonsUnderThreePoints()
+        public void FillPolygonOnlyRejectsAnEmptyPointArray()
         {
-            // Documents why CanFillPolygon exists: FillPolygon with 1 or 2 points is an
-            // InvalidParameter status ("Parameter is not valid"), not a no-op.
+            // Documents why CanFillPolygon exists: FillPolygon with NO points is an InvalidParameter
+            // status ("Parameter is not valid"), not a no-op. 1 and 2 points are tolerated and paint
+            // nothing; GraphicsPath.AddPolygon rejects those too, hence the guard's >= 3 rule.
             using var bmp = new Bitmap(16, 16);
             using var graphics = Graphics.FromImage(bmp);
             using var brush = new SolidBrush(Color.Red);
-            Assert.ThrowsException<ArgumentException>(() => graphics.FillPolygon(brush, new[] { new PointF(1, 1), new PointF(5, 5) }));
+            Assert.ThrowsException<ArgumentException>(() => graphics.FillPolygon(brush, Array.Empty<PointF>()));
+            graphics.FillPolygon(brush, new[] { new PointF(1, 1), new PointF(5, 5) }); // degenerate, paints nothing
             graphics.FillPolygon(brush, new[] { new PointF(1, 1), new PointF(5, 5), new PointF(1, 5) }); // 3 points paint
+            using var path = new GraphicsPath();
+            Assert.ThrowsException<ArgumentException>(() => path.AddPolygon(new[] { new PointF(1, 1), new PointF(5, 5) }));
+        }
+
+        private static bool AnyPaintedPixel(Bitmap bmp, Color background)
+        {
+            for (int x = 0; x < bmp.Width; x++)
+            {
+                for (int y = 0; y < bmp.Height; y++)
+                {
+                    if (bmp.GetPixel(x, y).ToArgb() != background.ToArgb()) return true;
+                }
+            }
+            return false;
+        }
+
+        [TestMethod]
+        public void TracesShorterThanThePaneNeedNoEnvelopeAndStillPaint()
+        {
+            // CanFillPolygon counts POLYGON points (2 per finite pixel column), never data points.
+            // The min/max envelope only exists once samples outnumber columns (Project2dCurves
+            // `width < samples.Length`), so a 1- or 2-sample trace has no polygon to fill or skip.
+            foreach (int count in new[] { 1, 2, 3 })
+            {
+                var scope = new SehensControl();
+                scope["A"].Update(SehensTestHarness.Ramp(count));
+                SehensTestHarness.Layout(scope);
+                TraceView view = SehensTestHarness.View(scope, "A");
+                TraceGroupDisplay info = scope.PaintBox.TraceToGroupDisplayInfo(view);
+
+                using var bmp = new Bitmap(SehensTestHarness.Width, SehensTestHarness.Height);
+                using var graphics = Graphics.FromImage(bmp);
+                graphics.Clear(info.Skin.BackgroundColour);
+                view.Painter.PaintProjection(graphics, info);
+
+                var painter = (Paint2dTrace)view.Painter;
+                Assert.IsNull(painter.DrawnPolygon, $"{count} samples span more columns than samples");
+                Assert.IsNotNull(painter.DrawnProjection1, $"{count} samples must still project");
+                Assert.IsTrue(AnyPaintedPixel(bmp, info.Skin.BackgroundColour), $"{count} samples must paint");
+            }
         }
 
         [TestMethod]
@@ -1342,7 +1385,7 @@ namespace SehensWerte.Controls.Sehens
 
             using var bmp = new Bitmap(SehensTestHarness.Width, SehensTestHarness.Height);
             using var graphics = Graphics.FromImage(bmp);
-            b.Painter.PaintProjection(graphics, info); // threw ArgumentException from FillPolygon before the guard
+            b.Painter.PaintProjection(graphics, info); // degenerate envelope: CanFillPolygon skips the fill
 
             var painter = (Paint2dTrace)b.Painter;
             Assert.IsNotNull(painter.DrawnPolygon);
