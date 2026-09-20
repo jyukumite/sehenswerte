@@ -42,6 +42,12 @@ namespace SehensWerte.Comms
         public int DataBits = 8;
         public System.IO.Ports.StopBits StopBits = System.IO.Ports.StopBits.One;
 
+        // Applied in Open() before the port is opened, so the lines are asserted from the start.
+        // Default false to match System.IO.Ports.SerialPort - existing callers are unaffected.
+        // Many USB-serial bridges need DTR asserted before they will pass data.
+        public bool DtrEnable = false;
+        public bool RtsEnable = false;
+
         private System.IO.Ports.SerialPort? m_SerialPort;
         private EventWaitHandle m_ThreadStop = new EventWaitHandle(false, EventResetMode.ManualReset);
         private Thread m_Thread;
@@ -89,6 +95,8 @@ namespace SehensWerte.Comms
                 OnLog?.Invoke(new CsvLog.Entry($"Opening {ConfigString}", CsvLog.Priority.Info));
                 m_SerialPort = new System.IO.Ports.SerialPort(Port, BaudRate, Parity, DataBits, StopBits);
                 m_SerialPort.ReadBufferSize = ReadBufferSize;
+                m_SerialPort.DtrEnable = DtrEnable;
+                m_SerialPort.RtsEnable = RtsEnable;
                 m_SerialPort.Open();
 
                 m_Thread.Start();
