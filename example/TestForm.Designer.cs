@@ -101,7 +101,7 @@ namespace SehensWerte
             Tabs.Size = new System.Drawing.Size(1200, 557);
             Tabs.TabIndex = 2;
             // 
-            // TabPageFliteScope
+            // TabPageScope
             // 
             if (tabs)
             {

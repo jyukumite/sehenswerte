@@ -571,11 +571,9 @@ namespace SehensWerte.Controls
             {
                 if (item is ComboBox)
                 {
-                    if (!m_ReadOnly)
-                    {
-                        ((ComboBox)item).SelectedIndexChanged += TextChanged;
-                        ((ComboBox)item).TextChanged += TextChanged;
-                    }
+                    // no event hooks here - SetEvents() is the one place that wires them. Hooking in
+                    // both doubled every commit, and made the UpdateControls() call between them
+                    // write values back and raise OnChanged before the user touched anything.
                     string[]? array = EnumValues(SourceData, item.Tag as EditRow);
                     if (array != null)
                     {
@@ -587,11 +585,7 @@ namespace SehensWerte.Controls
                 }
                 else if (item is ListBox)
                 {
-                    if (!m_ReadOnly)
-                    {
-                        ((ListBox)item).SelectedIndexChanged += TextChanged;
-                        ((ListBox)item).TextChanged += TextChanged;
-                    }
+                    // see the ComboBox branch: hooks live in SetEvents() only
                     string[]? array = EnumValues(SourceData, item.Tag as EditRow);
                     if (array != null)
                     {
@@ -606,6 +600,7 @@ namespace SehensWerte.Controls
                 }
             }
         }
+
         private void SetEvents()
         {
             if (Controls == null) return;
