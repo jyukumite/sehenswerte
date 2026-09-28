@@ -44,6 +44,7 @@ namespace SehensWerte.Controls
         public event DataGridControlCellKeyDownEventHandler CellKeyDown = (s, e) => { };
         public event EventHandler SelectionChanged = (s, e) => { };
         public event EventHandler VerticalScroll = (s, e) => { };
+        // handlers may amend e.DisplayText; the built-in text tip is shown after they run
         public event EventHandler<DataGridControlToolTipArgs> ShowTooltipWindow = (s, e) => { };
         public event EventHandler<DataGridControlToolTipArgs> HideTooltipWindow = (s, e) => { };
 
@@ -244,12 +245,6 @@ namespace SehensWerte.Controls
 
             this.Grid = new SehensWerte.Controls.DataGridViewDoubleBuffered();
             this.HoverTip = new System.Windows.Forms.ToolTip();
-            ShowTooltipWindow += (s, e) =>
-            {
-                if (!ShowCellHints) return;
-                int safetyTimer = ToolTipShowMilliseconds + 1000;
-                HoverTip.Show(e.DisplayText, Grid, Grid.PointToClient(e.MouseLocation), safetyTimer);
-            };
             HideTooltipWindow += (s, e) =>
             {
                 if (Grid != null && !Grid.IsDisposed)
@@ -1023,6 +1018,10 @@ namespace SehensWerte.Controls
                 HoverHideTimer.Interval = ToolTipShowMilliseconds;
                 HoverHideTimer.Start();
                 ShowTooltipWindow?.Invoke(this, HoverArgs);
+                if (ShowCellHints)
+                {
+                    HoverTip.Show(HoverArgs.DisplayText, Grid, Grid.PointToClient(HoverArgs.MouseLocation), ToolTipShowMilliseconds + 1000);
+                }
                 HoverArgs.Shown = true;
             }
         }
