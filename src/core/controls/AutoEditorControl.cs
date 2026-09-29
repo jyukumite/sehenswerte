@@ -41,10 +41,10 @@ namespace SehensWerte.Controls
                 int right = left + widths.Sum() - 1;
                 int divider = left + widths[0];
                 int top = DisplayRectangle.Y;
-                int bottom = top + heights.Sum() - 1;
+                int bottom = top + Padding.Top + heights.Sum() - 1;
 
                 e.Graphics.DrawRectangle(pen, left, top, right - left, bottom - top);
-                int y = top;
+                int y = top + Padding.Top;
                 for (int loop = 0; loop < heights.Length; loop++)
                 {
                     int bandTop = y;
@@ -140,7 +140,8 @@ namespace SehensWerte.Controls
             {
                 Dock = DockStyle.Fill,
                 CellBorderStyle = TableLayoutPanelCellBorderStyle.None,
-                AutoScroll = true
+                AutoScroll = true,
+                Padding = new Padding(0, 1, 0, 0), // the top border's row: at system DPI the first cell's label covered it
             };
             LayoutPanel.SuspendLayout();
             LayoutPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 45f));

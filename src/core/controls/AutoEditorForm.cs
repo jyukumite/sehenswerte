@@ -1,4 +1,5 @@
-﻿using System.Reflection;
+﻿using Microsoft.VisualStudio.TestTools.UnitTesting;
+using System.Reflection;
 
 namespace SehensWerte.Controls
 {
@@ -31,7 +32,7 @@ namespace SehensWerte.Controls
             ButtonOK.Text = "OK";
             ButtonOK.Click += ButtonOK_Click;
             LabelText.AutoSize = true;
-            LabelText.Location = new Point(16, 8);
+            LabelText.Location = new Point(16, 12);
             LabelText.Name = "LabelText";
             LabelText.Size = new Size(54, 13);
             LabelText.TabIndex = 3;
@@ -45,9 +46,9 @@ namespace SehensWerte.Controls
             ButtonCancel.Text = "Cancel";
             ButtonCancel.Click += ButtonCancel_Click;
             Panel.Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right;
-            Panel.Location = new Point(12, 30);
+            Panel.Location = new Point(12, 34);
             Panel.Name = "Panel";
-            Panel.Size = new Size(377, 228);
+            Panel.Size = new Size(377, 224);
             Panel.TabIndex = 0;
             Panel.OnChange += (s) => OnChange?.Invoke(s);
             base.Controls.Add(Panel);
@@ -61,6 +62,20 @@ namespace SehensWerte.Controls
             base.KeyPress += KeyPressed;
             ResumeLayout(performLayout: false);
             PerformLayout();
+            m_PanelTop = Panel.Top;
+            ClientSizeChanged += (s, e) => LayoutPrompt();
+        }
+
+        private readonly int m_PanelTop;
+
+        // Wraps the prompt to the form width and pushes the editor below it; returns the extra height used
+        private int LayoutPrompt()
+        {
+            const int gap = 6;
+            LabelText.MaximumSize = new Size(Math.Max(1, ClientSize.Width - LabelText.Left * 2), 0);
+            Panel.Top = Math.Max(m_PanelTop, LabelText.Bottom + gap);
+            Panel.Height = Math.Max(1, ButtonOK.Top - gap - Panel.Top);
+            return Panel.Top - m_PanelTop;
         }
 
         private class ValueList
@@ -91,8 +106,9 @@ namespace SehensWerte.Controls
                 ButtonCancel.Text = "Close";
             }
 
+            int promptExtra = LayoutPrompt();
             Rectangle workingArea = Screen.PrimaryScreen?.WorkingArea ?? Screen.GetWorkingArea(this);
-            base.Height = Math.Min(workingArea.Height - 100, Panel.PreferredHeight + 140);
+            base.Height = Math.Min(workingArea.Height - 100, Panel.PreferredHeight + 144 + promptExtra);
             if (base.Bottom > workingArea.Height)
             {
                 base.Top = Math.Max(20, base.Top - (base.Bottom - workingArea.Height) - 20);
@@ -132,6 +148,26 @@ namespace SehensWerte.Controls
                 Panel.Revert();
                 Close();
             }, "Cancel edits");
+        }
+
+        [TestClass]
+        public class AutoEditorFormTest
+        {
+            [TestMethod]
+            public void LongPromptPushesPanelDown()
+            {
+                using var form = new AutoEditorForm();
+                form.Prompt = "one line";
+                Assert.AreEqual(0, form.LayoutPrompt());
+                Assert.AreEqual(form.m_PanelTop, form.Panel.Top);
+
+                form.Prompt = "first line\nsecond line which is long enough to wrap " + new string('x', 200);
+                int extra = form.LayoutPrompt();
+                Assert.IsTrue(extra > 0);
+                Assert.IsTrue(form.Panel.Top >= form.LabelText.Bottom);
+                Assert.IsTrue(form.LabelText.Right <= form.ClientSize.Width);
+                Assert.IsTrue(form.Panel.Bottom < form.ButtonOK.Top);
+            }
         }
     }
 }
