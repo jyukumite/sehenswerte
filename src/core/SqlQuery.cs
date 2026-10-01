@@ -209,7 +209,8 @@ namespace SehensWerte.Utils
 
         public static Queue<string> Tokenise(string sqlQuery)
         {
-            var pattern = @"(:[A-Za-z_][A-Za-z0-9_]*)"   // parameters, e.g. :param_name
+            var pattern = @"\$([A-Za-z_][A-Za-z0-9_]*|)\$[\s\S]*?\$\1\$" // dollar-quoted strings, $$..$$ or $tag$..$tag$, whose body is never SQL
+                       + @"|(:[A-Za-z_][A-Za-z0-9_]*)"   // parameters, e.g. :param_name
                        + @"|[eE]?'([^']|'')*'"                // single-quoted strings, including escaped single quotes
                        + @"|""([^""]|"""")*"""           // double-quoted strings, including escaped double quotes
                        + @"|[A-Za-z_][A-Za-z0-9_.]*"     // identifiers and object/column names, like table.column
@@ -591,6 +592,25 @@ namespace SehensWerte.Utils
             }
         }
 
+
+        [TestMethod]
+        public void TestDollarQuoting()
+        {
+            string sql = "select $frog$it's :not_a_param\r\n  'x'$frog$, $$plain$$, $a$ $b$ nested $b$ $a$ from t where id=:id";
+            CollectionAssert.AreEqual(new List<string>
+            {
+                "select", "$frog$it's :not_a_param\r\n  'x'$frog$", ",", "$$plain$$", ",", "$a$ $b$ nested $b$ $a$",
+                "from", "t", "where", "id", "=", ":id",
+            }, SqlQuery.Tokenise(sql).ToList());
+
+            // the body is passed through byte for byte, and its :not_a_param is neither bound nor missing
+            Assert.AreEqual("select $frog$it's :not_a_param\r\n  'x'$frog$, $$plain$$, $a$ $b$ nested $b$ $a$ from t where id = 5",
+                SqlQuery.Parameterise(sql, new Dictionary<string, object?> { { "id", 5 } }));
+
+            // an unterminated quote and a positional $1 fall back to single characters, as before
+            CollectionAssert.AreEqual(new List<string> { "$", "tag", "$", "open" }, SqlQuery.Tokenise("$tag$ open").ToList());
+            CollectionAssert.AreEqual(new List<string> { "$", "1" }, SqlQuery.Tokenise("$1").ToList());
+        }
 
         [TestMethod]
         public void TestTokeniser()
