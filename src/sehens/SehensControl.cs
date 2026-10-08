@@ -908,7 +908,7 @@ namespace SehensWerte.Controls
 
         public void GroupViews(IEnumerable<TraceView> views, bool colour = false)
         {
-            if (views == null) return;
+            if (views == null || views.ToList().Count == 0) return;
 
             BeginUpdate();
             try
