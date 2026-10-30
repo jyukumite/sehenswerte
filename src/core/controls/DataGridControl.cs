@@ -866,35 +866,27 @@ namespace SehensWerte.Controls
                 SizeF headerTextSize = TextRenderer.MeasureText(column.HeaderText, headerFont);
                 int headerWidth = (int)Math.Ceiling(headerTextSize.Width) + padding;
 
-                // GetCellFont returns cache-/grid-owned fonts: fetch them on the UI thread
-                // (the cache is not thread-safe) and never dispose them.
+                // GetCellFont returns cache-/grid-owned fonts: never dispose them.
                 Font baseCellFont = column.InheritedStyle.Font;
                 Font normalFont = GetCellFont(baseCellFont, italic: false);
                 Font nullFont = GetCellFont(baseCellFont, italic: true);
 
-                ThreadLocal<(Bitmap bmp, Graphics g, int m)> widths = new ThreadLocal<(Bitmap bmp, Graphics g, int m)>(() =>
+                // Measure on the UI thread only: GDI+ objects are not thread-safe, and sharing
+                // these fonts across a Parallel.ForEach corrupted memory under Wine's gdiplus
+                // (uncatchable AccessViolationException). GDI+ serialises internally anyway.
+                int maxWidth = headerWidth;
+                using (Graphics g = grid.CreateGraphics())
                 {
-                    Bitmap bmp = new Bitmap(1, 1);
-                    return (bmp, Graphics.FromImage(bmp), headerWidth);
-                }, trackAllValues: true);
-                Parallel.ForEach(strings, str =>
-                {
-                    var (displayText, isNull, _) = CellDisplayText(column.Name, str);
-                    if (string.IsNullOrEmpty(displayText)) return;
-                    var local = widths.Value;
-                    SizeF textSize = local.g.MeasureString(displayText, isNull ? nullFont : normalFont);
-                    int width = (int)Math.Ceiling(textSize.Width) + padding;
-                    widths.Value = (local.bmp, local.g, Math.Max(local.m, width));
-                });
-                foreach (var v in widths.Values)
-                {
-                    v.g.Dispose();
-                    v.bmp.Dispose();
+                    foreach (string? str in strings)
+                    {
+                        var (displayText, isNull, _) = CellDisplayText(column.Name, str);
+                        if (string.IsNullOrEmpty(displayText)) continue;
+                        SizeF textSize = g.MeasureString(displayText, isNull ? nullFont : normalFont);
+                        maxWidth = Math.Max(maxWidth, (int)Math.Ceiling(textSize.Width) + padding);
+                    }
                 }
 
-                int maxWidth = widths.Values.Max(value => value.m);
                 int newWidth = Math.Max(10, Math.Min(grid.Parent.Width - 20, maxWidth + 10));
-                widths.Dispose();
 
                 DataGridBind?.PushSnapshot(new DataGridControlHistory.Snapshot(DataGridControlHistory.Snapshot.Operation.ColumnResize)
                 {
